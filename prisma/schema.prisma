@@ -1,0 +1,350 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============ ENUMS ============
+enum UserRole {
+  organization_admin
+  agent
+  super_admin
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum CallStatus {
+  INITIATED
+  ANSWERED
+  MISSED
+  DROPPED
+}
+
+enum PlanLevel {
+  ESSENTIALS
+  GROWTH
+  ENTERPRISE
+  CUSTOM
+}
+
+enum PlanType {
+  MONTHLY
+  YEARLY
+}
+
+enum Interval {
+  day
+  week
+  month
+  year
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+}
+
+enum FeedbackType {
+  SERVICE
+  AGENT
+}
+
+enum DocFor {
+  AI
+  AGENT
+}
+
+enum Status {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============ MODELS ============
+model User {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  email     String  @unique
+  password  String
+  image     String? @default("")
+  bio       String?
+  phone     String  @unique
+  isDeleted Boolean @default(false)
+
+  passwordChangedAt DateTime?
+  isVerified        Boolean   @default(false)
+  isResetPassword   Boolean   @default(false)
+  canResetPassword  Boolean   @default(false)
+  isResentOtp       Boolean   @default(false)
+
+  status UserStatus @default(ACTIVE)
+  role   UserRole   @default(organization_admin)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  Agent             Agent?
+  ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
+  ServiceFeedbacks  ServiceFeedback[]
+  AgentFeedbacks    AgentFeedback[]
+
+  @@map("users")
+}
+
+enum AgentStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+model Agent {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+
+  // displayName    String
+  // identity       String      @unique // used by Voice SDK
+  status         AgentStatus @default(OFFLINE)
+
+  // Personal info
+  dateOfBirth    DateTime
+  gender         String
+  address        String
+  emergencyPhone String
+  ssn            String?  
+
+  // Professional info
+  skills      String[]
+  employeeId  String
+  isAvailable Boolean  @default(true)
+  assignTo    String?  @db.ObjectId
+
+  officeHours       Int
+  startWorkDateTime DateTime?
+  endWorkDateTime   DateTime?
+
+  // Call metrics
+  totalCalls   Int @default(0)
+  successCalls Int @default(0)
+  droppedCalls Int @default(0)
+
+  // Relations
+  user           User            @relation(fields: [userId], references: [id])
+  organization   Organization?   @relation(fields: [assignTo], references: [id])
+  AgentFeedbacks AgentFeedback[]
+  calls          Call[]
+
+  @@map("agents")
+}
+
+model Organization {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  name               String
+  industry           String
+  address            String
+  websiteLink        String
+  organizationNumber String? @unique
+  ownerId            String? @unique @db.ObjectId
+
+  agentVoiceUrl String?
+  leadQuestions String[] @default([])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agents                Agent[] // One Organization can have multiple Agents
+  ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
+  subscriptions         Subscription[]
+  documents             CompanyDoc[]
+  calls                 Call[]
+  tools                 ToolIntegration[]
+  availableTwilioNumber AvailableTwilioNumber[]
+
+  @@map("organizations")
+}
+
+model CompanyDoc {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  companyId String @db.ObjectId
+
+  docFor  DocFor @default(AI)
+  content Json
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Organization @relation(fields: [companyId], references: [id])
+
+  @@map("company_docs")
+}
+
+model Plan {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  planName      String
+  amount        Float
+  currency      String
+  interval      Interval       @default(month)
+  intervalCount Int
+  freeTrialDays Int?
+  productId     String
+  priceId       String
+  active        Boolean
+  description   String?
+  features      Json?
+  Subscription  Subscription[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("plans")
+}
+
+model Subscription {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId  String             @db.ObjectId
+  planId          String             @db.ObjectId
+  startDate       DateTime
+  endDate         DateTime?
+  amount          Float
+  stripePaymentId String             @unique
+  paymentStatus   PaymentStatus      @default(PENDING)
+  status          SubscriptionStatus @default(INCOMPLETE)
+  organization    Organization?      @relation(fields: [organizationId], references: [id])
+  plan            Plan?              @relation(fields: [planId], references: [id])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Call {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  companyId  String @db.ObjectId
+  receiverId String @db.ObjectId
+
+  // Call details
+  callControlId String  @unique
+  fromNumber    String
+  toNumber      String
+  sid           String?
+
+  // orgId     String
+  // agentId   String?
+
+  ivrState String?
+  digits   String?
+
+  callTime    DateTime
+  callType    String
+  duration    Int?      @default(0)
+  status      String
+  callStartAt DateTime  @default(now())
+  callEndAt   DateTime?
+
+  // Call artifacts
+  recordingUrl String?
+  summary      String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  receivedBy Agent        @relation(fields: [receiverId], references: [userId])
+  company    Organization @relation(fields: [companyId], references: [id])
+
+  @@map("calls")
+}
+
+model ServiceFeedback {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  clientId     String  @unique @db.ObjectId
+  rating       Int
+  feedbackText String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model AgentFeedback {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  agentId      String  @unique @db.ObjectId
+  clientId     String  @unique @db.ObjectId
+  rating       Int
+  feedbackText String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agent  Agent @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("agent_feedbacks")
+}
+
+model ToolIntegration {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  companyId String @unique @db.ObjectId
+  toolType  String
+  config    Json
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  company Organization @relation(fields: [companyId], references: [id])
+
+  @@map("tool_integrations")
+}
+
+model AvailableTwilioNumber {
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  sid          String?
+  phoneNumber  String  @unique
+  friendlyName String
+
+  capabilities Json // Stores { voice: boolean, sms: boolean, mms: boolean, fax: boolean }
+  beta         Boolean   @default(false)
+  countryCode  String    @default("US")
+  isPurchased  Boolean   @default(false)
+  purchasedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  purchasedByOrganizationId String?       @db.ObjectId
+  organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
+
+  @@map("available_twilio_numbers")
+}
