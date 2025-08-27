@@ -161,7 +161,7 @@ model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
   name               String
-  industry           String
+  industry           String?
   address            String
   websiteLink        String
   organizationNumber String? @unique

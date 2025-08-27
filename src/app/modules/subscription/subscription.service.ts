@@ -145,7 +145,6 @@ const getSingleSubscription = async (subscriptionId: string) => {
         select: {
           id: true,
           name: true,
-          organizationEmail: true,
           organizationNumber: true,
         },
       },
@@ -184,7 +183,6 @@ const getMySubscription = async (userId: string) => {
         select: {
           id: true,
           name: true,
-          organizationEmail: true,
           organizationNumber: true,
         },
       },
