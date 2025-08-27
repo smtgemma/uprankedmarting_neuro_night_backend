@@ -1,0 +1,59 @@
+import { Router } from "express";
+import { PlanRoutes } from "../modules/plan/plan.route";
+import { AuthRoutes } from "../modules/auth/auth.route";
+import { UserRoutes } from "../modules/user/user.routes";
+import { SubscriptionRoutes } from "../modules/subscription/subscription.route";
+import {  CallRoutes } from "../modules/calls/calls.route";
+import { ServiceFeedbackRoutes } from "../modules/feedback/ServiceFeedback/serviceFeedback.route";
+import { AgentFeedbackRoutes } from "../modules/feedback/AgentFeedback/agentFeedback.route";
+import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNumbers.routes";
+import { AgentRoutes } from "../modules/agentManagement/agent.routes";
+
+const router = Router();
+
+const moduleRoutes = [
+  {
+    path: "/auth",
+    route: AuthRoutes,
+  },
+  {
+    path: "/users",
+    route: UserRoutes,
+  },
+  {
+    path: "/plans",
+    route: PlanRoutes,
+  },
+  {
+    path: "/subscriptions",
+    route: SubscriptionRoutes,
+  },
+  // {
+  //   path: "/calls",
+  //   route: callRouter,
+  // },
+  {
+    path: "/service-feedback",
+    route: ServiceFeedbackRoutes,
+  },
+  {
+    path: "/agent-feedback",
+    route: AgentFeedbackRoutes,
+  },
+  {
+    path: "/call",
+    route: CallRoutes,
+  },
+  {
+    path: "/active-numbers",
+    route: TwilioPhoneNumberRoutes,
+  },
+  {
+    path: "/agents",
+    route: AgentRoutes,
+  }
+];
+
+moduleRoutes.forEach((route) => router.use(route.path, route.route));
+
+export default router;
