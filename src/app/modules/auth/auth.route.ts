@@ -7,22 +7,22 @@ import { AuthValidation } from "./auth.validation";
 
 const router = Router();
 
-router.get("/me", auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),AuthController.getMe);
-router.get("/verify-email", AuthController.verifyEmail);
-
-router.get("/verify-reset-password", AuthController.verifyResetPassLink);
+router.get(
+  "/me",
+  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
+  AuthController.getMe
+);
 
 router.post(
   "/login",
-  // validateRequest(AuthValidation.loginValidationSchema),
+  validateRequest(AuthValidation.loginValidationSchema),
   AuthController.login
 );
 
-router.put(
-  "/change-password",
-  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
-  validateRequest(AuthValidation.changePasswordValidationSchema),
-  AuthController.changePassword
+router.post(
+  "/verify-otp",
+  validateRequest(AuthValidation.verifyOTPSchema),
+  AuthController.verifyOTP
 );
 
 router.post(
@@ -31,21 +31,29 @@ router.post(
   AuthController.forgotPassword
 );
 
-router.post("/reset-password", AuthController.resetPassword);
-
 router.post(
-  "/resend-verification-link",
-  validateRequest(AuthValidation.resendConfirmationLinkValidationSchema),
-  AuthController.resendVerificationLink
+  "/reset-password",
+  validateRequest(AuthValidation.resetPasswordWithOTPSchema),
+  AuthController.resetPasswordWithOTP
 );
 
 router.post(
-  "/resend-reset-pass-link",
-  validateRequest(AuthValidation.resendConfirmationLinkValidationSchema),
-  AuthController.resendResetPassLink
+  "/resend-otp",
+  validateRequest(AuthValidation.resendOTPSchema),
+  AuthController.resendOTP
 );
 
+router.post(
+  "/refresh-token",
+  validateRequest(AuthValidation.refreshTokenValidationSchema),
+  AuthController.refreshToken
+);
 
-router.post("/refresh-token", AuthController.refreshToken);
+router.post(
+  "/change-password",
+  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
+  validateRequest(AuthValidation.changePasswordValidationSchema),
+  AuthController.changePassword
+);
 
 export const AuthRoutes = router;
