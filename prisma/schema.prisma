@@ -95,6 +95,8 @@ model User {
   isResetPassword   Boolean   @default(false)
   canResetPassword  Boolean   @default(false)
   isResentOtp       Boolean   @default(false)
+  otp               Int?      // New field for OTP
+  otpExpiresAt      DateTime? // New field for OTP expiration
 
   status UserStatus @default(ACTIVE)
   role   UserRole   @default(organization_admin)

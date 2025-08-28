@@ -5,6 +5,8 @@ import ApiError from "../../errors/AppError";
 import { User, UserRole, UserStatus } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { hashPassword } from "../../helpers/hashPassword";
+import { generateOTPData } from "../../utils/otp";
+import { sendEmail } from "../../utils/sendEmail";
 
 const createUserIntoDB = async (payload: any) => {
   const { userData, organizationData, agentData } = payload;
@@ -23,18 +25,24 @@ const createUserIntoDB = async (payload: any) => {
   }
 
   const hashedPassword = await hashPassword(userData.password);
+  const { otp, expiresAt } = generateOTPData(4, 5); // 4-digit OTP, expires in 5 minutes
 
   const userPayload = {
     ...userData,
     role: organizationData ? UserRole.organization_admin : UserRole.agent,
     password: hashedPassword,
+    isVerified: false,
+    otp,
+    otpExpiresAt: expiresAt,
   };
 
-  // console.log(userPayload)
   try {
     const result = await prisma.$transaction(async (tx) => {
       // ===== Create User =====
       const createdUser = await tx.user.create({ data: userPayload });
+
+      // ===== Send Verification Email with OTP =====
+      await sendEmail(userData.email, otp, true); // isVerification: true for email verification
 
       let createdOrganization = null;
       if (organizationData) {
@@ -78,7 +86,7 @@ const createUserIntoDB = async (payload: any) => {
             userId: createdUser.id,
             dateOfBirth: new Date(agentData.dateOfBirth),
             assignTo: createdOrganization?.id || null,
-            status: "OFFLINE", // Default AgentStatus
+            status: "OFFLINE",
             isAvailable: agentData.isAvailable ?? true,
           },
         });
@@ -87,7 +95,10 @@ const createUserIntoDB = async (payload: any) => {
       return { user: { ...createdUser, password: undefined }, organization: createdOrganization, agent: createdAgent };
     });
 
-    return result;
+    return {
+      ...result,
+      message: "We have sent a verification email with an OTP to your email address. Please check your inbox.",
+    };
   } catch (error: any) {
     if (error.code === "P2002") {
       throw new ApiError(
@@ -101,6 +112,56 @@ const createUserIntoDB = async (payload: any) => {
     );
   }
 };
+
+const verifyOTP = async (email: string, otp: number) => {
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found!");
+  }
+
+  if (user.isVerified) {
+    throw new ApiError(status.BAD_REQUEST, "User is already verified!");
+  }
+
+  if (!user.otp || !user.otpExpiresAt) {
+    throw new ApiError(status.BAD_REQUEST, "No OTP found for this user!");
+  }
+
+  if (user.otp !== otp) {
+    throw new ApiError(status.BAD_REQUEST, "Invalid OTP!");
+  }
+
+  if (new Date() > user.otpExpiresAt) {
+    throw new ApiError(status.BAD_REQUEST, "OTP has expired!");
+  }
+
+  // Update user to mark as verified and clear OTP fields
+  const updatedUser = await prisma.user.update({
+    where: { email },
+    data: {
+      isVerified: true,
+      otp: null,
+      otpExpiresAt: null,
+      isResentOtp: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isVerified: true,
+    },
+  });
+
+  return {
+    user: updatedUser,
+    message: "Email verified successfully!",
+  };
+};
+
 
 const getAllUserFromDB = async (query: Record<string, unknown>) => {
   const userQuery = new QueryBuilder(prisma.user, query)
@@ -382,6 +443,7 @@ const updateUserRoleStatusByAdminIntoDB = async (
 
 export const UserService = {
   createUserIntoDB,
+  verifyOTP,
   getAllUserFromDB,
   updateUserIntoDB,
   updateAgentInfo,

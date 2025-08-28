@@ -5,7 +5,8 @@ import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { User } from "@prisma/client";
 import { UserValidation } from "./user.validation";
-
+import prisma from "../../utils/prisma";
+import AppError from "../../errors/AppError";
 
 const createUser = catchAsync(async (req, res) => {
   const parsedData = UserValidation.createUserPayloadSchema.parse(req.body);
@@ -14,8 +15,24 @@ const createUser = catchAsync(async (req, res) => {
 
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "User registered successfully!",
-    data: result,
+    message: result.message || "User registered successfully!",
+    data: {
+      user: result.user,
+      organization: result.organization,
+      agent: result.agent,
+    },
+  });
+});
+
+const verifyOTP = catchAsync(async (req, res) => {
+  const { email, otp } = req.body;
+
+  const result = await UserService.verifyOTP(email, otp);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: result.user,
   });
 });
 
@@ -54,11 +71,10 @@ const getSingleUserById = catchAsync(async (req, res) => {
   });
 });
 
-
 const updateAgentInfo = catchAsync(async (req, res) => {
   const user = req.user;
   const { id } = req.params;
-  const result = await UserService.updateAgentInfo(user as User, id,req.body);
+  const result = await UserService.updateAgentInfo(user as User, id, req.body);
   sendResponse(res, {
     statusCode: status.OK,
     message: "Agent info updated successfully!",
@@ -83,10 +99,11 @@ const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
 });
 
 export const UserController = {
+  verifyOTP,
   createUser,
   getAllUser,
   updateUser,
   getSingleUserById,
   updateAgentInfo,
-  updateUserRoleStatusByAdminIntoDB
+  updateUserRoleStatusByAdminIntoDB,
 };

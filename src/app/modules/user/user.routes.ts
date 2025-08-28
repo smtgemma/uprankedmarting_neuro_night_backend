@@ -19,10 +19,12 @@ router.get(
   UserController.getSingleUserById
 );
 
-router.post(
-  "/register",
+router.post("/register", UserController.createUser);
 
-  UserController.createUser
+router.post(
+  "/verify-otp",
+  // validateRequest(UserValidation.verifyOTPSchema),
+  UserController.verifyOTP
 );
 
 router.patch(

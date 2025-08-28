@@ -3,8 +3,8 @@ import nodemailer from "nodemailer";
 
 export const sendEmail = async (
   to: string,
-  resetPassLink?: string,
-  confirmLink?: string
+  otp?: number,
+  isVerification: boolean = false
 ) => {
   const transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
@@ -21,9 +21,6 @@ export const sendEmail = async (
     timeStyle: "short",
   }).format(new Date());
 
-  const clickableResetPass = `<a href="${resetPassLink}" style="color: #28C76F; text-decoration: underline;">here</a>`;
-  const clickableConfirm = `<a href="${confirmLink}" style="color: #28C76F; text-decoration: underline;">here</a>`;
-
   const html = `
   <div style="max-width: 600px; margin: 0 auto; background-color: #F6F7F9; color: #000; border-radius: 8px; padding: 24px;">
     <table style="width: 100%;">
@@ -37,36 +34,37 @@ export const sendEmail = async (
       </tr>
     </table>
 
-    
     ${
-      confirmLink
-        ? `<h3 style="text-align: center; color: #000;">Verify Your Email Within 10 Minutes</h3>
-       <div style="padding: 0 1em;">
-         <p style="text-align: left; line-height: 28px; color: #000;">
-           <strong style="color: #000;">Verification Link:</strong> Click ${clickableConfirm} to verify your email.
-         </p>
-       </div>`
-        : `<h3 style="text-align: center; color: #000;">Reset Your Password Within 10 Minutes</h3>
-       <div style="padding: 0 1em;">
-         <p style="text-align: left; line-height: 28px; color: #000;">
-       
-           <strong style="color: #000;">Reset Link:</strong> Click ${clickableResetPass} to reset your password.
-         </p>
-       </div>`
+      isVerification
+        ? `<h3 style="text-align: center; color: #000;">Verify Your Email</h3>
+           <div style="padding: 0 1em;">
+             <p style="text-align: left; line-height: 28px; color: #000;">
+               <strong style="color: #000;">Your OTP:</strong> ${otp} <br />
+               Please use this OTP to verify your email. It is valid for 5 minutes.
+             </p>
+           </div>`
+        : `<h3 style="text-align: center; color: #000;">Reset Your Password</h3>
+           <div style="padding: 0 1em;">
+             <p style="text-align: left; line-height: 28px; color: #000;">
+               <strong style="color: #000;">Your OTP:</strong> ${otp} <br />
+               Please use this OTP to reset your password. It is valid for 5 minutes.
+             </p>
+           </div>`
     }
   </div>
   `;
-
 
   await transporter.sendMail({
     from: `"Super Job" <${config.sendEmail.email_from}>`,
     to,
     subject: `${
-      resetPassLink
-        ? `Reset Your Password within 5 Minutes.`
-        : `Verify Your Email within 5 Minutes.`
+      isVerification
+        ? `Verify Your Email within 5 Minutes`
+        : `Reset Your Password within 5 Minutes`
     }`,
-    text: "Hello world?",
+    text: `Your OTP is ${otp}. Please use it to ${
+      isVerification ? "verify your email" : "reset your password"
+    }. It is valid for 5 minutes.`,
     html: html,
   });
 };
