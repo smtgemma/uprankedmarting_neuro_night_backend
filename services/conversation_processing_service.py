@@ -15,23 +15,23 @@ logger = logging.getLogger(__name__)
 class ConversationProcessingService:
     def __init__(self, db):
         self.db = db
-        self.org_id = None
+        self._id = None
         self.ai_service = AIService()
         self.rag_service = RAGService()
         self.max_concurrent_tasks = 5  # Reduced for memory efficiency
         self.processing_semaphore = asyncio.Semaphore(self.max_concurrent_tasks)
     
-    async def start_async_processing(self, org_id: str, conversation_data: ConversationCreate) -> str:
+    async def start_async_processing(self, _id: str, conversation_data: ConversationCreate) -> str:
         """Start asynchronous conversation processing"""
         try:
             # Verify organization exists
-            org = await self.db.organizations.find_one({"org_id": org_id, "is_active": True})
+            org = await self.db.organizations.find_one({"_id": _id, "is_active": True})
             if not org:
                 raise HTTPException(status_code=404, detail="Active organization not found")
             
             # Check for duplicate conversation
             existing_conv = await self.db.conversations.find_one({
-                "org_id": org_id,
+                "_id": _id,
                 "conv_id": conversation_data.conv_id
             })
             if existing_conv:
@@ -39,7 +39,7 @@ class ConversationProcessingService:
             
             # Create processing task
             task = ProcessingTask(
-                org_id=org_id,
+                _id=_id,
                 conv_id=conversation_data.conv_id,
                 status=ProcessingStatus.PENDING
             )
@@ -49,7 +49,7 @@ class ConversationProcessingService:
             
             # Create conversation record
             conversation = Conversation(
-                org_id=org_id,
+                _id=_id,
                 conv_id=conversation_data.conv_id,
                 conv_script=conversation_data.conv_script
             )
@@ -57,7 +57,7 @@ class ConversationProcessingService:
             await self.db.conversations.insert_one(conv_dict)
             
             # Start background processing
-            asyncio.create_task(self._process_conversation_background(task_id, org_id, conversation_data))
+            asyncio.create_task(self._process_conversation_background(task_id, _id, conversation_data))
             
             return task_id
             
@@ -67,8 +67,8 @@ class ConversationProcessingService:
             logger.error(f"Error starting conversation processing: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to start processing")
     
-    async def _process_conversation_background(self, task_id: str, org_id: str, conversation_data: ConversationCreate):
-        self.org_id = org_id
+    async def _process_conversation_background(self, task_id: str, _id: str, conversation_data: ConversationCreate):
+        self._id = _id
         """Background task for processing conversation - Memory optimized"""
         # Add conversation-level locking for data flow security
         conversation_lock_key = f"conv_processing_{conversation_data.conv_id}"
@@ -94,7 +94,7 @@ class ConversationProcessingService:
                 await self._update_task_status(task_id, ProcessingStatus.IN_PROGRESS, 20.0)
                 
                 # Get questions in small batches to save memory
-                questions_cursor = self.db.questions.find({"org_id": org_id})
+                questions_cursor = self.db.questions.find({"_id": _id})
                 
                 processed_count = 0
                 total_processed = 0
@@ -114,7 +114,7 @@ class ConversationProcessingService:
                         total_processed += len(current_batch)
                         
                         # Update progress
-                        progress = 20.0 + (70.0 * total_processed / await self._get_question_count(org_id))
+                        progress = 20.0 + (70.0 * total_processed / await self._get_question_count(_id))
                         await self._update_task_status(task_id, ProcessingStatus.IN_PROGRESS, min(progress, 99.0))
                         
                         # Clear batch to free memory
@@ -172,7 +172,7 @@ class ConversationProcessingService:
         for result in results:
             if not isinstance(result, Exception) and result:
                 qa_pair = QAPair(
-                    org_id=self.org_id,
+                    _id=self._id,
                     conv_id=conv_id,
                     question=result["question"],
                     answer=result["answer"]
@@ -186,9 +186,9 @@ class ConversationProcessingService:
         
         return processed_count
     
-    async def _get_question_count(self, org_id: str) -> int:
+    async def _get_question_count(self, _id: str) -> int:
         """Get total question count for progress calculation"""
-        return await self.db.questions.count_documents({"org_id": org_id})
+        return await self.db.questions.count_documents({"_id": _id})
     
     async def _process_single_question_safe(self, conv_id: str, question: Dict) -> Dict[str, Any]:
         """Safely process a single question with error handling"""
@@ -240,7 +240,7 @@ class ConversationProcessingService:
                 "task_id": task_id,
                 "status": task["status"],
                 "progress": task["progress"],
-                "org_id": task["org_id"],
+                "_id": task["_id"],
                 "conv_id": task["conv_id"],
                 "created_at": task["created_at"].isoformat()
             }

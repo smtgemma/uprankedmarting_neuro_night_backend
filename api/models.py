@@ -31,8 +31,8 @@ class ProcessingStatus(str, Enum):
 
 class Organization(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    org_id: str = Field(...)
-    org_name: str = Field(..., min_length=2, max_length=100)
+    _id: str = Field(...)
+    name: str = Field(..., min_length=2, max_length=100)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -43,9 +43,9 @@ class Organization(BaseModel):
         json_encoders = {ObjectId: str}
 
 class SingleQuestionCreate(BaseModel):
-    org_id: str = Field(..., min_length=1, max_length=50)
+    _id: str = Field(..., min_length=1, max_length=50)
     question: str = Field(..., min_length=3, max_length=500)
-    org_name: str = Field(..., min_length=2, max_length=100)
+    name: str = Field(..., min_length=2, max_length=100)
     
     @field_validator('question')
     def validate_question(cls, v):
@@ -64,8 +64,8 @@ class QuestionUpdate(BaseModel):
         return v.strip()
 
 class OrganizationQuestionsCreate(BaseModel):
-    org_id: str = Field(..., min_length=1, max_length=50)
-    org_name: str = Field(..., min_length=2, max_length=100)
+    _id: str = Field(..., min_length=1, max_length=50)
+    name: str = Field(..., min_length=2, max_length=100)
     questions: List[str] = Field(..., min_items=1, max_items=50)
     
     @field_validator('questions')
@@ -88,7 +88,7 @@ class ConversationCreate(BaseModel):
 class ProcessingTask(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     task_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    org_id: str = Field(...)
+    _id: str = Field(...)
     conv_id: str = Field(...)
     status: ProcessingStatus = Field(default=ProcessingStatus.PENDING)
     progress: float = Field(default=0.0)
@@ -109,7 +109,7 @@ class QAResponse(BaseModel):
 
 class Question(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    org_id: str = Field(...)
+    _id: str = Field(...)
     question_text: str = Field(..., min_length=3, max_length=500)
     question_keywords: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -122,7 +122,7 @@ class Question(BaseModel):
 
 class Conversation(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    org_id: str = Field(...)
+    _id: str = Field(...)
     conv_id: str = Field(...)
     conv_script: str = Field(...)
     processed: bool = Field(default=False)
@@ -135,7 +135,7 @@ class Conversation(BaseModel):
 
 class QAPair(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    org_id: str = Field(...)  # ADD THIS LINE
+    _id: str = Field(...)  # ADD THIS LINE
     conv_id: str = Field(...)
     question: str = Field(...)
     answer: str = Field(...)
