@@ -204,7 +204,7 @@ model Organization {
   agents                Agent[] // One Organization can have multiple Agents
   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions         Subscription[]
-  documents             CompanyDoc[]
+  documents             OrganizationDoc[]
   calls                 Call[]
   tools                 ToolIntegration[]
   availableTwilioNumber AvailableTwilioNumber[]
@@ -229,9 +229,9 @@ model AiAgent {
   updatedAt DateTime @updatedAt
 }
 
-model CompanyDoc {
+model OrganizationDoc {
   id        String @id @default(auto()) @map("_id") @db.ObjectId
-  companyId String @db.ObjectId
+  organizationId String @db.ObjectId
   docFor    DocFor @default(AI)
   content   Json
 
@@ -239,7 +239,7 @@ model CompanyDoc {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Organization @relation(fields: [companyId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   // ai
   docId   String?

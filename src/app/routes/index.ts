@@ -9,6 +9,7 @@ import { AgentFeedbackRoutes } from "../modules/feedback/AgentFeedback/agentFeed
 import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNumbers.routes";
 import { AgentRoutes } from "../modules/agentManagement/agent.routes";
 import { TestCallRoutes } from "../modules/test-call/test.route";
+import { CompanyDocRoutes } from "../modules/companyDoc/companyDoc.routes";
 
 const router = Router();
 
@@ -52,6 +53,10 @@ const moduleRoutes = [
   {
     path: "/agents",
     route: AgentRoutes,
+  },
+  {
+    path: "/company-docs",
+    route: CompanyDocRoutes,
   }
 ];
 
