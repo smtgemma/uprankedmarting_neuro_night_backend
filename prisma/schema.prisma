@@ -143,6 +143,8 @@ model Agent {
   sipUsername String? // Required for SIP authentication
   extension   String? // Internal extension number
 
+  twilioIdentity String?      @unique // e.g., "agent_101"
+
   // displayName    String
   // identity       String      @unique // used by Voice SDK
   status AgentStatus @default(OFFLINE)
