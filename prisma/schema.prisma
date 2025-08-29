@@ -95,7 +95,7 @@ model User {
   isResetPassword   Boolean   @default(false)
   canResetPassword  Boolean   @default(false)
   isResentOtp       Boolean   @default(false)
-  otp               Int?      // New field for OTP
+  otp               Int? // New field for OTP
   otpExpiresAt      DateTime? // New field for OTP expiration
 
   status UserStatus @default(ACTIVE)
@@ -126,14 +126,14 @@ model Agent {
 
   // displayName    String
   // identity       String      @unique // used by Voice SDK
-  status         AgentStatus @default(OFFLINE)
+  status AgentStatus @default(OFFLINE)
 
   // Personal info
   dateOfBirth    DateTime
   gender         String
   address        String
   emergencyPhone String
-  ssn            String?  
+  ssn            String?
 
   // Professional info
   skills      String[]
