@@ -11,20 +11,20 @@ class QARetrievalService:
     def __init__(self, db):
         self.db = db
     
-    async def get_qa_pairs(self, org_id: str, conv_id: str) -> List[QAResponse]:
+    async def get_qa_pairs(self, _id: str, conv_id: str) -> List[QAResponse]:
         """Retrieve Q&A pairs directly from database"""
         try:
             # Verify organization exists
-            org = await self.db.organizations.find_one({"org_id": org_id, "is_active": True})
+            org = await self.db.organizations.find_one({"_id": _id, "is_active": True})
             if not org:
                 raise HTTPException(status_code=404, detail="Organization not found")
             
             # Verify conversation exists and belongs to organization
-            conversation = await self.db.conversations.find_one({"conv_id": conv_id, "org_id": org_id})
+            conversation = await self.db.conversations.find_one({"conv_id": conv_id, "_id": _id})
             if not conversation:
                 raise HTTPException(status_code=404, detail="Conversation not found for this organization")
             
-            qa_pairs_cursor = self.db.qa_pairs.find({"conv_id": conv_id, "org_id": org_id}).sort("created_at", -1)
+            qa_pairs_cursor = self.db.qa_pairs.find({"conv_id": conv_id, "_id": _id}).sort("created_at", -1)
             qa_pairs = await qa_pairs_cursor.to_list(length=None)
             
             if not qa_pairs:

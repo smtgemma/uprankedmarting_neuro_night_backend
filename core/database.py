@@ -52,25 +52,25 @@ async def create_indexes():
     """Create database indexes for better performance"""
     try:
         # Organizations collection indexes
-        await db.database.organizations.create_index([("org_id", 1), ("is_active", 1)], background=True)
+        await db.database.organizations.create_index([("_id", 1), ("is_active", 1)], background=True)
         await db.database.organizations.create_index([("created_at", DESCENDING)], background=True)
         
         # Questions collection indexes  
-        await db.database.questions.create_index([("org_id", 1)], background=True)
-        await db.database.questions.create_index([("org_id", 1), ("question_text", "text")], background=True)
+        await db.database.questions.create_index([("_id", 1)], background=True)
+        await db.database.questions.create_index([("_id", 1), ("question_text", "text")], background=True)
         await db.database.questions.create_index([("created_at", DESCENDING)], background=True)
         
         # Conversations collection indexes
-        await db.database.conversations.create_index([("org_id", 1)], background=True)
+        await db.database.conversations.create_index([("_id", 1)], background=True)
         await db.database.conversations.create_index([("conv_id", 1)], background=True)
         await db.database.conversations.create_index([("created_at", DESCENDING)], background=True)
         
         # QA pairs collection indexes
-        await db.database.qa_pairs.create_index([("conv_id", 1)], background=True)
+        await db.database.qa_pairs.create_index([("_id", 1)], background=True)
         await db.database.qa_pairs.create_index([("created_at", DESCENDING)], background=True)
         
         # Processing tasks indexes
-        await db.database.processing_tasks.create_index([("task_id", 1)], background=True)
+        await db.database.processing_tasks.create_index([("_id", 1)], background=True)
         await db.database.processing_tasks.create_index([("status", 1)], background=True)
         
         logger.info("Database indexes created successfully")

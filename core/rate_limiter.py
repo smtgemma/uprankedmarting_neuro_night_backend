@@ -20,7 +20,7 @@ class RateLimiter:
     
     @asynccontextmanager
     async def acquire(self, key: str):
-        """Rate limit based on key (e.g., user_id, org_id, etc.)"""
+        """Rate limit based on key (e.g., user_id, _id, etc.)"""
         async with self.lock:
             now = time.time()
             await self._cleanup_old_requests(key, now)

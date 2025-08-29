@@ -82,13 +82,13 @@ async def read_root():
         "version": "2.0.0",
         "status": "operational",
         "endpoints": {
-            "POST /api/v1/organizations/{org_id}/questions": "Add single question",
-            "DELETE /api/v1/organizations/{org_id}/questions/{question_id}": "Delete question",
-            "PUT /api/v1/organizations/{org_id}/questions/{question_id}": "Update question with validation",
-            "GET /api/v1/organizations/{org_id}/questions": "Get organization questions",
-            "POST /api/v1/organizations/{org_id}/conversations/upload": "Upload conversation file",
-            "POST /api/v1/organizations/{org_id}/conversations": "Process conversation (async)",
-            "GET /api/v1/organizations/{org_id}/conversations/{conv_id}/qa-pairs": "Get Q&A pairs",
+            "POST /api/v1/organizations/{_id}/questions": "Add single question",
+            "DELETE /api/v1/organizations/{_id}/questions/{question_id}": "Delete question",
+            "PUT /api/v1/organizations/{_id}/questions/{question_id}": "Update question with validation",
+            "GET /api/v1/organizations/{_id}/questions": "Get organization questions",
+            "POST /api/v1/organizations/{_id}/conversations/upload": "Upload conversation file",
+            "POST /api/v1/organizations/{_id}/conversations": "Process conversation (async)",
+            "GET /api/v1/organizations/{_id}/conversations/{conv_id}/qa-pairs": "Get Q&A pairs",
             "GET /api/v1/tasks/{task_id}/status": "Check processing status"
         }
     }
