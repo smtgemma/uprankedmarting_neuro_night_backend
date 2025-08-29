@@ -20,18 +20,23 @@ enum UserStatus {
   DELETED
 }
 
-enum CallStatus {
-  INITIATED
-  ANSWERED
-  MISSED
-  DROPPED
-}
+// enum CallStatus {
+//   INITIATED
+//   ANSWERED
+//   MISSED
+//   DROPPED
+// }
 
+// enum PlanLevel {
+//   ESSENTIALS
+//   GROWTH
+//   ENTERPRISE
+//   CUSTOM
+// }
 enum PlanLevel {
-  ESSENTIALS
-  GROWTH
-  ENTERPRISE
-  CUSTOM
+  only_real_agent
+  only_ai
+  ai_then_real_agent
 }
 
 enum PlanType {
@@ -95,7 +100,7 @@ model User {
   isResetPassword   Boolean   @default(false)
   canResetPassword  Boolean   @default(false)
   isResentOtp       Boolean   @default(false)
-  otp               Int?      // New field for OTP
+  otp               Int? // New field for OTP
   otpExpiresAt      DateTime? // New field for OTP expiration
 
   status UserStatus @default(ACTIVE)
@@ -120,20 +125,34 @@ enum AgentStatus {
   OFFLINE
 }
 
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  BUSY
+  NO_ANSWER
+  CANCELED
+}
+
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
 
+  // Add these fields for SIP integration:
+  sipUsername String? // Required for SIP authentication
+  extension   String? // Internal extension number
+
   // displayName    String
   // identity       String      @unique // used by Voice SDK
-  status         AgentStatus @default(OFFLINE)
+  status AgentStatus @default(OFFLINE)
 
   // Personal info
   dateOfBirth    DateTime
   gender         String
   address        String
   emergencyPhone String
-  ssn            String?  
+  ssn            String?
 
   // Professional info
   skills      String[]
@@ -162,6 +181,9 @@ model Agent {
 model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
+  // Add SIP domain field
+  sipDomain String? // Stores the Twilio SIP domain like "company.sip.twilio.com"
+
   name               String
   industry           String?
   address            String
@@ -188,19 +210,38 @@ model Organization {
   @@map("organizations")
 }
 
-model CompanyDoc {
+model UploadVoice {
   id String @id @default(auto()) @map("_id") @db.ObjectId
+  voiceId String @unique @db.ObjectId
+  voiceName String
+}
 
+model AiAgent {
+  id             String  @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String? @db.ObjectId
+  agentId        String  @unique @db.ObjectId
+
+  // for voice
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompanyDoc {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
   companyId String @db.ObjectId
-
-  docFor  DocFor @default(AI)
-  content Json
+  docFor    DocFor @default(AI)
+  content   Json
 
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   company Organization @relation(fields: [companyId], references: [id])
+
+  // ai
+  docId   String?
+  docName String?
 
   @@map("company_docs")
 }
@@ -251,6 +292,7 @@ model Call {
   receiverId String @db.ObjectId
 
   // Call details
+  call_sid      String? // for Twilio
   callControlId String  @unique
   fromNumber    String
   toNumber      String
