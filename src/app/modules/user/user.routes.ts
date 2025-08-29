@@ -8,6 +8,8 @@ import { UserController } from "./user.controller";
 import validateRequest from "../../middlewares/validateRequest";
 import { NextFunction, Request, Response, Router } from "express";
 import { multerUpload } from "../../config/multer.config";
+import prisma from "../../utils/prisma";
+import  twilio  from "twilio";
 
 const router = Router();
 
@@ -18,6 +20,51 @@ router.get(
   // auth(UserRole.SUPER_ADMIN),
   UserController.getSingleUserById
 );
+
+// router.post("/agent/answer-call", async (req, res) => {
+//   const { call_sid, agent_id } = req.body;
+//   const twiml = new twilio.twiml.VoiceResponse();
+//   try {
+//     twiml.dial().client(`agent_${agent_id}`);
+//     await prisma.call.update({
+//       where: { call_sid },
+//       data: { status: "IN_PROGRESS", receiverId: agent_id },
+//     });
+//     res.type("text/xml");
+//     res.send(twiml.toString());
+//   } catch (error) {
+//     console.error("Answer call error:", error);
+//     res.status(500).json({ success: false, detail: "Failed to answer call" });
+//   }
+// });
+
+// router.post("/agent/update-status", async (req, res) => {
+//   const { agentId, status } = req.body;
+//   const client = require("twilio")(
+//     process.env.TWILIO_ACCOUNT_SID,
+//     process.env.TWILIO_AUTH_TOKEN
+//   );
+//   try {
+//     const activitySid =
+//       status === "Available"
+//         ? process.env.TWILIO_AVAILABLE_ACTIVITY_SID
+//         : status === "Busy"
+//         ? process.env.TWILIO_BUSY_ACTIVITY_SID
+//         : process.env.TWILIO_OFFLINE_ACTIVITY_SID;
+//     await client.taskrouter.v1
+//       .workspaces(process.env.TWILIO_WORKSPACE_SID)
+//       .workers(`WK${agentId}`)
+//       .update({ activitySid });
+//     await prisma.agent.update({
+//       where: { userId: agentId },
+//       data: { status: status.toUpperCase() },
+//     });
+//     res.json({ success: true });
+//   } catch (error) {
+//     console.error("Status update error:", error);
+//     res.status(500).json({ error: "Failed to update status" });
+//   }
+// });
 
 router.post("/register", UserController.createUser);
 

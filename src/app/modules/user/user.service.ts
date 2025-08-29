@@ -87,6 +87,7 @@ const createUserIntoDB = async (payload: any) => {
             dateOfBirth: new Date(agentData.dateOfBirth),
             assignTo: createdOrganization?.id || null,
             status: "OFFLINE",
+            twilioIdentity: `${agentData?.agent_id}`,
             isAvailable: agentData.isAvailable ?? true,
           },
         });
