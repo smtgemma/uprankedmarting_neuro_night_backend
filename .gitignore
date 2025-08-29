@@ -1,0 +1,5 @@
+.env
+temp_auto_push.bat
+venv
+.gitignore
+branch_structure.json

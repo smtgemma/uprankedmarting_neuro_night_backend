@@ -1,0 +1,544 @@
+<!-- templates/dashboard.html -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Center Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://sdk.twilio.com/js/client/v1.14/twilio.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-4">
+                <h1 class="text-2xl font-bold text-gray-900">Call Center Dashboard</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div id="agentStatus" class="w-3 h-3 bg-gray-400 rounded-full"></div>
+                        <span id="agentName" class="text-sm font-medium text-gray-700">Not logged in</span>
+                    </div>
+                    <button
+                        id="logoutBtn"
+                        class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200 hidden"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Not Logged In Message -->
+        <div id="notLoggedIn" class="text-center py-12">
+            <div class="bg-white rounded-lg shadow p-8">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Please Log In</h2>
+                <p class="text-gray-600 mb-6">You need to log in as an agent to access the dashboard.</p>
+                <a
+                    href="/login"
+                    class="bg-blue-500 text-white px-6 py-3 rounded-md hover:bg-blue-600 transition duration-200 inline-block"
+                >
+                    Go to Login
+                </a>
+            </div>
+        </div>
+
+        <!-- Dashboard Content (hidden initially) -->
+        <div id="dashboardContent" class="hidden">
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Queue Size</h3>
+                    <p id="queueSize" class="text-3xl font-bold text-gray-900">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Available Agents</h3>
+                    <p id="availableAgents" class="text-3xl font-bold text-green-600">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Agents</h3>
+                    <p id="totalAgents" class="text-3xl font-bold text-blue-600">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Calls Handled</h3>
+                    <p id="callsHandled" class="text-3xl font-bold text-purple-600">0</p>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Queue Section -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="p-6 border-b border-gray-200">
+                        <h2 class="text-lg font-semibold text-gray-900">Waiting Callers</h2>
+                    </div>
+                    <div class="p-6">
+                        <div id="queueList" class="space-y-3">
+                            <div class="text-center text-gray-500 py-8">No callers in queue</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agents Section -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="p-6 border-b border-gray-200">
+                        <h2 class="text-lg font-semibold text-gray-900">Active Agents</h2>
+                    </div>
+                    <div class="p-6">
+                        <div id="agentsList" class="space-y-3">
+                            <div class="text-center text-gray-500 py-8">No agents logged in</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call Interface (hidden initially) -->
+            <div id="callInterface" class="mt-8 bg-white rounded-lg shadow p-6 hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Active Call</h3>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                        <span class="text-sm font-medium text-green-600">Connected</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex-1">
+                        <p class="text-sm text-gray-600">Caller:</p>
+                        <p id="currentCallerNumber" class="font-semibold text-gray-900">-</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button
+                            id="muteBtn"
+                            class="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition duration-200"
+                        >
+                            Mute
+                        </button>
+                        <button
+                            id="hangupBtn"
+                            class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200"
+                        >
+                            Hang Up
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let agentData = null;
+        let twilioDevice = null;
+        let currentCall = null;
+        let websocket = null;
+        let isMuted = false;
+        
+        // Session data for artifacts (no localStorage)
+        let sessionAgentData = null;
+
+        // Initialize dashboard
+        window.addEventListener('load', function() {
+            checkAgentSession();
+        });
+
+        async function checkAgentSession() {
+            // Check URL parameters for agent data
+            const urlParams = new URLSearchParams(window.location.search);
+            const agentId = urlParams.get('agent_id');
+            const agentName = urlParams.get('agent_name');
+            
+            if (agentId && agentName) {
+                // Login again to get proper access token
+                try {
+                    const response = await fetch('/agent/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            agent_id: agentId,
+                            agent_name: agentName
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        agentData = result;
+                        initializeDashboard();
+                    } else {
+                        throw new Error(result.detail || 'Failed to get access token');
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    document.getElementById('notLoggedIn').classList.remove('hidden');
+                }
+            } else {
+                document.getElementById('notLoggedIn').classList.remove('hidden');
+            }
+        }
+
+        async function initializeDashboard() {
+            // Show dashboard content
+            document.getElementById('notLoggedIn').classList.add('hidden');
+            document.getElementById('dashboardContent').classList.remove('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+
+            // Update header
+            updateAgentStatus(agentData.agent.status);
+            document.getElementById('agentName').textContent = agentData.agent.name;
+
+            // Initialize Twilio Device
+            initializeTwilioDevice();
+
+            // Connect WebSocket
+            connectWebSocket();
+
+            // Setup logout
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+        }
+
+        function initializeTwilioDevice() {
+            try {
+                // Initialize Twilio Device with token
+                twilioDevice = new Twilio.Device(agentData.access_token, {
+                    debug: true,
+                    enableRingingState: true,
+                    allowIncomingWhileBusy: false
+                });
+
+                twilioDevice.on('ready', function() {
+                    console.log('Twilio Device Ready for agent:', agentData.agent.id);
+                    updateAgentStatus('available');
+                });
+
+                twilioDevice.on('error', function(error) {
+                    console.error('Twilio Device Error:', error);
+                    showNotification('WebRTC Error: ' + error.message, 'error');
+                });
+
+                twilioDevice.on('incoming', function(call) {
+                    console.log('Incoming WebRTC call');
+                    handleIncomingCall(call);
+                });
+
+                twilioDevice.on('disconnect', function(call) {
+                    console.log('WebRTC call disconnected');
+                    handleCallDisconnect();
+                });
+
+            } catch (error) {
+                console.error('Error initializing Twilio Device:', error);
+                showNotification('Failed to initialize WebRTC', 'error');
+            }
+        }
+
+
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/queue/ws`;
+            
+            websocket = new WebSocket(wsUrl);
+
+            websocket.onopen = function() {
+                console.log('WebSocket connected');
+            };
+
+            websocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+
+            websocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            websocket.onclose = function() {
+                console.log('WebSocket disconnected');
+                // Try to reconnect after 3 seconds
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            console.log('WebSocket message:', data);
+
+            if (data.type === 'initial_status') {
+                updateDashboard(data.data);
+            } else if (data.type === 'caller_joined') {
+                updateQueueDisplay();
+                playNotificationSound();
+            } else if (data.type === 'caller_dequeued') {
+                updateQueueDisplay();
+            } else if (data.type === 'agent_status_changed') {
+                updateAgentsDisplay();
+            }
+        }
+
+        function updateDashboard(queueData) {
+            // Update stats
+            document.getElementById('queueSize').textContent = queueData.queue_size || 0;
+            document.getElementById('availableAgents').textContent = queueData.available_agents || 0;
+            document.getElementById('totalAgents').textContent = queueData.agents ? queueData.agents.length : 0;
+            
+            // Calculate total calls handled
+            const totalCalls = queueData.agents ?
+                queueData.agents.reduce((sum, agent) => sum + (agent.total_calls || 0), 0) : 0;
+            document.getElementById('callsHandled').textContent = totalCalls;
+
+            // Update displays
+            updateQueueList(queueData.callers || []);
+            updateAgentsList(queueData.agents || []);
+        }
+
+        function updateQueueList(callers) {
+            const queueList = document.getElementById('queueList');
+            
+            if (callers.length === 0) {
+                queueList.innerHTML = '<div class="text-center text-gray-500 py-8">No callers in queue</div>';
+                return;
+            }
+
+            queueList.innerHTML = callers.map(caller => `
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div>
+                        <p class="font-semibold text-gray-900">${caller.phone_number}</p>
+                        <p class="text-sm text-gray-600">Waiting: ${formatWaitTime(caller.wait_time)}</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                            Position ${caller.queue_position}
+                        </span>
+                        <button
+                            class="answer-call-btn bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition duration-200 text-sm"
+                            data-call-sid="${caller.call_sid}"
+                            ${agentData.agent.status !== 'available' ? 'disabled' : ''}
+                        >
+                            Answer
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add event listeners to answer buttons
+            document.querySelectorAll('.answer-call-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const callSid = this.dataset.callSid;
+                    answerCall(callSid);
+                });
+            });
+        }
+
+        function updateAgentsList(agents) {
+            const agentsList = document.getElementById('agentsList');
+            
+            if (agents.length === 0) {
+                agentsList.innerHTML = '<div class="text-center text-gray-500 py-8">No agents logged in</div>';
+                return;
+            }
+
+            agentsList.innerHTML = agents.map(agent => `
+                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-3 h-3 rounded-full ${getStatusColor(agent.status)}"></div>
+                        <div>
+                            <p class="font-semibold text-gray-900">${agent.name}</p>
+                            <p class="text-sm text-gray-600">ID: ${agent.id}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-medium ${getStatusTextColor(agent.status)}">${agent.status}</p>
+                        <p class="text-sm text-gray-600">Calls: ${agent.total_calls || 0}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function answerCall(callSid) {
+            try {
+                const response = await fetch('/agent/answer-call', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        call_sid: callSid,
+                        agent_id: agentData.agent.id
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    updateAgentStatus('busy');
+                    showNotification('Call connected!', 'success');
+                } else {
+                    showNotification('Failed to answer call: ' + result.detail, 'error');
+                }
+            } catch (error) {
+                showNotification('Error answering call: ' + error.message, 'error');
+            }
+        }
+
+        function handleIncomingCall(call) {
+            currentCall = call;
+            
+            // Show call interface
+            document.getElementById('callInterface').classList.remove('hidden');
+            document.getElementById('currentCallerNumber').textContent = call.parameters.From || 'Unknown';
+            
+            // Accept the call
+            call.accept();
+            
+            // Update agent status
+            updateAgentStatus('busy');
+            
+            showNotification('Call connected!', 'success');
+        }
+
+        function handleCallDisconnect() {
+            currentCall = null;
+            
+            // Hide call interface
+            document.getElementById('callInterface').classList.add('hidden');
+            
+            // Update agent status
+            updateAgentStatus('available');
+            
+            showNotification('Call ended', 'info');
+        }
+
+        // Call control functions
+        document.getElementById('muteBtn').addEventListener('click', function() {
+            if (currentCall) {
+                if (isMuted) {
+                    currentCall.unmute();
+                    this.textContent = 'Mute';
+                    this.className = this.className.replace('bg-red-500', 'bg-yellow-500').replace('hover:bg-red-600', 'hover:bg-yellow-600');
+                } else {
+                    currentCall.mute();
+                    this.textContent = 'Unmute';
+                    this.className = this.className.replace('bg-yellow-500', 'bg-red-500').replace('hover:bg-yellow-600', 'hover:bg-red-600');
+                }
+                isMuted = !isMuted;
+            }
+        });
+
+        document.getElementById('hangupBtn').addEventListener('click', function() {
+            if (currentCall) {
+                currentCall.disconnect();
+            }
+        });
+
+        async function logout() {
+            try {
+                await fetch(`/agent/logout/${agentData.agent.id}`, {
+                    method: 'POST'
+                });
+                
+                // Redirect to login
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('Logout error:', error);
+                // Force logout even if API call fails
+                window.location.href = '/login';
+            }
+        }
+
+        // Utility functions
+        function updateAgentStatus(status) {
+            const statusEl = document.getElementById('agentStatus');
+            agentData.agent.status = status;
+            statusEl.className = `w-3 h-3 rounded-full ${getStatusColor(status)}`;
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'available': return 'bg-green-500';
+                case 'busy': return 'bg-red-500';
+                case 'offline': return 'bg-gray-400';
+                default: return 'bg-gray-400';
+            }
+        }
+
+        function getStatusTextColor(status) {
+            switch (status) {
+                case 'available': return 'text-green-600';
+                case 'busy': return 'text-red-600';
+                case 'offline': return 'text-gray-600';
+                default: return 'text-gray-600';
+            }
+        }
+
+        function formatWaitTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return minutes > 0 ? `${minutes}m ${remainingSeconds}s` : `${remainingSeconds}s`;
+        }
+
+        function playNotificationSound() {
+            // Create a simple beep sound
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800;
+                oscillator.type = 'square';
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (e) {
+                console.log('Could not play notification sound');
+            }
+        }
+
+        function showNotification(message, type) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' :
+                type === 'error' ? 'bg-red-500 text-white' :
+                type === 'info' ? 'bg-blue-500 text-white' :
+                'bg-gray-500 text-white'
+            }`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 3000);
+        }
+
+        // Auto-refresh queue status
+        function updateQueueDisplay() {
+            fetch('/queue/status')
+                .then(response => response.json())
+                .then(data => updateDashboard(data))
+                .catch(error => console.error('Error updating queue:', error));
+        }
+
+        function updateAgentsDisplay() {
+            updateQueueDisplay(); // This will also update agents
+        }
+
+        // Set up periodic updates
+        setInterval(updateQueueDisplay, 30000);
+    </script>
+</body>
+</html>
