@@ -8,6 +8,7 @@ import { ServiceFeedbackRoutes } from "../modules/feedback/ServiceFeedback/servi
 import { AgentFeedbackRoutes } from "../modules/feedback/AgentFeedback/agentFeedback.route";
 import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNumbers.routes";
 import { AgentRoutes } from "../modules/agentManagement/agent.routes";
+import { TestCallRoutes } from "../modules/test-call/test.route";
 
 const router = Router();
 
@@ -28,10 +29,10 @@ const moduleRoutes = [
     path: "/subscriptions",
     route: SubscriptionRoutes,
   },
-  // {
-  //   path: "/calls",
-  //   route: callRouter,
-  // },
+  {
+    path: "/calls",
+    route: TestCallRoutes,
+  },
   {
     path: "/service-feedback",
     route: ServiceFeedbackRoutes,
