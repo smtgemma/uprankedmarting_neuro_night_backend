@@ -6,7 +6,8 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 
 // Demo data (you can replace with database calls)
 const demoSubscribers = {
-  "+18633445510": { plan: "real_agent" },
+  // "+18633445510": { plan: "real_agent" },
+  "+19062890771": { plan: "real_agent" },
 };
 
 
@@ -14,7 +15,8 @@ const demoAgents = [
   {
     name: "Alice",
     available: true,
-    sip_address: "sip:hudaisip@test-sip-sajjad.sip.twilio.com",
+    // sip_address: "sip:hudaisip@test-sip-sajjad.sip.twilio.com",
+    sip_address: "sip:hudaisip@137.59.180.209:54723;transport=TCP;rinstance=76dda5701dee486f"
   },
   { name: "Bob", available: false, sip_address: "sip:bob@company.com" },
 ];
