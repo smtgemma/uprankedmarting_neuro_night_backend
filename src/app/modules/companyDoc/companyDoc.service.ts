@@ -14,17 +14,17 @@ const removeFileExtension = (filename: string): string => {
 };
 
 const createCompanyDoc = async (req: Request) => {
-  const { organizationId, docFor } = req.body;
+  const { docFor } = req.body;
   const file = req.file;
 
   const user = req.user;
 
-  const company = await prisma.organization.findUnique({
-    where: { id: organizationId, ownerId: user?.id },
+  const Organization = await prisma.organization.findUnique({
+    where: { ownerId: user?.id },
   });
 
-  if (!company) {
-    throw new Error("Company not found for the user");
+  if (!Organization) {
+    throw new Error("Organization not found for the user");
   }
 
   if (!file) {
@@ -40,13 +40,13 @@ const createCompanyDoc = async (req: Request) => {
 
   try {
     if (file.mimetype === "application/pdf") {
-      console.log("Extracting text from PDF...");
+      // console.log("Extracting text from PDF...");
       content = await extractTextFromPDF(file.path);
     } else if (
       file.mimetype ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
-      console.log("Extracting text from DOCX...");
+      // console.log("Extracting text from DOCX...");
       content = await extractTextFromDocx(file.path);
     } else {
       throw new Error("Unsupported file type");
@@ -56,7 +56,7 @@ const createCompanyDoc = async (req: Request) => {
 
     const companyDoc = await prisma.organizationDoc.create({
       data: {
-        organizationId: organizationId,
+        organizationId: Organization?.id,
         docFor: docFor as DocFor,
         content,
         docId: file.filename,

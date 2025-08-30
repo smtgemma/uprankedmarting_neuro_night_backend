@@ -10,6 +10,7 @@ import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNu
 import { AgentRoutes } from "../modules/agentManagement/agent.routes";
 import { TestCallRoutes } from "../modules/test-call/test.route";
 import { CompanyDocRoutes } from "../modules/companyDoc/companyDoc.routes";
+import { RecordAndTranscriptRoutes } from "../modules/RecordAndTranscript/recordAndTranscript.routes";
 
 const router = Router();
 
@@ -57,7 +58,11 @@ const moduleRoutes = [
   {
     path: "/company-docs",
     route: CompanyDocRoutes,
-  }
+  },
+  {
+    path: "/call-logs",
+    route: RecordAndTranscriptRoutes,
+  },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
