@@ -142,6 +142,7 @@ model Agent {
   // Add these fields for SIP integration:
   sipUsername String? // Required for SIP authentication
   extension   String? // Internal extension number
+  sip_address String?
 
   twilioIdentity String?      @unique // e.g., "agent_101"
 

@@ -11,6 +11,7 @@ import { AgentRoutes } from "../modules/agentManagement/agent.routes";
 import { TestCallRoutes } from "../modules/test-call/test.route";
 import { CompanyDocRoutes } from "../modules/companyDoc/companyDoc.routes";
 import { RecordAndTranscriptRoutes } from "../modules/RecordAndTranscript/recordAndTranscript.routes";
+import { SipRoutes } from "../modules/sip/sip.route";
 
 const router = Router();
 
@@ -62,6 +63,10 @@ const moduleRoutes = [
   {
     path: "/call-logs",
     route: RecordAndTranscriptRoutes,
+  },
+  {
+    path: "/sip",
+    route: SipRoutes,
   },
 ];
 
