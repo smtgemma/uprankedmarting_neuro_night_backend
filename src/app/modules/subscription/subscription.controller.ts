@@ -4,9 +4,16 @@ import sendResponse from "../../utils/sendResponse";
 import { SubscriptionServices } from "./subscription.service";
 
 const createSubscription = catchAsync(async (req, res) => {
-  const { planId, organizationId } = req.body;
+  const { planId, organizationId, planLevel, purchasedNumber, sid,numberOfAgents } = req.body;
 
-  const result = await SubscriptionServices.createSubscription(organizationId, planId);
+  const result = await SubscriptionServices.createSubscription(
+    organizationId,
+    planId,
+    planLevel,
+    purchasedNumber,
+    sid,
+    numberOfAgents
+  );
 
   sendResponse(res, {
     statusCode: status.CREATED,
@@ -26,7 +33,9 @@ const getAllSubscription = catchAsync(async (req, res) => {
 });
 
 const getSingleSubscription = catchAsync(async (req, res) => {
-  const result = await SubscriptionServices.getSingleSubscription(req.params.subscriptionId);
+  const result = await SubscriptionServices.getSingleSubscription(
+    req.params.subscriptionId
+  );
   sendResponse(res, {
     statusCode: status.OK,
     message: "Subscription retrieved successfully",
@@ -49,7 +58,10 @@ const getMySubscription = catchAsync(async (req, res) => {
 const updateSubscription = catchAsync(async (req, res) => {
   const { subscriptionId } = req.params;
 
-  const result = await SubscriptionServices.updateSubscription(subscriptionId, req.body);
+  const result = await SubscriptionServices.updateSubscription(
+    subscriptionId,
+    req.body
+  );
   sendResponse(res, {
     statusCode: status.OK,
     message: "Subscription updated successfully.",
@@ -58,7 +70,9 @@ const updateSubscription = catchAsync(async (req, res) => {
 });
 
 const deleteSubscription = catchAsync(async (req, res) => {
-  const result = await SubscriptionServices.deleteSubscription(req.params.subscriptionId);
+  const result = await SubscriptionServices.deleteSubscription(
+    req.params.subscriptionId
+  );
 
   sendResponse(res, {
     statusCode: status.OK,
@@ -86,7 +100,6 @@ export const SubscriptionController = {
   updateSubscription,
   deleteSubscription,
 };
-
 
 // import status from "http-status";
 // import catchAsync from "../../utils/catchAsync";
