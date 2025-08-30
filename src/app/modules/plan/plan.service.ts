@@ -30,6 +30,7 @@ const createPlan = async (payload: Plan) => {
       data: {
         amount: payload.amount || 0,
         planName: payload.planName,
+        planLevel: payload.planLevel,
         currency: "usd",
         interval: payload.interval,
         intervalCount: payload.intervalCount,

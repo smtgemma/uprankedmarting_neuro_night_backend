@@ -102,7 +102,7 @@ router.delete(
 
 router.post(
   "/stripe/webhook",
-  verifyStripeWebhook,
+  // verifyStripeWebhook,
   SubscriptionController.handleStripeWebhook
 );
 

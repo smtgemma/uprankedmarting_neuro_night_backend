@@ -144,7 +144,7 @@ model Agent {
   extension   String? // Internal extension number
   sip_address String?
 
-  twilioIdentity String?      @unique // e.g., "agent_101"
+  twilioIdentity String? @unique // e.g., "agent_101"
 
   // displayName    String
   // identity       String      @unique // used by Voice SDK
@@ -214,8 +214,8 @@ model Organization {
 }
 
 model UploadVoice {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-  voiceId String @unique @db.ObjectId
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  voiceId   String @unique @db.ObjectId
   voiceName String
 }
 
@@ -263,6 +263,7 @@ model Plan {
   active        Boolean
   description   String?
   features      Json?
+  planLevel     PlanLevel
   Subscription  Subscription[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -282,6 +283,10 @@ model Subscription {
   status          SubscriptionStatus @default(INCOMPLETE)
   organization    Organization?      @relation(fields: [organizationId], references: [id])
   plan            Plan?              @relation(fields: [planId], references: [id])
+  planLevel       PlanLevel
+  purchasedNumber String
+  sid             String
+  numberOfAgents  Int                @default(0)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
