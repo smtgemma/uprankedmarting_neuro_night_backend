@@ -3,12 +3,13 @@ import { PlanRoutes } from "../modules/plan/plan.route";
 import { AuthRoutes } from "../modules/auth/auth.route";
 import { UserRoutes } from "../modules/user/user.routes";
 import { SubscriptionRoutes } from "../modules/subscription/subscription.route";
-import {  CallRoutes } from "../modules/calls/calls.route";
+import { CallRoutes } from "../modules/calls/calls.route";
 import { ServiceFeedbackRoutes } from "../modules/feedback/ServiceFeedback/serviceFeedback.route";
 import { AgentFeedbackRoutes } from "../modules/feedback/AgentFeedback/agentFeedback.route";
 import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNumbers.routes";
 import { AgentRoutes } from "../modules/agentManagement/agent.routes";
 import { TestCallRoutes } from "../modules/test-call/test.route";
+import { OrganizationRoutes } from "../modules/organization/organization.routes";
 
 const router = Router();
 
@@ -52,7 +53,11 @@ const moduleRoutes = [
   {
     path: "/agents",
     route: AgentRoutes,
-  }
+  },
+  {
+    path: "/organizations",
+    route: OrganizationRoutes,
+  },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
