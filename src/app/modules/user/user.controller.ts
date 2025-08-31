@@ -47,6 +47,8 @@ const getAllUser = catchAsync(async (req, res) => {
   });
 });
 
+
+
 const updateUser = catchAsync(async (req, res) => {
   const user = req.user;
 
