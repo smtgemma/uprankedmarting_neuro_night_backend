@@ -14,6 +14,7 @@ import { generateOTPData } from "../../utils/otp";
 import { sendEmail } from "../../utils/sendEmail";
 import { generateUniqueUsernameFromEmail } from "../../utils/generateUniqueSlug";
 import { TwilioSipService } from "../sip/sip.service";
+import { sendAgentWelcomeEmail } from "../../utils/sendAgentWelcomeEmail";
 
 const createUserIntoDB = async (payload: any) => {
   const { userData, organizationData } = payload;
@@ -171,7 +172,9 @@ const createAgentIntoDB = async (payload: any) => {
       sip_domain,
     });
 
-    console.log("sipInfo", sipInfo);
+    // console.log("sipInfo", sipInfo)
+
+    // console.log("sipInfo", sipInfo);
 
     const result = await prisma.$transaction(async (tx) => {
       // ===== Double-check for existing user INSIDE transaction =====
@@ -205,7 +208,7 @@ const createAgentIntoDB = async (payload: any) => {
         data: userPayload,
       });
 
-      console.log("createdUser", createdUser);
+      // console.log("createdUser", createdUser);
 
       // ===== Create Agent =====
       const agentPayload = {
@@ -255,12 +258,27 @@ const createAgentIntoDB = async (payload: any) => {
         droppedCalls: 0,
       };
 
-      console.log("agentPayload", agentPayload);
-      
+      // console.log("agentPayload", agentPayload);
+
+      const EmailPayload = {
+        name: createdUser?.name,
+        email: createdUser?.email,
+        phone: createdUser?.phone,
+        password: userData?.password,
+
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+      };
+
       // FIX: Remove the duplicate userId assignment
       const createdAgent = await tx.agent.create({
         data: agentPayload, // Just pass the agentPayload directly
       });
+
+      // console.log("createdAgent", createdAgent)
+
+      await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
 
       return {
         user: { ...createdUser, password: undefined },
@@ -274,23 +292,20 @@ const createAgentIntoDB = async (payload: any) => {
     };
   } catch (error: any) {
     console.error("Error creating agent:", error);
-    
+
     // Handle specific Prisma errors
     if (error.code === "P2002") {
       const field = error.meta?.target?.[0];
       const fieldMap: { [key: string]: string } = {
-        'email': 'Email',
-        'phone': 'Phone',
-        'userId': 'User ID',
-        'twilioIdentity': 'Twilio Identity',
-        'employeeId': 'Employee ID'
+        email: "Email",
+        phone: "Phone",
+        userId: "User ID",
+        twilioIdentity: "Twilio Identity",
+        employeeId: "Employee ID",
       };
-      
-      const fieldName = fieldMap[field] || field || 'Field';
-      throw new ApiError(
-        status.BAD_REQUEST,
-        `${fieldName} already exists`
-      );
+
+      const fieldName = fieldMap[field] || field || "Field";
+      throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
     }
 
     // Handle our custom ApiError
@@ -562,7 +577,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           ssn: agentData.ssn,
           skills: agentData.skills,
           employeeId: agentData.employeeId,
-          officeHours: agentData.officeHours,
           isAvailable: agentData.isAvailable,
           assignTo: agentData.assignTo, // Super admin can reassign to different organization
         },
