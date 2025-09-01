@@ -6,6 +6,7 @@ import status from "http-status";
 import { PaymentStatus, Interval, SubscriptionStatus } from "@prisma/client";
 import AppError from "../errors/AppError";
 import prisma from "./prisma";
+import axios from "axios";
 
 
 // Helper function to calculate end date based on plan interval
@@ -94,6 +95,30 @@ const handlePaymentIntentSucceeded = async (
       },
     }),
   ]);
+
+
+  // Send POST request to Twilio auto-route endpoint
+  try {
+    const payload = {
+      payment_status: PaymentStatus.COMPLETED,
+      phone: payment.purchasedNumber,
+      sid: payment.sid,
+      plan: payment.planLevel,
+    };
+
+    await axios.post("http://10.0.30.84:8000/twilio/auto-route", payload, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    console.log("Successfully sent POST request to Twilio auto-route endpoint");
+  } catch (error) {
+    console.error("Error sending POST request to Twilio:", error);
+    // Optionally, handle the error (e.g., log to a monitoring service, retry, or throw)
+    // For now, we won't throw an error to avoid disrupting the subscription update
+  }
+
+  
 };
 
 const handlePaymentIntentFailed = async (
