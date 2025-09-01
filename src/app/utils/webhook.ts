@@ -97,25 +97,27 @@ const handlePaymentIntentSucceeded = async (
   ]);
 
 
-  // Send POST request to Twilio auto-route endpoint
-  try {
-    const payload = {
-      payment_status: PaymentStatus.COMPLETED,
-      phone: payment.purchasedNumber,
-      sid: payment.sid,
-      plan: payment.planLevel,
-    };
+    // Send POST request to Twilio auto-route endpoint only if planLevel is 'only_real_agent'
+  if (payment.planLevel === "only_real_agent") {
+    try {
+      const payload = {
+        payment_status: PaymentStatus.COMPLETED,
+        phone: payment.purchasedNumber,
+        sid: payment.sid,
+        plan: payment.planLevel,
+        organization_id: payment.organizationId,
+      };
 
-    await axios.post("http://10.0.30.84:8000/twilio/auto-route", payload, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    console.log("Successfully sent POST request to Twilio auto-route endpoint");
-  } catch (error) {
-    console.error("Error sending POST request to Twilio:", error);
-    // Optionally, handle the error (e.g., log to a monitoring service, retry, or throw)
-    // For now, we won't throw an error to avoid disrupting the subscription update
+      await axios.post("http://10.0.30.84:8000/twilio/auto-route", payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      console.log("Successfully sent POST request to Twilio auto-route endpoint");
+    } catch (error) {
+      console.error("Error sending POST request to Twilio:", error);
+      // Optionally, handle the error (e.g., log to a monitoring service, retry, or throw)
+    }
   }
 
   
