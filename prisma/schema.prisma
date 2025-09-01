@@ -120,9 +120,9 @@ model User {
 }
 
 enum AgentStatus {
-  AVAILABLE
-  BUSY
-  OFFLINE
+  free
+  busy
+  offline
 }
 
 enum CallStatus {
@@ -135,20 +135,24 @@ enum CallStatus {
   CANCELED
 }
 
+enum employmentType {
+  part_time
+  full_time
+  contract
+}
+
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
 
-  // Add these fields for SIP integration:
-  sipUsername String? // Required for SIP authentication
-  extension   String? // Internal extension number
-  sip_address String?
+  // // Add these fields for SIP integration:
+  // sipUsername String? // Required for SIP authentication sip:agentone@test-uprank.sip.twilio.com   
+  // extension   String? // Internal extension number
 
-  twilioIdentity String? @unique // e.g., "agent_101"
-
-  // displayName    String
-  // identity       String      @unique // used by Voice SDK
-  status AgentStatus @default(OFFLINE)
+  status         AgentStatus @default(offline)
+  sip_address    String?
+  sip_username   String?
+  sip_password   String?
 
   // Personal info
   dateOfBirth    DateTime
@@ -157,13 +161,19 @@ model Agent {
   emergencyPhone String
   ssn            String?
 
-  // Professional info
+  // Professional info 
   skills      String[]
-  employeeId  String
+  employeeId  String?
   isAvailable Boolean  @default(true)
   assignTo    String?  @db.ObjectId
 
-  officeHours       Int
+  // employment information
+  jobTitle       String
+  employmentType employmentType
+  department     String
+
+  workEndTime       DateTime?
+  workStartTime     DateTime?
   startWorkDateTime DateTime?
   endWorkDateTime   DateTime?
 
@@ -184,14 +194,11 @@ model Agent {
 model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  // Add SIP domain field
-  sipDomain String? // Stores the Twilio SIP domain like "company.sip.twilio.com"
-
   name               String
   industry           String?
   address            String
   websiteLink        String
-  organizationNumber String? @unique
+  organizationNumber String?
   ownerId            String? @unique @db.ObjectId
 
   agentVoiceUrl String?
@@ -209,42 +216,66 @@ model Organization {
   calls                 Call[]
   tools                 ToolIntegration[]
   availableTwilioNumber AvailableTwilioNumber[]
+  voice                 UploadVoice?
+  AiAgent               AiAgent?
+  AiknowledgeBase       AiknowledgeBase[]
 
   @@map("organizations")
 }
 
 model UploadVoice {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  voiceId   String @unique @db.ObjectId
-  voiceName String
+  id                    String  @id @default(auto()) @map("_id") @db.ObjectId
+  voiceId               String  @unique @db.ObjectId
+  voiceName             String
+  requires_verification Boolean
+  organizationId        String  @unique @db.ObjectId
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
 model AiAgent {
-  id             String  @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String? @db.ObjectId
-  agentId        String  @unique @db.ObjectId
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String @unique 
+  organizationId String @unique @db.ObjectId
 
-  // for voice
+  Organization Organization @relation(fields: [organizationId], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AiknowledgeBase {
+  id                String       @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId    String       @db.ObjectId
+  knowledgeBaseId   String       @unique
+  knowledgeBaseName String
+  Organization      Organization @relation(fields: [organizationId], references: [id])
+
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model OrganizationDoc {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
   organizationId String @db.ObjectId
-  docFor    DocFor @default(AI)
-  content   Json
+  docFor         DocFor @default(AI)
+  content        Json
+
+  // ai
+  aiDocId   String?
+  aiDocName String?
 
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-
-  // ai
-  docId   String?
-  docName String?
 
   @@map("company_docs")
 }
@@ -309,8 +340,8 @@ model Call {
   // orgId     String
   // agentId   String?
 
-  ivrState String?
-  digits   String?
+  // ivrState String?
+  // digits   String?
 
   callTime    DateTime
   callType    String

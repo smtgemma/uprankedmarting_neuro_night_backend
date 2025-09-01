@@ -20,7 +20,7 @@ const createCompanyDoc = async (req: Request) => {
   const user = req.user;
 
   const Organization = await prisma.organization.findUnique({
-    where: { ownerId: user?.id },
+    where: { ownerId: user?.id , },
   });
 
   if (!Organization) {
