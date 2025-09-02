@@ -172,8 +172,8 @@ model Agent {
   employmentType employmentType
   department     String
 
-  workEndTime       DateTime?
-  workStartTime     DateTime?
+  workEndTime       String?
+  workStartTime     String?
   startWorkDateTime DateTime?
   endWorkDateTime   DateTime?
 

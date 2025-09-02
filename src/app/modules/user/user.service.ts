@@ -147,12 +147,11 @@ const createAgentIntoDB = async (payload: any) => {
     // ===== Check for existing user OUTSIDE transaction first =====
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [
-          { email: userData.email.toLowerCase().trim() },
-          { phone: userData.phone.trim() },
-        ],
+        OR: [{ email: userData.email }, { phone: userData.phone }],
       },
     });
+
+    // console.log("existingUser", existingUser)
 
     if (existingUser) {
       throw new ApiError(
@@ -171,10 +170,6 @@ const createAgentIntoDB = async (payload: any) => {
       password,
       sip_domain,
     });
-
-    // console.log("sipInfo", sipInfo)
-
-    // console.log("sipInfo", sipInfo);
 
     const result = await prisma.$transaction(async (tx) => {
       // ===== Double-check for existing user INSIDE transaction =====
@@ -208,75 +203,49 @@ const createAgentIntoDB = async (payload: any) => {
         data: userPayload,
       });
 
-      // console.log("createdUser", createdUser);
-
       // ===== Create Agent =====
       const agentPayload = {
-        userId: createdUser.id, // This is correct
+        userId: createdUser.id,
         dateOfBirth: new Date(agentData.dateOfBirth),
         gender: agentData.gender,
         address: agentData.address?.trim(),
-        emergencyPhone: agentData.emergencyPhone
-          ? agentData.emergencyPhone?.trim()
-          : "",
-        ssn: agentData.ssn, // Remove hyphens from SSN
+        emergencyPhone: agentData.emergencyPhone?.trim() || "",
+        ssn: agentData.ssn,
         skills: agentData.skills || [],
         sip_address: sipInfo?.fullSipUri,
         sip_username: userName,
         sip_password: password,
-
-        // Professional info
         jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
         employmentType: agentData.employmentType || employmentType.full_time,
         department: agentData.department?.trim() || "Customer Service",
-
-        // Office hours - validate dates
-        workStartTime:
-          agentData.workStartTime &&
-          !isNaN(new Date(agentData.workStartTime).getTime())
-            ? new Date(agentData.workStartTime)
-            : null,
-        workEndTime:
-          agentData.workEndTime &&
-          !isNaN(new Date(agentData.workEndTime).getTime())
-            ? new Date(agentData.workEndTime)
-            : null,
-        startWorkDateTime:
-          agentData.startWorkDateTime &&
-          !isNaN(new Date(agentData.startWorkDateTime).getTime())
-            ? new Date(agentData.startWorkDateTime)
-            : null,
-        endWorkDateTime:
-          agentData.endWorkDateTime &&
-          !isNaN(new Date(agentData.endWorkDateTime).getTime())
-            ? new Date(agentData.endWorkDateTime)
-            : null,
-
-        // Call metrics
+        // Keep as strings (no Date conversion)
+        workStartTime: agentData.workStartTime,
+        workEndTime: agentData.workEndTime,
+        // Convert only DateTime fields
+        startWorkDateTime: agentData.startWorkDateTime
+          ? new Date(agentData.startWorkDateTime)
+          : null,
+        endWorkDateTime: agentData.endWorkDateTime
+          ? new Date(agentData.endWorkDateTime)
+          : null,
         totalCalls: 0,
         successCalls: 0,
         droppedCalls: 0,
       };
 
-      // console.log("agentPayload", agentPayload);
-
       const EmailPayload = {
-        name: createdUser?.name,
-        email: createdUser?.email,
-        phone: createdUser?.phone,
-        password: userData?.password,
-
+        name: createdUser.name,
+        email: createdUser.email,
+        phone: createdUser.phone,
+        password: userData.password,
         sip_address: sipInfo?.fullSipUri,
         sip_username: userName,
         sip_password: password,
       };
 
-      // FIX: Remove the duplicate userId assignment
       const createdAgent = await tx.agent.create({
-        data: agentPayload, // Just pass the agentPayload directly
+        data: agentPayload,
       });
-
-      // console.log("createdAgent", createdAgent)
 
       await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
 
@@ -293,7 +262,6 @@ const createAgentIntoDB = async (payload: any) => {
   } catch (error: any) {
     console.error("Error creating agent:", error);
 
-    // Handle specific Prisma errors
     if (error.code === "P2002") {
       const field = error.meta?.target?.[0];
       const fieldMap: { [key: string]: string } = {
@@ -308,12 +276,8 @@ const createAgentIntoDB = async (payload: any) => {
       throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
     }
 
-    // Handle our custom ApiError
-    if (error instanceof ApiError) {
-      throw error;
-    }
+    if (error instanceof ApiError) throw error;
 
-    // Handle other errors
     throw new ApiError(
       status.INTERNAL_SERVER_ERROR,
       "Failed to create agent: " + error.message
@@ -517,15 +481,15 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   }
 
   // console.log(targetUser);
-  // if (
-  //   targetUser?.Agent?.ssn === agentData?.ssn ||
-  //   targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
-  // ) {
-  //   throw new ApiError(
-  //     status.BAD_REQUEST,
-  //     "SSN or Emergency Phone number already exists!"
-  //   );
-  // }
+  if (
+    targetUser?.Agent?.ssn === agentData?.ssn ||
+    targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
+  ) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "SSN or Emergency Phone number already exists!"
+    );
+  }
 
   const result = await prisma.$transaction(async (transactionClient) => {
     let updatedUser = targetUser;
@@ -533,19 +497,20 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
     // Update user data if provided
     if (userData) {
-      // Check for duplicate email or phone
-      const checkIfNumberOrEmailExists = await transactionClient.user.findFirst(
-        {
-          where: {
-            phone: userData.phone,
-          },
-        }
-      );
-
-      // console.log(checkIfNumberOrEmailExists)
-
-      if (checkIfNumberOrEmailExists) {
-        throw new ApiError(status.BAD_REQUEST, "Phone number already exists!");
+      // ===== Check for existing user =====
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [{ email: userData.email }, { phone: userData.phone }],
+        },
+        include: {
+          Agent: true,
+        },
+      });
+      if (existingUser) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "User with this email or phone already exists!"
+        );
       }
 
       updatedUser = await transactionClient.user.update({
@@ -568,17 +533,11 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
       updatedAgent = await transactionClient.agent.update({
         where: { userId: agentId },
         data: {
-          dateOfBirth: agentData.dateOfBirth
-            ? new Date(agentData.dateOfBirth)
-            : undefined,
-          gender: agentData.gender,
-          address: agentData.address,
+          ...agentData,
           emergencyPhone: agentData.emergencyPhone,
           ssn: agentData.ssn,
           skills: agentData.skills,
-          employeeId: agentData.employeeId,
-          isAvailable: agentData.isAvailable,
-          assignTo: agentData.assignTo, // Super admin can reassign to different organization
+          dateOfBirth:  new Date(agentData.dateOfBirth)
         },
       });
     }
