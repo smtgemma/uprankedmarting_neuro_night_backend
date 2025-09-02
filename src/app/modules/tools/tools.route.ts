@@ -10,8 +10,8 @@ const router = Router();
 
 router.post(
   "/create-lead",
-  auth(UserRole.organization_admin, UserRole.super_admin),
-  validateRequest(ToolsValidation.CreateLeadSchema),
+  // auth(UserRole.organization_admin, UserRole.super_admin),
+  // validateRequest(ToolsValidation.CreateLeadSchema),
   ToolsController.createHubSpotLead
 );
 

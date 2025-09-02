@@ -8,6 +8,7 @@ export default {
   port: process.env.PORT,
   host: process.env.HOST,
   databaseUrl: process.env.DATABASE_URL,
+  hubspot_api_key: process.env.HUBSPOT_API_KEY,
   telnyx: {
     telnyxApiKey: process.env.TELNYX_API_KEY,
     telnyxWebhookSecret: process.env.TELNYX_WEBHOOK_SECRET, // Add this
@@ -58,6 +59,7 @@ export default {
     account_sid: process.env.ACCOUNT_SID,
     auth_token: process.env.AUTH_TOKEN,
     twilio_number: process.env.TWILIO_NUMBER,
+    twilio_auto_route_url: process.env.TWILIO_AUTO_ROUTE_URL,
   },
   stripe: {
     secret_key: process.env.STRIPE_SECRET_KEY,
