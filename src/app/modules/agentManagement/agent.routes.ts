@@ -54,7 +54,7 @@ router.patch(
   AssignmentController.approveAssignment
 );
 router.patch(
-  "/:assignmentId/reject",
+  "/reject/:assignmentId",
   auth(UserRole.super_admin),
   AssignmentController.rejectAssignment
 );
