@@ -91,7 +91,7 @@ model User {
   email     String  @unique
   password  String
   image     String? @default("")
-  bio       String?
+  bio       String? @default("")
   phone     String  @unique
   isDeleted Boolean @default(false)
 
@@ -115,6 +115,7 @@ model User {
   ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
   ServiceFeedbacks  ServiceFeedback[]
   AgentFeedbacks    AgentFeedback[]
+  assignedAgents    AgentAssignment[] @relation("AssignmentMadeBy")
 
   @@map("users")
 }
@@ -145,14 +146,10 @@ model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
 
-  // // Add these fields for SIP integration:
-  // sipUsername String? // Required for SIP authentication sip:agentone@test-uprank.sip.twilio.com   
-  // extension   String? // Internal extension number
-
-  status         AgentStatus @default(offline)
-  sip_address    String?
-  sip_username   String?
-  sip_password   String?
+  status       AgentStatus @default(offline)
+  sip_address  String?
+  sip_username String?
+  sip_password String?
 
   // Personal info
   dateOfBirth    DateTime
@@ -162,10 +159,11 @@ model Agent {
   ssn            String?
 
   // Professional info 
-  skills      String[]
+  skills String[] @default([])
+
   employeeId  String?
-  isAvailable Boolean  @default(true)
-  assignTo    String?  @db.ObjectId
+  isAvailable Boolean @default(true)
+  assignTo    String? @db.ObjectId
 
   // employment information
   jobTitle       String
@@ -188,7 +186,38 @@ model Agent {
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
 
+  assignments AgentAssignment[]
+
   @@map("agents")
+}
+
+enum AssignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AgentAssignment {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String           @db.ObjectId
+  organizationId String           @db.ObjectId
+  status         AssignmentStatus @default(PENDING)
+  assignedBy     String?          @db.ObjectId // User who made the assignment
+  assignedAt     DateTime         @default(now())
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  reason         String? // Reason for rejection if applicable
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent          Agent        @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
+
+  @@unique([agentId, organizationId])
 }
 
 model Organization {
@@ -219,6 +248,7 @@ model Organization {
   voice                 UploadVoice?
   AiAgent               AiAgent?
   AiknowledgeBase       AiknowledgeBase[]
+  AgentAssignment       AgentAssignment[]
 
   @@map("organizations")
 }
@@ -239,7 +269,7 @@ model UploadVoice {
 
 model AiAgent {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String @unique 
+  agentId        String @unique
   organizationId String @unique @db.ObjectId
 
   Organization Organization @relation(fields: [organizationId], references: [id])
