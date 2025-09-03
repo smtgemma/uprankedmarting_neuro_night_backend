@@ -8,6 +8,17 @@ const createAgentFeedback = async (
   data: { rating: number; feedbackText?: string; agentId: string },
   userId: string
 ): Promise<AgentFeedback> => {
+  const checkAgentFeedback = await prisma.agentFeedback.findFirst({
+    where: {
+      agentId: data.agentId,
+      clientId: userId,
+    },
+  });
+
+  if (checkAgentFeedback) {
+    throw new AppError(status.BAD_REQUEST, "Agent feedback already exists!");
+  }
+
   const serviceData = {
     rating: data.rating,
     feedbackText: data.feedbackText || undefined,

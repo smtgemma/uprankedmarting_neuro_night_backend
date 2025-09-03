@@ -9,7 +9,7 @@ const login = catchAsync(async (req, res) => {
 
   const result = await AuthService.loginUser(email, password);
 
-  const { accessToken, refreshToken } = result;
+  const { accessToken, refreshToken, isVerified , message } = result;
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
@@ -21,7 +21,7 @@ const login = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: status.OK,
     message: "User logged in successfully!",
-    data: { accessToken, refreshToken },
+    data: { accessToken, refreshToken , isVerified , message},
   });
 });
 
