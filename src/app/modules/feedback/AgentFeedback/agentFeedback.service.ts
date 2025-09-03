@@ -1,4 +1,4 @@
-import { PrismaClient, AgentFeedback } from "@prisma/client";
+import { PrismaClient, AgentFeedback, User } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";
@@ -20,6 +20,32 @@ const createAgentFeedback = async (
     throw new AppError(status.BAD_REQUEST, "Agent feedback already exists!");
   }
 
+  const checkisAgentAssignToMyOrganization =
+    await prisma.organization.findFirst({
+      where: {
+        ownerId: userId,
+      },
+      include: {
+        agents: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+  const isAgentInOrg = checkisAgentAssignToMyOrganization?.agents?.some(
+    (agent) => agent.id.toString() === agentId
+  );
+
+  if (!isAgentInOrg) {
+    console.log("Agent not found in this organization:", agentId);
+    throw new AppError(
+      status.BAD_REQUEST,
+      "Agent is not assigned to your organization!"
+    );
+  }
+
   const serviceData = {
     rating: data.rating,
     feedbackText: data.feedbackText || undefined,
@@ -33,10 +59,23 @@ const createAgentFeedback = async (
   return result;
 };
 
-const getAllAgentFeedbacks = async (query: Record<string, unknown>) => {
+const getAllAgentFeedbacks = async (query: Record<string, unknown>, user: User) => {
+
+  const agent = await prisma.agent.findUnique({
+    where: {
+      userId: user?.id
+    }
+  })
+
+  console.log(agent)
+
+  // console.log("Agent:", agent)
   const agentFeedbackQuery = new QueryBuilder(prisma.agentFeedback, query)
     .search(["feedbackText"])
     .filter()
+    .rawFilter({
+      agentId: agent?.id,
+    })
     .sort()
     .paginate()
     .fields();

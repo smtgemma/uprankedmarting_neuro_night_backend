@@ -15,7 +15,7 @@ router.post(
   AgentFeedbackController.createAgentFeedback
 );
 
-router.get('/', AgentFeedbackController.getAllAgentFeedbacks);
+router.get('/',auth(UserRole.super_admin, UserRole.agent), AgentFeedbackController.getAllAgentFeedbacks);
 
 router.get(
   '/:id',

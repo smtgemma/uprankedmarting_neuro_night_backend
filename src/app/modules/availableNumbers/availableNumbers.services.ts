@@ -4,6 +4,7 @@ import config from "../../config";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
+import { User } from "@prisma/client";
 // Initialize Twilio client
 const twilioClient = new Twilio(
   config.twilio.account_sid || "AC3c7b7f9af62077ff16931a102df853ff",
@@ -61,7 +62,10 @@ const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) =>
   
   const searchableFields = ['phoneNumber', 'friendlyName',  'countryCode'];
   
-  const customFilters: Record<string, any> = {};
+  // console.log(query?.isPurchased)
+  const customFilters: Record<string, any> = {
+    isPurchased: Boolean(query?.isPurchased)
+  };
   
   // Filter by phone number pattern
   if (query.phoneNumberPattern) {
