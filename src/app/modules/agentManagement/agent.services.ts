@@ -619,11 +619,13 @@ const approveAssignment = async (assignmentId: string) => {
 };
 
 // Reject assignment (Admin only)
+// Reject assignment (Admin only)
 const rejectAssignment = async (assignmentId: string) => {
   const assignment = await prisma.agentAssignment.findUnique({
     where: { id: assignmentId },
     include: {
       agent: true,
+      organization: true,
     },
   });
 
@@ -658,10 +660,29 @@ const rejectAssignment = async (assignmentId: string) => {
           },
         },
       },
+      organization: true,
+      assignedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
     },
   });
 
-  return updatedAssignment;
+  // For rejection: Only remove organization assignment if this was the current one
+  if (assignment.agent.assignTo === assignment.organizationId) {
+    await prisma.agent.update({
+      where: { userId: assignment.agentId },
+      data: {
+        assignTo: null,
+        isAvailable: true,
+      },
+    });
+  }
+
+  return updatedAssignment
 };
 
 // Get pending assignments (Admin only)
