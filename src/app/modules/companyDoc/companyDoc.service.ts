@@ -59,8 +59,8 @@ const createCompanyDoc = async (req: Request) => {
         organizationId: Organization?.id,
         docFor: docFor as DocFor,
         content,
-        docId: file.filename,
-        docName: cleanedDocName,
+        aiDocId: file.filename,
+        aiDocName: cleanedDocName,
       },
       include: {
         organization: true,
@@ -155,8 +155,8 @@ const updateCompanyDoc = async (id: string, req: Request) => {
   });
 
   let content = existingDoc?.content || {};
-  let docId = existingDoc?.docId || null;
-  let docName = existingDoc?.docName || null;
+  let aiDocId = existingDoc?.aiDocId || null;
+  let aiDocName = existingDoc?.aiDocName || null;
 
   // Handle file upload and text extraction if new file is provided
   if (
@@ -169,19 +169,19 @@ const updateCompanyDoc = async (id: string, req: Request) => {
 
     if (file) {
       // Delete old file if exists
-      if (existingDoc?.docId) {
+      if (existingDoc?.aiDocId) {
         const oldFilePath = path.join(
           process.cwd(),
           "uploads",
-          existingDoc.docId
+          existingDoc.aiDocId
         );
         if (fs.existsSync(oldFilePath)) {
           fs.unlinkSync(oldFilePath);
         }
       }
 
-      docId = file.filename;
-      docName = file.originalname;
+      aiDocId = file.filename;
+      aiDocName = file.originalname;
 
       // Extract text based on file type
       try {
@@ -209,8 +209,8 @@ const updateCompanyDoc = async (id: string, req: Request) => {
       organizationId,
       docFor: docFor as DocFor,
       content,
-      docId,
-      docName,
+      aiDocId,
+      aiDocName,
     },
     include: {
       organization: true,
@@ -222,8 +222,8 @@ const deleteCompanyDoc = async (id: string) => {
   const doc = await prisma.organizationDoc.findUnique({ where: { id } });
 
   // Delete associated file if exists
-  if (doc?.docId) {
-    const filePath = path.join(process.cwd(), "uploads", doc.docId);
+  if (doc?.aiDocId) {
+    const filePath = path.join(process.cwd(), "uploads", doc.aiDocId);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
