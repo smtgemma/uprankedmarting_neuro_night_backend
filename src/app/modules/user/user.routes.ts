@@ -1,15 +1,9 @@
-import status from "http-status";
+
 import auth from "../../middlewares/auth";
 import { UserRole } from "@prisma/client";
-import { upload } from "../../utils/upload";
-import ApiError from "../../errors/AppError";
-import { UserValidation } from "./user.validation";
 import { UserController } from "./user.controller";
-import validateRequest from "../../middlewares/validateRequest";
 import { NextFunction, Request, Response, Router } from "express";
 import { multerUpload } from "../../config/multer.config";
-import prisma from "../../utils/prisma";
-import  twilio  from "twilio";
 
 const router = Router();
 
@@ -66,7 +60,8 @@ router.get(
 //   }
 // });
 
-router.post("/register", UserController.createUser);
+router.post("/register-user", UserController.createUser);
+router.post("/register-agent", UserController.createAgent);
 
 router.post(
   "/verify-otp",

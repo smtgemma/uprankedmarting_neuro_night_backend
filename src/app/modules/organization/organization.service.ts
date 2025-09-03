@@ -2,6 +2,7 @@ import status from "http-status";
 // import QueryBuilder from "../../builder/QueryBuilder";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
+import { AssignmentStatus } from "@prisma/client";
 
 const getAllOrganizations = async () => {
   const organizations = await prisma.organization.findMany({
@@ -38,35 +39,12 @@ const getAllOrganizations = async () => {
 };
 
 const getSingleOrganization = async (organizationId: string) => {
+
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: {
-      id: true,
-      name: true,
-      industry: true,
-      organizationNumber: true,
-      ownerId: true,
-      subscriptions: {
-        select: {
-          id: true,
-          amount: true,
-          startDate: true,
-          endDate: true,
-          paymentStatus: true,
-          planLevel: true,
-          purchasedNumber: true,
-          sid: true,
-          numberOfAgents: true,
-          status: true,
-          plan: {
-            select: {
-              id: true,
-              planName: true,
-            },
-          },
-        },
-      },
-    },
+    // include: {
+      
+    // }
   });
 
   if (!organization) {

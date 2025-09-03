@@ -12,6 +12,9 @@ import { generateOTPData } from "../../utils/otp";
 const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
     where: { email },
+    include: {
+      Agent: true,
+    },
   });
 
   if (!user) {
@@ -24,12 +27,19 @@ const loginUser = async (email: string, password: string) => {
     throw new ApiError(status.UNAUTHORIZED, "Password is incorrect!");
   }
 
+  const agentInfo = user?.Agent;
+
   const jwtPayload = {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
     isVerified: user.isVerified ?? false,
+    sip: {
+      sip_password: agentInfo?.sip_password,
+      sip_username: agentInfo?.sip_username,
+      sip_address: agentInfo?.sip_address,
+    },
   };
 
   if (!user.isVerified) {
@@ -69,7 +79,11 @@ const loginUser = async (email: string, password: string) => {
   };
 };
 
-const verifyOTP = async (email: string, otp: number, isVerification: boolean = true) => {
+const verifyOTP = async (
+  email: string,
+  otp: number,
+  isVerification: boolean = true
+) => {
   const user = await prisma.user.findUnique({
     where: { email },
   });
@@ -83,7 +97,10 @@ const verifyOTP = async (email: string, otp: number, isVerification: boolean = t
   }
 
   if (!isVerification && (!user.isResetPassword || !user.canResetPassword)) {
-    throw new ApiError(status.BAD_REQUEST, "User is not eligible for password reset!");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "User is not eligible for password reset!"
+    );
   }
 
   if (!user.otp || !user.otpExpiresAt) {
@@ -127,7 +144,9 @@ const verifyOTP = async (email: string, otp: number, isVerification: boolean = t
 
   return {
     user: updatedUser,
-    message: isVerification ? "Email verified successfully!" : "OTP verified successfully!",
+    message: isVerification
+      ? "Email verified successfully!"
+      : "OTP verified successfully!",
   };
 };
 
@@ -204,7 +223,8 @@ const forgotPassword = async (email: string) => {
   await sendEmail(user.email, otp, false);
 
   return {
-    message: "We have sent a password reset OTP to your email address. Please check your inbox.",
+    message:
+      "We have sent a password reset OTP to your email address. Please check your inbox.",
   };
 };
 
@@ -227,7 +247,10 @@ const resetPasswordWithOTP = async (
   }
 
   if (!user.isResetPassword || !user.canResetPassword) {
-    throw new ApiError(status.BAD_REQUEST, "User is not eligible for password reset!");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "User is not eligible for password reset!"
+    );
   }
 
   if (!user.otp || !user.otpExpiresAt) {
@@ -289,7 +312,8 @@ const resendOTP = async (email: string) => {
   await sendEmail(user.email, otp, !user.isResetPassword);
 
   return {
-    message: "A new OTP has been sent to your email address. Please check your inbox.",
+    message:
+      "A new OTP has been sent to your email address. Please check your inbox.",
   };
 };
 
@@ -303,14 +327,8 @@ const refreshToken = async (token: string) => {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      image: true,
-      isVerified: true,
-      passwordChangedAt: true,
+    include: {
+      Agent: true,
     },
   });
 
@@ -328,13 +346,19 @@ const refreshToken = async (token: string) => {
     );
   }
 
+  const agentInfo = user?.Agent;
+
   const jwtPayload = {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
-    image: user?.image,
-    isVerified: user.isVerified,
+    isVerified: user.isVerified ?? false,
+    sip: {
+      sip_password: agentInfo?.sip_password,
+      sip_username: agentInfo?.sip_username,
+      sip_address: agentInfo?.sip_address,
+    },
   };
 
   const accessToken = jwtHelpers.createToken(

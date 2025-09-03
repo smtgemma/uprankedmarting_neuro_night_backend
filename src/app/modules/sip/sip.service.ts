@@ -2,7 +2,6 @@
 import twilio from "twilio";
 import config from "../../config";
 
-
 const accountSid = config.twilio.account_sid;
 const authToken = config.twilio.auth_token;
 
@@ -16,56 +15,57 @@ const client = twilio(accountSid, authToken);
 
 // Create a SIP endpoint
 const createSipEndpoint = async (data: {
-  friendlyName: string;
   userName: string;
   password: string;
   sip_domain: string;
 }) => {
   try {
-    const { friendlyName, userName, password, sip_domain } = data;
+    const { userName, password, sip_domain } = data;
 
     // First, get the existing SIP domain (don't try to create it)
     const domainSid = await getSipDomain(sip_domain);
-    console.log("domainSid", domainSid)
+    // console.log("domainSid", domainSid);
     if (!domainSid) {
-      throw new Error(`SIP domain ${sip_domain} not found. Please create it first in Twilio console.`);
+      throw new Error(
+        `SIP domain ${sip_domain} not found. Please create it first in Twilio console.`
+      );
     }
 
     // Create a credential list
-    const credentialListName = `${sip_domain.replace('.sip.twilio.com', '')}-${userName}-creds`;
+    const credentialListName = `${sip_domain.replace(
+      ".sip.twilio.com",
+      ""
+    )}-${userName}-creds`;
     const newCredentialList = await client.sip.credentialLists.create({
-      friendlyName: credentialListName
+      friendlyName: credentialListName,
     });
-    
-    console.log("newCredentialList", newCredentialList)
+
+    // console.log("newCredentialList", newCredentialList);
     // Add credentials to the list
-    await client.sip.credentialLists(newCredentialList.sid)
-      .credentials
-      .create({
-        username: userName,
-        password: password
-      });
+    await client.sip.credentialLists(newCredentialList.sid).credentials.create({
+      username: userName,
+      password: password,
+    });
 
     // Create SIP endpoint credential list mapping
-    const sipEndpoint = await client.sip.domains(domainSid)
-      .auth
-      .calls
-      .credentialListMappings
-      .create({ credentialListSid: newCredentialList.sid });
+    const sipEndpoint = await client.sip
+      .domains(domainSid)
+      .auth.calls.credentialListMappings.create({
+        credentialListSid: newCredentialList.sid,
+      });
 
     return {
-      success: true,
-      message: 'SIP endpoint created successfully',
-      data: {
-        credentialListSid: newCredentialList.sid,
-        userName,
-        sip_domain,
-        sipUri: `${userName}@${sip_domain}`,
-        fullSipUri: `sip:${userName}@${sip_domain}`,
-        domainSid: domainSid
-      }
+      // success: true,
+      // message: 'SIP endpoint created successfully',
+      // data: {
+      credentialListSid: newCredentialList.sid,
+      userName,
+      sip_domain,
+      sipUri: `${userName}@${sip_domain}`,
+      fullSipUri: `sip:${userName}@${sip_domain}`,
+      domainSid: domainSid,
+      // }
     };
-
   } catch (error: any) {
     // Handle Twilio API errors specifically
     if (error.code === 20001) {
@@ -83,17 +83,16 @@ const createSipEndpoint = async (data: {
 const getSipDomain = async (domainName: string) => {
   try {
     const domains = await client.sip.domains.list();
-    console.log("domains", domains)
-    const existingDomain = domains.find(domain => 
-      domain.domainName === domainName
+    console.log("domains", domains);
+    const existingDomain = domains.find(
+      (domain) => domain.domainName === domainName
     );
-    
+
     return existingDomain ? existingDomain.sid : null;
   } catch (error: any) {
     throw new Error(`Failed to get SIP domain: ${error.message}`);
   }
 };
-
 
 // Helper function to get default domain
 const getDefaultDomain = async () => {

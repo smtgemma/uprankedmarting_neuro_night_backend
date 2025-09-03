@@ -1,15 +1,23 @@
 import status from "http-status";
-import config from "../../config";
 import prisma from "../../utils/prisma";
 import ApiError from "../../errors/AppError";
-import { User, UserRole, UserStatus } from "@prisma/client";
+import {
+  AgentStatus,
+  employmentType,
+  User,
+  UserRole,
+  UserStatus,
+} from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { hashPassword } from "../../helpers/hashPassword";
 import { generateOTPData } from "../../utils/otp";
 import { sendEmail } from "../../utils/sendEmail";
+import { generateUniqueUsernameFromEmail } from "../../utils/generateUniqueSlug";
+import { TwilioSipService } from "../sip/sip.service";
+import { sendAgentWelcomeEmail } from "../../utils/sendAgentWelcomeEmail";
 
 const createUserIntoDB = async (payload: any) => {
-  const { userData, organizationData, agentData } = payload;
+  const { userData, organizationData } = payload;
 
   // ===== Check for existing user =====
   const existingUser = await prisma.user.findFirst({
@@ -29,7 +37,7 @@ const createUserIntoDB = async (payload: any) => {
 
   const userPayload = {
     ...userData,
-    role: organizationData ? UserRole.organization_admin : UserRole.agent,
+    role: UserRole.organization_admin,
     password: hashedPassword,
     isVerified: false,
     otp,
@@ -46,26 +54,25 @@ const createUserIntoDB = async (payload: any) => {
 
       let createdOrganization = null;
       if (organizationData) {
-        // Ensure unique organizationNumber
-        const orgNumber =
-          organizationData.organizationNumber || `ORG-${Date.now()}`;
+        // Ensure unique organizationNumbe
 
-        const existingOrg = await tx.organization.findUnique({
-          where: { organizationNumber: orgNumber },
+        const existingOrganization = await tx.organization.findFirst({
+          where: {
+            ownerId: createdUser?.id,
+          },
         });
 
-        if (existingOrg) {
+        if (existingOrganization) {
           throw new ApiError(
             status.BAD_REQUEST,
-            `Organization with number ${orgNumber} already exists!`
+            "Organization with this owner already exists!"
           );
         }
 
         createdOrganization = await tx.organization.create({
           data: {
             ...organizationData,
-            ownerId: createdUser.id,
-            organizationNumber: orgNumber,
+            ownerId: createdUser?.id,
           },
         });
 
@@ -78,27 +85,31 @@ const createUserIntoDB = async (payload: any) => {
         });
       }
 
-      let createdAgent = null;
-      if (agentData) {
-        createdAgent = await tx.agent.create({
-          data: {
-            ...agentData,
-            userId: createdUser.id,
-            dateOfBirth: new Date(agentData.dateOfBirth),
-            assignTo: createdOrganization?.id || null,
-            status: "OFFLINE",
-            twilioIdentity: `${agentData?.agent_id}`,
-            isAvailable: agentData.isAvailable ?? true,
-          },
-        });
-      }
+      // let createdAgent = null;
+      // if (agentData) {
+      //   createdAgent = await tx.agent.create({
+      //     data: {
+      //       ...agentData,
+      //       userId: createdUser.id,
+      //       dateOfBirth: new Date(agentData.dateOfBirth),
+      //       assignTo: createdOrganization?.id || null,
+      //       status: "OFFLINE",
+      //       twilioIdentity: `${agentData?.agent_id}`,
+      //       isAvailable: agentData.isAvailable ?? true,
+      //     },
+      //   });
+      // }
 
-      return { user: { ...createdUser, password: undefined }, organization: createdOrganization, agent: createdAgent };
+      return {
+        user: { ...createdUser, password: undefined },
+        organization: createdOrganization,
+      };
     });
 
     return {
       ...result,
-      message: "We have sent a verification email with an OTP to your email address. Please check your inbox.",
+      message:
+        "We have sent a verification email with an OTP to your email address. Please check your inbox.",
     };
   } catch (error: any) {
     if (error.code === "P2002") {
@@ -114,6 +125,165 @@ const createUserIntoDB = async (payload: any) => {
   }
 };
 
+const createAgentIntoDB = async (payload: any) => {
+  const { userData, agentData } = payload;
+
+  // Validate required fields
+  if (!userData?.email || !userData?.phone) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Email and phone are required fields"
+    );
+  }
+
+  if (!agentData?.sip_domain || !agentData?.sip_password) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "SIP domain and password are required"
+    );
+  }
+
+  try {
+    // ===== Check for existing user OUTSIDE transaction first =====
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: userData.email }, { phone: userData.phone }],
+      },
+    });
+
+    // console.log("existingUser", existingUser)
+
+    if (existingUser) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "User with this email or phone already exists!"
+      );
+    }
+
+    const hashedPassword = await hashPassword(userData.password);
+    const userName = await generateUniqueUsernameFromEmail(userData.email);
+    const sip_domain = agentData.sip_domain;
+    const password = agentData.sip_password;
+
+    const sipInfo = await TwilioSipService.createSipEndpoint({
+      userName,
+      password,
+      sip_domain,
+    });
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ===== Double-check for existing user INSIDE transaction =====
+      const existingUserInTx = await tx.user.findFirst({
+        where: {
+          OR: [
+            { email: userData.email.toLowerCase().trim() },
+            { phone: userData.phone.trim() },
+          ],
+        },
+      });
+
+      if (existingUserInTx) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "User with this email or phone already exists!"
+        );
+      }
+
+      // ===== Create User =====
+      const userPayload = {
+        name: userData.name.trim(),
+        email: userData.email.toLowerCase().trim(),
+        phone: userData.phone.trim(),
+        role: UserRole.agent,
+        password: hashedPassword,
+        isVerified: true,
+      };
+
+      const createdUser = await tx.user.create({
+        data: userPayload,
+      });
+
+      // ===== Create Agent =====
+      const agentPayload = {
+        userId: createdUser.id,
+        dateOfBirth: new Date(agentData.dateOfBirth),
+        gender: agentData.gender,
+        address: agentData.address?.trim(),
+        emergencyPhone: agentData.emergencyPhone?.trim() || "",
+        ssn: agentData.ssn,
+        skills: agentData.skills || [],
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+        jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
+        employmentType: agentData.employmentType || employmentType.full_time,
+        department: agentData.department?.trim() || "Customer Service",
+        // Keep as strings (no Date conversion)
+        workStartTime: agentData.workStartTime,
+        workEndTime: agentData.workEndTime,
+        // Convert only DateTime fields
+        startWorkDateTime: agentData.startWorkDateTime
+          ? new Date(agentData.startWorkDateTime)
+          : null,
+        endWorkDateTime: agentData.endWorkDateTime
+          ? new Date(agentData.endWorkDateTime)
+          : null,
+        totalCalls: 0,
+        successCalls: 0,
+        droppedCalls: 0,
+      };
+
+      const EmailPayload = {
+        name: createdUser.name,
+        email: createdUser.email,
+        phone: createdUser.phone,
+        password: userData.password,
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+      };
+
+      const createdAgent = await tx.agent.create({
+        data: agentPayload,
+      });
+
+      await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
+
+      return {
+        user: { ...createdUser, password: undefined },
+        agent: createdAgent,
+      };
+    });
+
+    return {
+      ...result,
+      message: "Agent created successfully!",
+    };
+  } catch (error: any) {
+    console.error("Error creating agent:", error);
+
+    if (error.code === "P2002") {
+      const field = error.meta?.target?.[0];
+      const fieldMap: { [key: string]: string } = {
+        email: "Email",
+        phone: "Phone",
+        userId: "User ID",
+        twilioIdentity: "Twilio Identity",
+        employeeId: "Employee ID",
+      };
+
+      const fieldName = fieldMap[field] || field || "Field";
+      throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
+    }
+
+    if (error instanceof ApiError) throw error;
+
+    throw new ApiError(
+      status.INTERNAL_SERVER_ERROR,
+      "Failed to create agent: " + error.message
+    );
+  }
+};
 const verifyOTP = async (email: string, otp: number) => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -162,7 +332,6 @@ const verifyOTP = async (email: string, otp: number) => {
     message: "Email verified successfully!",
   };
 };
-
 
 const getAllUserFromDB = async (query: Record<string, unknown>) => {
   const userQuery = new QueryBuilder(prisma.user, query)
@@ -312,15 +481,15 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   }
 
   // console.log(targetUser);
-  // if (
-  //   targetUser?.Agent?.ssn === agentData?.ssn ||
-  //   targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
-  // ) {
-  //   throw new ApiError(
-  //     status.BAD_REQUEST,
-  //     "SSN or Emergency Phone number already exists!"
-  //   );
-  // }
+  if (
+    targetUser?.Agent?.ssn === agentData?.ssn ||
+    targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
+  ) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "SSN or Emergency Phone number already exists!"
+    );
+  }
 
   const result = await prisma.$transaction(async (transactionClient) => {
     let updatedUser = targetUser;
@@ -328,19 +497,20 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
     // Update user data if provided
     if (userData) {
-      // Check for duplicate email or phone
-      const checkIfNumberOrEmailExists = await transactionClient.user.findFirst(
-        {
-          where: {
-            phone: userData.phone,
-          },
-        }
-      );
-
-      // console.log(checkIfNumberOrEmailExists)
-
-      if (checkIfNumberOrEmailExists) {
-        throw new ApiError(status.BAD_REQUEST, "Phone number already exists!");
+      // ===== Check for existing user =====
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [{ email: userData.email }, { phone: userData.phone }],
+        },
+        include: {
+          Agent: true,
+        },
+      });
+      if (existingUser) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "User with this email or phone already exists!"
+        );
       }
 
       updatedUser = await transactionClient.user.update({
@@ -363,23 +533,16 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
       updatedAgent = await transactionClient.agent.update({
         where: { userId: agentId },
         data: {
-          dateOfBirth: agentData.dateOfBirth
-            ? new Date(agentData.dateOfBirth)
-            : undefined,
-          gender: agentData.gender,
-          address: agentData.address,
+          ...agentData,
           emergencyPhone: agentData.emergencyPhone,
           ssn: agentData.ssn,
           skills: agentData.skills,
-          employeeId: agentData.employeeId,
-          officeHours: agentData.officeHours,
-          isAvailable: agentData.isAvailable,
-          assignTo: agentData.assignTo, // Super admin can reassign to different organization
+          dateOfBirth:  new Date(agentData.dateOfBirth)
         },
       });
     }
 
-    return {...updatedUser, password: null};
+    return { ...updatedUser, password: null };
   });
 
   return result;
@@ -444,6 +607,7 @@ const updateUserRoleStatusByAdminIntoDB = async (
 
 export const UserService = {
   createUserIntoDB,
+  createAgentIntoDB,
   verifyOTP,
   getAllUserFromDB,
   updateUserIntoDB,
