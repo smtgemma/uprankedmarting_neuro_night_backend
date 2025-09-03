@@ -114,7 +114,8 @@ const getAllAgent = catchAsync(async (req, res) => {
   const filters = pickOptions(req.query, [
     "searchTerm",
     "isAvailable",
-    "status"
+    "status",
+    "viewType"
   ]);
   const result = await AssignmentService.getAllAgentFromDB(options, filters, req.user as User);
 
@@ -124,6 +125,29 @@ const getAllAgent = catchAsync(async (req, res) => {
     data: result
   });
 });
+const getAllAgentForAdmin = catchAsync(async (req, res) => {
+  const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const filters = pickOptions(req.query, [
+    "searchTerm",
+    "isAvailable",
+    "status",
+    "viewType"
+  ]);
+  const result = await AssignmentService.getAllAgentForAdmin(options, filters, req.user as User);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agents are retrieved successfully!",
+    data: result
+  });
+});
+
+
 
 // Admin approves assignment
 const approveAssignment = catchAsync(async (req: Request, res: Response) => {
@@ -188,6 +212,7 @@ const getOrganizationAssignments = catchAsync(async (req: Request, res: Response
 export const AssignmentController = {
   requestAssignment,
   getAllAgent,
+  getAllAgentForAdmin,
   approveAssignment,
   rejectAssignment,
   getPendingAssignments,

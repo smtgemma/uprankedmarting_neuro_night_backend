@@ -352,6 +352,7 @@ import {
   IPaginationOptions,
   paginationHelper,
 } from "../../utils/paginationHelpers";
+import AppError from "../../errors/AppError";
 
 const prisma = new PrismaClient();
 
@@ -361,97 +362,93 @@ const getAllAgentFromDB = async (
   user: User
 ) => {
   const searchTerm = filters?.searchTerm as string;
-  const status = filters?.status as AssignmentStatus;
   const isAvailable = filters?.isAvailable as boolean | string;
+  const viewType = filters?.viewType as "all" | "my-agents"; // New filter for view type
 
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
-  let whereClause: any = {};
+  let whereClause: any = {
+    isDeleted: false,
+    role: UserRole.agent,
+  };
 
-  // Role-based filtering
-  if (user?.role !== UserRole.super_admin) {
-    whereClause = {
-      OR: [{ assignedBy: user?.id }, { status: AssignmentStatus.APPROVED }],
-    };
-  }
+  // Handle view type
+  if (viewType === "my-agents") {
+    // For "My Agents" tab - show only agents assigned to user's organization
+    const userOrganization = await prisma.organization.findUnique({
+      where: { ownerId: user.id },
+    });
 
-  // Status filter
-  if (status) {
-    whereClause = {
-      ...whereClause,
-      status: status,
+    if (!userOrganization) {
+      throw new AppError(
+        status.NOT_FOUND,
+        "Organization not found for this user!"
+      );
+    }
+
+    whereClause.Agent = {
+      assignTo: userOrganization.id,
     };
+  } else {
+    // For "View All" tab - show all agents including unassigned ones
+    // No additional filter needed for unassigned agents
   }
 
   // Search functionality
   if (searchTerm) {
-    whereClause = {
-      ...whereClause,
-      OR: [
-        {
-          agent: {
-            user: {
-              OR: [
-                { name: { contains: searchTerm, mode: "insensitive" } },
-                { email: { contains: searchTerm, mode: "insensitive" } },
-                { phone: { contains: searchTerm, mode: "insensitive" } },
-              ],
-            },
-          },
-        },
-        {
-          organization: {
-            name: { contains: searchTerm, mode: "insensitive" },
-          },
-        },
-      ],
-    };
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { phone: { contains: searchTerm, mode: "insensitive" } },
+    ];
   }
 
   // Availability filter
   if (isAvailable !== undefined) {
-    whereClause.agent = {
-      ...whereClause.agent,
+    whereClause.Agent = {
+      ...whereClause.Agent,
       isAvailable: isAvailable === "true" || isAvailable === true,
     };
   }
 
-  const [assignments, total] = await Promise.all([
-    prisma.agentAssignment.findMany({
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
       where: whereClause,
-      include: {
-        agent: {
+      select: {
+        name: true,
+        bio: true,
+        image: true,
+        Agent: {
           select: {
             skills: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                image: true,
-                bio: true,
-                createdAt: true,
-              },
-            },
+            totalCalls: true,
           },
+          // include: {
+          //   organization: {
+          //     select: {
+          //       id: true,
+          //       name: true,
+          //       industry: true,
+          //     },
+          //   },
+          //   // assignments: {
+          //   //   include: {
+          //   //     organization: true,
+          //   //     assignedByUser: {
+          //   //       select: {
+          //   //         id: true,
+          //   //         name: true,
+          //   //         email: true,
+          //   //       },
+          //   //     },
+          //   //   },
+          //   //   orderBy: {
+          //   //     assignedAt: 'desc',
+          //   //   },
+          //   // },
+          // },
         },
-        // organization: {
-        //   select: {
-        //     id: true,
-        //     name: true,
-        //     industry: true,
-        //     websiteLink: true,
-        //   },
-        // },
-        // assignedByUser: {
-        //   select: {
-        //     id: true,
-        //     name: true,
-        //     email: true,
-        //   },
-        // },
       },
       orderBy: {
         [sortBy as string]: sortOrder,
@@ -459,7 +456,7 @@ const getAllAgentFromDB = async (
       skip: Number(skip),
       take: Number(limit),
     }),
-    prisma.agentAssignment.count({
+    prisma.user.count({
       where: whereClause,
     }),
   ]);
@@ -471,10 +468,93 @@ const getAllAgentFromDB = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
     },
-    data: assignments,
+    users,
   };
 };
 
+const getAllAgentForAdmin = async (
+  options: IPaginationOptions,
+  filters: any = {},
+  user: User
+) => {
+  const searchTerm = filters?.searchTerm as string;
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  let whereClause: any = {
+    isDeleted: false,
+    role: UserRole.agent,
+  };
+
+  // Search functionality
+  if (searchTerm) {
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { phone: { contains: searchTerm, mode: "insensitive" } },
+    ];
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        image: true,
+        bio: true,
+        createdAt: true,
+        Agent: {
+          select: {
+            id: true,
+            skills: true,
+            totalCalls: true,
+            successCalls: true,
+            droppedCalls: true,
+            isAvailable: true,
+            status: true,
+            // assignments: {
+            //   select: {
+            //     status: true,
+            //     assignedAt: true,
+            //     organization: {
+            //       select: {
+            //         name: true,
+            //       },
+            //     },
+            //   },
+            //   orderBy: {
+            //     assignedAt: 'desc',
+            //   },
+            //   take: 1,
+            // },
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.user.count({
+      where: whereClause,
+    }),
+  ]);
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: users,
+  };
+};
 // Request assignment (Organization Admin)
 const requestAgentAssignment = async (agentId: string, user: User) => {
   // Validate agent exists
@@ -682,7 +762,7 @@ const rejectAssignment = async (assignmentId: string) => {
     });
   }
 
-  return updatedAssignment
+  return updatedAssignment;
 };
 
 // Get pending assignments (Admin only)
@@ -814,6 +894,7 @@ const getOrganizationAssignments = async (organizationId: string) => {
 export const AssignmentService = {
   requestAgentAssignment,
   getAllAgentFromDB,
+  getAllAgentForAdmin,
   approveAssignment,
   rejectAssignment,
   getPendingAssignments,

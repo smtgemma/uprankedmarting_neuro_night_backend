@@ -9,7 +9,7 @@ const router = Router();
 
 // Prefix: /api/v1/agent-feedback
 router.post(
-  '/',
+  '/create-agent-feedback/:agentId',
   auth(UserRole.organization_admin),
   validateRequest(AgentFeedbackValidation.createAgentFeedbackValidation),
   AgentFeedbackController.createAgentFeedback
