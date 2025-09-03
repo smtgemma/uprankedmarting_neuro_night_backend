@@ -12,9 +12,7 @@ import { generateOTPData } from "../../utils/otp";
 const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
     where: { email },
-    include: {
-      Agent: true,
-    },
+    include: { Agent: true },
   });
 
   if (!user) {
@@ -22,67 +20,54 @@ const loginUser = async (email: string, password: string) => {
   }
 
   const isPasswordMatched = await passwordCompare(password, user.password);
-
   if (!isPasswordMatched) {
     throw new ApiError(status.UNAUTHORIZED, "Password is incorrect!");
   }
 
-  const agentInfo = user?.Agent;
+  if (!user.isVerified) {
+    const { otp, expiresAt } = generateOTPData(4, 5);
+    await prisma.user.update({
+      where: { email },
+      data: { otp, otpExpiresAt: expiresAt, isResentOtp: true },
+    });
+
+    await sendEmail(user.email, otp, true);
+
+    return {
+      isVerified: false,
+      message:
+        "User is not verified! We sent a verification OTP to your email address.",
+    };
+  }
 
   const jwtPayload = {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
-    isVerified: user.isVerified ?? false,
+    isVerified: user.isVerified,
     sip: {
-      sip_password: agentInfo?.sip_password,
-      sip_username: agentInfo?.sip_username,
-      sip_address: agentInfo?.sip_address,
+      sip_password: user.Agent?.sip_password,
+      sip_username: user.Agent?.sip_username,
+      sip_address: user.Agent?.sip_address,
     },
   };
 
-  if (!user.isVerified) {
-    const { otp, expiresAt } = generateOTPData(4, 5); // 4-digit OTP, expires in 5 minutes
-    await prisma.user.update({
-      where: { email },
-      data: {
-        otp,
-        otpExpiresAt: expiresAt,
-        isResentOtp: true,
-      },
-    });
-
-    await sendEmail(user.email, otp, true);
-
-    // throw new ApiError(
-    //   status.UNAUTHORIZED,
-    //   "User is not verified! We have sent a verification OTP to your email address. Please check your inbox."
-    // );
-    return {
-      message:
-        "User is not verified! We have sent a verification OTP to your email address. Please check your inbox.",
-      isVerified: false,
-    };
-  }
-
-  const accessToken = jwtHelpers.createToken(
-    jwtPayload,
-    config.jwt.access.secret as string,
-    config.jwt.access.expiresIn as string
-  );
-
-  const refreshToken = jwtHelpers.createToken(
-    jwtPayload,
-    config.jwt.refresh.secret as string,
-    config.jwt.refresh.expiresIn as string
-  );
-
   return {
-    accessToken,
-    refreshToken,
+    isVerified: true,
+    accessToken: jwtHelpers.createToken(
+      jwtPayload,
+      config.jwt.access.secret as string,
+      config.jwt.access.expiresIn as string
+    ),
+    refreshToken: jwtHelpers.createToken(
+      jwtPayload,
+      config.jwt.refresh.secret as string,
+      config.jwt.refresh.expiresIn as string
+    ),
   };
 };
+
 
 const verifyOTP = async (
   email: string,
