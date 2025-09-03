@@ -5,12 +5,13 @@ import AppError from "../../../errors/AppError";
 import status from "http-status";
 
 const createAgentFeedback = async (
-  data: { rating: number; feedbackText?: string; agentId: string },
-  userId: string
+  data: { rating: number; feedbackText?: string },
+  userId: string,
+  agentId: string
 ): Promise<AgentFeedback> => {
   const checkAgentFeedback = await prisma.agentFeedback.findFirst({
     where: {
-      agentId: data.agentId,
+      agentId: agentId,
       clientId: userId,
     },
   });
@@ -22,7 +23,7 @@ const createAgentFeedback = async (
   const serviceData = {
     rating: data.rating,
     feedbackText: data.feedbackText || undefined,
-    agentId: data.agentId,
+    agentId: agentId,
     clientId: userId,
   };
 
