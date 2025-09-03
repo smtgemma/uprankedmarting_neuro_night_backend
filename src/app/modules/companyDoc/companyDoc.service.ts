@@ -17,6 +17,8 @@ const createCompanyDoc = async (req: Request) => {
   const { docFor } = req.body;
   const file = req.file;
 
+  // console.log("File:", file)
+
   const user = req.user;
 
   const Organization = await prisma.organization.findUnique({

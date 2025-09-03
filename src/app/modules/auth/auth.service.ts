@@ -55,10 +55,15 @@ const loginUser = async (email: string, password: string) => {
 
     await sendEmail(user.email, otp, true);
 
-    throw new ApiError(
-      status.UNAUTHORIZED,
-      "User is not verified! We have sent a verification OTP to your email address. Please check your inbox."
-    );
+    // throw new ApiError(
+    //   status.UNAUTHORIZED,
+    //   "User is not verified! We have sent a verification OTP to your email address. Please check your inbox."
+    // );
+    return {
+      message:
+        "User is not verified! We have sent a verification OTP to your email address. Please check your inbox.",
+      isVerified: false,
+    };
   }
 
   const accessToken = jwtHelpers.createToken(
