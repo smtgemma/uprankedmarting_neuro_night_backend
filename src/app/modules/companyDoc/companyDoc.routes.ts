@@ -61,8 +61,9 @@ router.get(
   auth(UserRole.organization_admin),
   CompanyDocController.getAllCompanyDocs
 );
+router.get("/organization",auth(UserRole.organization_admin), CompanyDocController.getCompanyDocsByOrgAdmin);
 router.get("/:id", CompanyDocController.getSingleCompanyDoc);
-router.get("/organization/:organizationId", CompanyDocController.getCompanyDocsByCompany);
+router.get("/organization/:organizationId",auth(UserRole.organization_admin, UserRole.super_admin), CompanyDocController.getCompanyDocsByOrgnizationId);
 router.get("/type/:docFor", CompanyDocController.getCompanyDocsByType);
 router.put(
   "/:id",
@@ -72,6 +73,6 @@ router.put(
   ]),
   CompanyDocController.updateCompanyDoc
 );
-router.delete("/:id", CompanyDocController.deleteCompanyDoc);
+router.delete("/:id",auth(UserRole.organization_admin), CompanyDocController.deleteCompanyDoc);
 
 export const CompanyDocRoutes = router;

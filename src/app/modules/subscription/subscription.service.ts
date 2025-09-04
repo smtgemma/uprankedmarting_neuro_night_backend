@@ -185,7 +185,7 @@ const createSubscription = async (
       metadata: {
         organizationId: organization.id,
         planId,
-        numberOfAgents: numberOfAgents.toString(),
+        numberOfAgents: numberOfAgents?.toString(),
       },
       automatic_payment_methods: {
         enabled: true,
@@ -211,6 +211,7 @@ const createSubscription = async (
           numberOfAgents,
         },
       });
+      
     } else {
       // 7. Create new subscription
       subscription = await tx.subscription.create({

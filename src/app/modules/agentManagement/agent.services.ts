@@ -891,9 +891,23 @@ const getOrganizationAssignments = async (organizationId: string) => {
   return assignments;
 };
 
+const getAllAgentIds = async () => {
+  const agents = await prisma.agent.findMany({
+    select: {
+      id: true,
+    },
+  });
+
+  if (!agents) {
+    throw new ApiError(status.NOT_FOUND, "Agents not found!");
+  }
+  return agents;
+};
+
 export const AssignmentService = {
   requestAgentAssignment,
   getAllAgentFromDB,
+  getAllAgentIds,
   getAllAgentForAdmin,
   approveAssignment,
   rejectAssignment,

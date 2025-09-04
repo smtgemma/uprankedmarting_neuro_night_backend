@@ -1,11 +1,13 @@
 import { Request } from "express";
-import { PrismaClient, DocFor } from "@prisma/client";
+import { PrismaClient, DocFor, User } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import fs from "fs";
 import path from "path";
 import { extractTextFromPDF } from "../../utils/pdfExtractor";
 import { extractTextFromDocx } from "../../utils/docxExtractor";
 import prisma from "../../utils/prisma";
+import AppError from "../../errors/AppError";
+import status from "http-status";
 
 const removeFileExtensionRegex = /\.(pdf|docx)$/i;
 
@@ -22,11 +24,11 @@ const createCompanyDoc = async (req: Request) => {
   const user = req.user;
 
   const Organization = await prisma.organization.findUnique({
-    where: { ownerId: user?.id , },
+    where: { ownerId: user?.id },
   });
 
   if (!Organization) {
-    throw new Error("Organization not found for the user");
+    throw new AppError(status.NOT_FOUND, "Organization not found for the user");
   }
 
   if (!file) {
@@ -61,8 +63,8 @@ const createCompanyDoc = async (req: Request) => {
         organizationId: Organization?.id,
         docFor: docFor as DocFor,
         content,
-        aiDocId: file.filename,
-        aiDocName: cleanedDocName,
+        aiDocId: docFor === "AI" ? file.filename : null,
+        aiDocName: docFor === "AI" ? cleanedDocName : null,
       },
       include: {
         organization: true,
@@ -108,7 +110,34 @@ const getSingleCompanyDoc = async (id: string) => {
   });
 };
 
-const getCompanyDocsByCompany = async (
+const getCompanyDocsByOrgAdmin = async (
+  query: Record<string, unknown>,
+  user: User
+) => {
+  const Organization = await prisma.organization.findUnique({
+    where: { ownerId: user?.id },
+  });
+
+  if (!Organization) {
+    throw new AppError(status.NOT_FOUND, "Organization not found for the user");
+  }
+  const companyDocQuery = new QueryBuilder(prisma.organizationDoc, query)
+    .rawFilter({ organizationId: Organization?.id })
+    .sort()
+    .paginate()
+    .fields();
+  // .include({ organization: true });
+
+  const result = await companyDocQuery.execute();
+  const meta = await companyDocQuery.countTotal();
+
+  return {
+    meta,
+    data: result,
+  };
+};
+
+const getCompanyDocsByOrgnizationId = async (
   organizationId: string,
   query: Record<string, unknown>
 ) => {
@@ -119,6 +148,9 @@ const getCompanyDocsByCompany = async (
     .fields();
   // .include({ organization: true });
 
+  if (!companyDocQuery) {
+    throw new AppError(status.NOT_FOUND, "Organization not found for the user");
+  }
   const result = await companyDocQuery.execute();
   const meta = await companyDocQuery.countTotal();
 
@@ -220,15 +252,24 @@ const updateCompanyDoc = async (id: string, req: Request) => {
   });
 };
 
-const deleteCompanyDoc = async (id: string) => {
-  const doc = await prisma.organizationDoc.findUnique({ where: { id } });
+const deleteCompanyDoc = async (id: string, user: User) => {
+  console.log(user);
+  const doc = await prisma.organizationDoc.findUnique({
+    where: { id },
+    include: {
+      organization: {
+        select: {
+          ownerId: true,
+        },
+      },
+    },
+  });
 
-  // Delete associated file if exists
-  if (doc?.aiDocId) {
-    const filePath = path.join(process.cwd(), "uploads", doc.aiDocId);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+  if (doc?.organization?.ownerId !== user.id) {
+    throw new AppError(
+      status.UNAUTHORIZED,
+      "You are not authorized to delete this document!"
+    );
   }
 
   return await prisma.organizationDoc.delete({
@@ -239,8 +280,9 @@ const deleteCompanyDoc = async (id: string) => {
 export const CompanyDocServices = {
   createCompanyDoc,
   getAllCompanyDocs,
+  getCompanyDocsByOrgnizationId,
   getSingleCompanyDoc,
-  getCompanyDocsByCompany,
+  getCompanyDocsByOrgAdmin,
   getCompanyDocsByType,
   updateCompanyDoc,
   deleteCompanyDoc,
