@@ -155,8 +155,7 @@ const getAllAgentForAdmin = catchAsync(async (req, res) => {
   ]);
   const result = await AssignmentService.getAllAgentForAdmin(
     options,
-    filters,
-    req.user as User
+    filters
   );
 
   sendResponse(res, {

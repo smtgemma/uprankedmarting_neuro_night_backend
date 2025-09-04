@@ -20,7 +20,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // Local dev
-      "https://your-frontend.vercel.app", // Production frontend
+      "http://10.0.30.84:3000", // Production frontend
     ],
     credentials: true,
   })
