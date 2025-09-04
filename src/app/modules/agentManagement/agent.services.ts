@@ -364,9 +364,14 @@ const getAllAgentFromDB = async (
   const searchTerm = filters?.searchTerm as string;
   const isAvailable = filters?.isAvailable as boolean | string;
   const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
-  console.log("viewType", viewType)
+  console.log("viewType", viewType);
 
-  if (viewType !== undefined && viewType !== "all" && viewType !== "my-agents" && viewType !== "unassigned") {
+  if (
+    viewType !== undefined &&
+    viewType !== "all" &&
+    viewType !== "my-agents" &&
+    viewType !== "unassigned"
+  ) {
     throw new AppError(status.BAD_REQUEST, "Invalid view type!");
   }
 
@@ -401,8 +406,8 @@ const getAllAgentFromDB = async (
     whereClause.Agent = {
       OR: [
         { assignTo: null },
-        { assignTo: { equals: undefined } } // For missing fields
-      ]
+        { assignTo: { equals: undefined } }, // For missing fields
+      ],
     };
   }
   // For "all" view type, no additional filter needed
@@ -437,6 +442,7 @@ const getAllAgentFromDB = async (
         // Agent: true
         Agent: {
           select: {
+            // assignments: true,
             skills: true,
             totalCalls: true,
             isAvailable: true,
@@ -475,7 +481,7 @@ const getAllAgentFromDB = async (
 };
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
-  filters: any = {},
+  filters: any = {}
 ) => {
   const searchTerm = filters?.searchTerm as string;
 
