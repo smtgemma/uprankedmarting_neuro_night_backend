@@ -2,7 +2,7 @@ import status from "http-status";
 import { AgentFeedbackServices } from "./agentFeedback.service";
 import catchAsync from "../../../utils/catchAsync";
 import sendResponse from "../../../utils/sendResponse";
-import { AgentFeedback, User } from "@prisma/client";
+import { User } from "@prisma/client";
 
 const createAgentFeedback = catchAsync(async (req, res) => {
   const userId = req.user.id as string;
@@ -57,7 +57,7 @@ const deleteAgentFeedback = catchAsync(async (req, res) => {
   const { id } = req.params;
   const result = await AgentFeedbackServices.deleteAgentFeedback(
     id,
-    req.user.id as string
+    req.user as User
   );
   sendResponse(res, {
     statusCode: status.OK,

@@ -2,6 +2,7 @@ import status from "http-status";
 import { ServiceFeedbackServices } from "./serviceFeedback.service";
 import catchAsync from "../../../utils/catchAsync";
 import sendResponse from "../../../utils/sendResponse";
+import { User } from "@prisma/client";
 
 const createServiceFeedback = catchAsync(async (req, res) => {
   const userId = req.user.id as string;
@@ -58,7 +59,7 @@ const deleteServiceFeedback = catchAsync(async (req, res) => {
   const { id } = req.params;
   const result = await ServiceFeedbackServices.deleteServiceFeedback(
     id,
-    req.user.id as string
+    req.user as User
   );
   sendResponse(res, {
     statusCode: status.OK,

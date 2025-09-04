@@ -1,4 +1,4 @@
-import { PrismaClient, ServiceFeedback } from "@prisma/client";
+import { PrismaClient, ServiceFeedback, User, UserRole } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";
@@ -8,10 +8,19 @@ const createServiceFeedback = async (
   data: { rating: number; feedbackText?: string },
   userId: string
 ): Promise<ServiceFeedback> => {
-  
+  const checkAgentFeedback = await prisma.serviceFeedback.findFirst({
+    where: {
+      clientId: userId,
+    },
+  });
+
+  if (checkAgentFeedback) {
+    throw new AppError(status.BAD_REQUEST, "Service feedback already exists!");
+  }
+
   const serviceData = {
     rating: data.rating,
-    feedbackText: data.feedbackText || undefined, // Optional field
+    feedbackText: data.feedbackText || undefined,
     clientId: userId,
   };
 
@@ -21,15 +30,18 @@ const createServiceFeedback = async (
   return result;
 };
 
-const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
-
-
-  const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query);
-
+const getAllServiceFeedbacks = async (
+  query: Record<string, unknown>
+) => {
+  const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query)
+    .search(["feedbackText"])
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
 
   const result = await serviceFeedbackQuery.execute();
   const meta = await serviceFeedbackQuery.countTotal();
-
 
   return {
     meta,
@@ -43,7 +55,15 @@ const getSingleServiceFeedback = async (
   const result = await prisma.serviceFeedback.findUnique({
     where: { id },
     include: {
-      client: true, // Include all client fields to avoid strict typing issues
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          image: true,
+        },
+      },
     },
   });
   return result;
@@ -74,14 +94,29 @@ const updateServiceFeedback = async (
 
 const deleteServiceFeedback = async (
   id: string,
-  clientId: string
+  user: User
 ): Promise<ServiceFeedback> => {
-  const checkServiceFeedback = await prisma.serviceFeedback.findUnique({
-    where: { id },
-  });
+
+  let checkServiceFeedback = null;
+
+  if (user?.role === UserRole.super_admin) {
+    checkServiceFeedback = await prisma.serviceFeedback.findUnique({
+      where: { id },
+    });
+  } else if (user?.role === UserRole.organization_admin) {
+    checkServiceFeedback = await prisma.serviceFeedback.findFirst({
+      where: {
+        id,
+        clientId: user.id,
+      },
+    });
+  }
 
   if (!checkServiceFeedback) {
-    throw new AppError(status.NOT_FOUND, "Service feedback not found!");
+    throw new AppError(
+      status.NOT_FOUND,
+      "Service feedback not found or you are not authorized!"
+    );
   }
 
   const result = await prisma.serviceFeedback.delete({
