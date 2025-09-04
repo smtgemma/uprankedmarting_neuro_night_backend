@@ -60,19 +60,16 @@ const fetchAndStoreAvailableNumbers = async () => {
 const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) => {
   const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
   
-  const searchableFields = ['phoneNumber', 'friendlyName',  'countryCode'];
+  const searchableFields = ['phoneNumber', 'friendlyName', 'countryCode'];
   
-  // console.log(query?.isPurchased)
   const customFilters: Record<string, any> = {
     isPurchased: Boolean(query?.isPurchased)
   };
   
-  // Filter by phone number pattern
   if (query.phoneNumberPattern) {
     customFilters.phoneNumber = { contains: query.phoneNumberPattern as string };
   }
   
-  // Filter by capability (SMS, Voice, etc.)
   if (query.capability) {
     const capabilities = Array.isArray(query.capability) 
       ? query.capability 
@@ -83,7 +80,10 @@ const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) =>
   const result = await queryBuilder
     .search(searchableFields)
     .filter()
-    .rawFilter(customFilters) 
+    .rawFilter(customFilters)
+    .include({
+      organization: true
+    })
     .sort()
     .paginate()
     .fields()
