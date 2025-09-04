@@ -4,7 +4,6 @@ const createAgentFeedbackValidation = z.object({
   body: z.object({
     rating: z.number().int().min(1).max(5),
     feedbackText: z.string().optional(),
-    agentId: z.string().length(24, "Invalid agent ID"), // Validate 24-character ObjectId
   }),
 });
 

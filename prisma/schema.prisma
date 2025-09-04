@@ -421,7 +421,7 @@ model AgentFeedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agent  Agent @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  agent  Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
   client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("agent_feedbacks")
