@@ -1,12 +1,10 @@
-
-
-
 import Stripe from "stripe";
 import status from "http-status";
 import { PaymentStatus, Interval, SubscriptionStatus } from "@prisma/client";
 import AppError from "../errors/AppError";
 import prisma from "./prisma";
-
+import axios from "axios";
+import config from "../config";
 
 // Helper function to calculate end date based on plan interval
 const calculateEndDate = (
@@ -94,6 +92,31 @@ const handlePaymentIntentSucceeded = async (
       },
     }),
   ]);
+
+  // Send POST request to Twilio auto-route endpoint only if planLevel is 'only_real_agent'
+  if (payment.planLevel === "only_real_agent") {
+    try {
+      const payload = {
+        payment_status: PaymentStatus.COMPLETED,
+        phone: payment.purchasedNumber,
+        sid: payment.sid,
+        plan: payment.planLevel,
+        organization_id: payment.organizationId,
+      };
+
+      await axios.post(config.twilio.twilio_auto_route_url!, payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      console.log(
+        "Successfully sent POST request to Twilio auto-route endpoint"
+      );
+    } catch (error) {
+      console.error("Error sending POST request to Twilio:", error);
+      // Optionally, handle the error (e.g., log to a monitoring service, retry, or throw)
+    }
+  }
 };
 
 const handlePaymentIntentFailed = async (
