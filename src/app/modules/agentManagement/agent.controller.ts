@@ -72,7 +72,6 @@
 //   });
 // });
 
-
 // export const AgentController = {
 //   getAllAgent,
 //   getAgentsByOrganization,
@@ -82,21 +81,23 @@
 //   unassignAgentFromOrganization,
 // };
 
-
 // controllers/assignment.controller.ts
-import { Request, Response } from 'express';
-import catchAsync from '../../utils/catchAsync';
-import status from 'http-status';
-import sendResponse from '../../utils/sendResponse';
-import { AssignmentService } from './agent.services';
-import { User } from '@prisma/client';
-import pickOptions from '../../utils/pick';
+import { Request, Response } from "express";
+import catchAsync from "../../utils/catchAsync";
+import status from "http-status";
+import sendResponse from "../../utils/sendResponse";
+import { AssignmentService } from "./agent.services";
+import { User } from "@prisma/client";
+import pickOptions from "../../utils/pick";
 
 // Organization admin requests assignment
 const requestAssignment = catchAsync(async (req: Request, res: Response) => {
   const { agentId } = req.params;
-  const result = await AssignmentService.requestAgentAssignment(agentId, req.user as User);
-  
+  const result = await AssignmentService.requestAgentAssignment(
+    agentId,
+    req.user as User
+  );
+
   sendResponse(res, {
     statusCode: status.OK,
     message: result.message,
@@ -115,14 +116,28 @@ const getAllAgent = catchAsync(async (req, res) => {
     "searchTerm",
     "isAvailable",
     "status",
-    "viewType"
+    "viewType",
   ]);
-  const result = await AssignmentService.getAllAgentFromDB(options, filters, req.user as User);
+  const result = await AssignmentService.getAllAgentFromDB(
+    options,
+    filters,
+    req.user as User
+  );
 
   sendResponse(res, {
     statusCode: status.OK,
     message: "Agents are retrieved successfully!",
-    data: result
+    data: result,
+  });
+});
+
+const getAgentsId = catchAsync(async (req, res) => {
+  const result = await AssignmentService.getAllAgentIds();
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agents Id are retrieved successfully!",
+    data: result,
   });
 });
 const getAllAgentForAdmin = catchAsync(async (req, res) => {
@@ -136,24 +151,25 @@ const getAllAgentForAdmin = catchAsync(async (req, res) => {
     "searchTerm",
     "isAvailable",
     "status",
-    "viewType"
+    "viewType",
   ]);
-  const result = await AssignmentService.getAllAgentForAdmin(options, filters, req.user as User);
+  const result = await AssignmentService.getAllAgentForAdmin(
+    options,
+    filters
+  );
 
   sendResponse(res, {
     statusCode: status.OK,
     message: "Agents are retrieved successfully!",
-    data: result
+    data: result,
   });
 });
-
-
 
 // Admin approves assignment
 const approveAssignment = catchAsync(async (req: Request, res: Response) => {
   const { assignmentId } = req.params;
   const result = await AssignmentService.approveAssignment(assignmentId);
-  
+
   sendResponse(res, {
     statusCode: status.OK,
     message: result.message,
@@ -166,7 +182,7 @@ const rejectAssignment = catchAsync(async (req: Request, res: Response) => {
   const { assignmentId } = req.params;
   // const { reason } = req.body;
   const result = await AssignmentService.rejectAssignment(assignmentId);
-  
+
   sendResponse(res, {
     statusCode: status.OK,
     message: "Assignment rejected successfully!",
@@ -175,43 +191,52 @@ const rejectAssignment = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Admin views pending assignments
-const getPendingAssignments = catchAsync(async (req: Request, res: Response) => {
-  const result = await AssignmentService.getPendingAssignments();
-  
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: 'Pending assignments fetched successfully!',
-    data: result,
-  });
-});
+const getPendingAssignments = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await AssignmentService.getPendingAssignments();
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Pending assignments fetched successfully!",
+      data: result,
+    });
+  }
+);
 
 // Get assignment status for an agent
-const getAgentAssignmentStatus = catchAsync(async (req: Request, res: Response) => {
-  const { agentId } = req.params;
-  const result = await AssignmentService.getAgentAssignmentStatus(agentId);
-  
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: 'Assignment status fetched successfully!',
-    data: result,
-  });
-});
+const getAgentAssignmentStatus = catchAsync(
+  async (req: Request, res: Response) => {
+    const { agentId } = req.params;
+    const result = await AssignmentService.getAgentAssignmentStatus(agentId);
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Assignment status fetched successfully!",
+      data: result,
+    });
+  }
+);
 
 // Get assignments for an organization
-const getOrganizationAssignments = catchAsync(async (req: Request, res: Response) => {
-  const { organizationId } = req.params;
-  const result = await AssignmentService.getOrganizationAssignments(organizationId);
-  
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: 'Organization assignments fetched successfully!',
-    data: result,
-  });
-});
+const getOrganizationAssignments = catchAsync(
+  async (req: Request, res: Response) => {
+    const { organizationId } = req.params;
+    const result = await AssignmentService.getOrganizationAssignments(
+      organizationId
+    );
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Organization assignments fetched successfully!",
+      data: result,
+    });
+  }
+);
 
 export const AssignmentController = {
   requestAssignment,
   getAllAgent,
+  getAgentsId,
   getAllAgentForAdmin,
   approveAssignment,
   rejectAssignment,

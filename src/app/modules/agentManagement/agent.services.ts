@@ -363,7 +363,16 @@ const getAllAgentFromDB = async (
 ) => {
   const searchTerm = filters?.searchTerm as string;
   const isAvailable = filters?.isAvailable as boolean | string;
-  const viewType = filters?.viewType as "all" | "my-agents"; // New filter for view type
+  const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
+
+  if (
+    viewType !== undefined &&
+    viewType !== "all" &&
+    viewType !== "my-agents" &&
+    viewType !== "unassigned"
+  ) {
+    throw new AppError(status.BAD_REQUEST, "Invalid view type!");
+  }
 
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
@@ -373,11 +382,10 @@ const getAllAgentFromDB = async (
     role: UserRole.agent,
   };
 
-  // Handle view type
-  if (viewType === "my-agents") {
-    // For "My Agents" tab - show only agents assigned to user's organization
+  // Handle view type filtering
+  if (user?.role === UserRole.organization_admin && viewType === "my-agents") {
     const userOrganization = await prisma.organization.findUnique({
-      where: { ownerId: user.id },
+      where: { ownerId: user?.id },
     });
 
     if (!userOrganization) {
@@ -388,11 +396,16 @@ const getAllAgentFromDB = async (
     }
 
     whereClause.Agent = {
-      assignTo: userOrganization.id,
+      assignTo: userOrganization?.id,
     };
-  } else {
-    // For "View All" tab - show all agents including unassigned ones
-    // No additional filter needed for unassigned agents
+  } else if (viewType === "unassigned") {
+    // Unassigned = assignTo is null OR field missing
+    whereClause.Agent = {
+      OR: [
+        { assignTo: null }, // null হলে
+        { assignTo: { isSet: false } }, // field missing হলে (Prisma syntax)
+      ],
+    };
   }
 
   // Search functionality
@@ -416,38 +429,39 @@ const getAllAgentFromDB = async (
     prisma.user.findMany({
       where: whereClause,
       select: {
+        id: true,
         name: true,
+        email: true,
+        phone: true,
         bio: true,
         image: true,
         Agent: {
           select: {
+            AgentFeedbacks: {
+              select: {
+                id: true,
+                rating: true,
+              },
+            },
             skills: true,
             totalCalls: true,
+            isAvailable: true,
+            status: true,
+            assignTo: true,
+            assignments: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                industry: true,
+              },
+            },
           },
-          // include: {
-          //   organization: {
-          //     select: {
-          //       id: true,
-          //       name: true,
-          //       industry: true,
-          //     },
-          //   },
-          //   // assignments: {
-          //   //   include: {
-          //   //     organization: true,
-          //   //     assignedByUser: {
-          //   //       select: {
-          //   //         id: true,
-          //   //         name: true,
-          //   //         email: true,
-          //   //       },
-          //   //     },
-          //   //   },
-          //   //   orderBy: {
-          //   //     assignedAt: 'desc',
-          //   //   },
-          //   // },
-          // },
         },
       },
       orderBy: {
@@ -474,8 +488,7 @@ const getAllAgentFromDB = async (
 
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
-  filters: any = {},
-  user: User
+  filters: any = {}
 ) => {
   const searchTerm = filters?.searchTerm as string;
 
@@ -687,7 +700,7 @@ const approveAssignment = async (assignmentId: string) => {
   await prisma.agent.update({
     where: { userId: assignment.agentId },
     data: {
-      assignTo: assignment.organizationId,
+      assignTo: assignment?.organizationId,
       isAvailable: true,
     },
   });
@@ -891,9 +904,23 @@ const getOrganizationAssignments = async (organizationId: string) => {
   return assignments;
 };
 
+const getAllAgentIds = async () => {
+  const agents = await prisma.agent.findMany({
+    select: {
+      id: true,
+    },
+  });
+
+  if (!agents) {
+    throw new ApiError(status.NOT_FOUND, "Agents not found!");
+  }
+  return agents;
+};
+
 export const AssignmentService = {
   requestAgentAssignment,
   getAllAgentFromDB,
+  getAllAgentIds,
   getAllAgentForAdmin,
   approveAssignment,
   rejectAssignment,

@@ -7,7 +7,7 @@ import { multerUpload } from "../../config/multer.config";
 
 const router = Router();
 
-router.get("/", auth(UserRole.super_admin), UserController.getAllUser);
+router.get("/",  UserController.getAllUser);
 
 router.get(
   "/:userId",
