@@ -195,6 +195,7 @@ enum AssignmentStatus {
   PENDING
   APPROVED
   REJECTED
+  REMOVAL_REQUESTED  // Add this new status
 }
 
 model AgentAssignment {
