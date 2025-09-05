@@ -347,7 +347,7 @@ model Subscription {
   planLevel       PlanLevel
   purchasedNumber String
   sid             String
-  numberOfAgents  Int?                @default(0)
+  numberOfAgents  Int?               @default(0)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 

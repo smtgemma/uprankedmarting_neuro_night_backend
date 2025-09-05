@@ -364,7 +364,6 @@ const getAllAgentFromDB = async (
   const searchTerm = filters?.searchTerm as string;
   const isAvailable = filters?.isAvailable as boolean | string;
   const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
-  console.log("viewType", viewType);
 
   if (
     viewType !== undefined &&
@@ -385,7 +384,6 @@ const getAllAgentFromDB = async (
 
   // Handle view type filtering
   if (user?.role === UserRole.organization_admin && viewType === "my-agents") {
-    // For "My Agents" tab - show only agents assigned to user's organization
     const userOrganization = await prisma.organization.findUnique({
       where: { ownerId: user?.id },
     });
@@ -401,16 +399,14 @@ const getAllAgentFromDB = async (
       assignTo: userOrganization?.id,
     };
   } else if (viewType === "unassigned") {
-    // For "Unassigned" tab - show only agents not assigned to any organization
-    // Handle both cases: assignTo is null OR assignTo field doesn't exist
+    // Unassigned = assignTo is null OR field missing
     whereClause.Agent = {
       OR: [
-        { assignTo: null },
-        { assignTo: { equals: undefined } }, // For missing fields
+        { assignTo: null }, // null হলে
+        { assignTo: { isSet: false } }, // field missing হলে (Prisma syntax)
       ],
     };
   }
-  // For "all" view type, no additional filter needed
 
   // Search functionality
   if (searchTerm) {
@@ -439,15 +435,25 @@ const getAllAgentFromDB = async (
         phone: true,
         bio: true,
         image: true,
-        // Agent: true
         Agent: {
           select: {
-            // assignments: true,
+            AgentFeedbacks: {
+              select: {
+                id: true,
+                rating: true,
+              },
+            },
             skills: true,
             totalCalls: true,
             isAvailable: true,
             status: true,
             assignTo: true,
+            assignments: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
             organization: {
               select: {
                 id: true,
@@ -479,6 +485,7 @@ const getAllAgentFromDB = async (
     users,
   };
 };
+
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
   filters: any = {}
