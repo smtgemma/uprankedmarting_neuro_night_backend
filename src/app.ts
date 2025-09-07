@@ -30,6 +30,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 const allowedOrigins = [
   "http://localhost:3000",
+  "http://10.0.30.84:3000",
   "https://your-production-frontend-url.com",
 ];
 

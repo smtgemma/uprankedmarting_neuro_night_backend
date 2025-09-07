@@ -4,7 +4,6 @@ import { UserService } from "./user.service";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { User } from "@prisma/client";
-import { UserValidation } from "./user.validation";
 
 const createUser = catchAsync(async (req, res) => {
   // const parsedData = UserValidation.createUserPayloadSchema.parse(req.body);
