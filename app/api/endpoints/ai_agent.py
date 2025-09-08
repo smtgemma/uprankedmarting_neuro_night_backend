@@ -22,8 +22,8 @@ class VoiceIDModel(BaseModel):
 
 class AgentModel(BaseModel):
     id: str
-    sip: Optional[str]  # Maps to Agent.sip_address
-    twilioIdentity: Optional[str]  # Maps to Agent.twilioIdentity
+    sip: str  # Maps to Agent.sip_address
+    status: str
 
 class KnowledgeBaseModel(BaseModel):
     id: str  # Maps to AiknowledgeBase.knowledgeBaseId
@@ -54,36 +54,84 @@ class OrganizationResponse(BaseModel):
 # ----------------------------
 # Helper: Fetch organization by ID
 # ----------------------------
+# ----------------------------
+# Helper: Fetch organization by ID
+# ----------------------------
 async def get_org_by_id(org_id: str, db=Depends(get_database)) -> OrganizationResponse:
+    # --- Validate org_id ---
     try:
         oid = ObjectId(org_id)
     except Exception:
         logger.error(f"Invalid organization_id: {org_id}")
         raise HTTPException(status_code=400, detail="Invalid organization_id")
 
-    # Fetch organization data
+    # --- Fetch organization data ---
     org_data = await db.organizations.find_one({"_id": oid})
     logger.info(f"org_data: {org_data}")
     if not org_data:
         raise HTTPException(status_code=404, detail="Organization not found")
-    
-    #Fetch ogranization data
-    subscription = await db.subscriptions.find_one({"organizationId": oid})
-    print("subscription", subscription)
 
-    # Fetch voice data
-    voice_data = await db["UploadVoice"].find_one({"organizationId": str(org_id)})
+    # --- Fetch latest active subscription ---
+    subscription = await db.subscriptions.find_one(
+        {
+            "$or": [
+                {"organizationId": oid},
+                {"organizationId": str(org_id)}
+            ],
+            "status": "ACTIVE",
+        },
+        sort=[("createdAt", -1)]
+    )
+    logger.info(f"subscription: {subscription}")
+
+    # --- Fetch voice data ---
+    voice_data = await db.UploadVoice.find_one(
+        {"organizationId": str(org_id)},
+        {"voiceId": 1, "voiceName": 1, "_id": 0}
+    )
     if voice_data:
         logger.info(f"Voice data for org {org_id}: {voice_data}")
     else:
         logger.info(f"No voice data found for org {org_id}")
 
-    # Fetch agents
-    agents_data = await db.agents.find({"assignTo": str(org_id)}).to_list(length=None)
-    logger.info(f"Agents found: {len(agents_data)}")
+    # --- Fetch approved agent assignments ---
+    # --- Fetch approved assignments for this organization ---
+    approved_assignments = await db.AgentAssignment.find(
+        {
+            "status": "APPROVED",
+            "organizationId": ObjectId(org_id)
+        }
+    ).to_list(length=None)
 
-    # Fetch knowledge bases
-    raw_kbs = await db.AiknowledgeBase.find({"organizationId": str(org_data["_id"])}).to_list(length=None)
+    logger.info(f"approved_assignments: {approved_assignments}")
+
+    # Collect agentIds (these are userIds of agents)
+    agent_ids = [assignment["agentId"] for assignment in approved_assignments]
+
+    # --- Fetch agent details using userId instead of _id ---
+    if agent_ids:
+        agents_data = await db.agents.find(
+            {"userId": {"$in": agent_ids}}
+        ).to_list(length=None)
+    else:
+        agents_data = []
+
+    logger.info(f"Agents found for org {org_id}: {len(agents_data)}")
+
+    assign_agents_list = [
+        AgentModel(
+            id=str(agent.get("_id", "")),  # Convert ObjectId to string
+            sip=agent.get("sip_address", ""),  # Default empty string if missing
+            status = agent.get("status","")
+        )
+        for agent in agents_data
+    ]
+
+    # --- Fetch Knowledge Bases ---
+    raw_kbs = await db.AiknowledgeBase.find(
+        {"organizationId": str(org_data["_id"])}
+    ).to_list(length=None)
+
     knowledge_bases_list = [
         KnowledgeBaseModel(
             id=kb["knowledgeBaseId"],
@@ -94,27 +142,28 @@ async def get_org_by_id(org_id: str, db=Depends(get_database)) -> OrganizationRe
     ]
     logger.info(f"Knowledge bases processed: {knowledge_bases_list}")
 
-    # Build response
+    #---- Fetch Lead Question
+    raw_questions = await db.questions.find({"org_id": org_id}).to_list(length=None)
+    print("raw_questions", raw_questions)
+    question_texts = [q.get("question_text", "") for q in raw_questions]
+
+
+    # --- Build Response ---
     return OrganizationResponse(
         id=str(org_data["_id"]),
         business_name=org_data.get("name", ""),
-        business_phone=subscription.get("purchasedNumber"),  # fallback
+        business_phone=subscription.get("purchasedNumber") if subscription else None,
         industry=org_data.get("industry", ""),
-        current_plan_type=org_data.get("planType", "ai_then_human"),  # fallback
+        current_plan_type=subscription.get("planLevel") if subscription else org_data.get("planType", "ai_then_real_agent"),
         voice_id=VoiceIDModel(
-            voice_id=voice_data["voiceId"],
+            voice_id=voice_data.get("voiceId", ""),
             voice_name=voice_data.get("voiceName", "")
         ) if voice_data else None,
-        assign_agents=[
-            AgentModel(
-                id=str(agent["_id"]),
-                sip=agent.get("sip_address", ""),
-                twilioIdentity=agent.get("twilioIdentity", "")
-            ) for agent in agents_data
-        ],
+        assign_agents=assign_agents_list,
         knowledge_bases=knowledge_bases_list,
-        lead_questions=org_data.get("leadQuestions", [])
+        lead_questions=question_texts,
     )
+
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)
@@ -241,8 +290,8 @@ def build_elevenlabs_payload(
         "name": f"{org.business_name} AI Agent"
     }
 
-    # Add transfer logic for ai_then_human plan
-    if org.current_plan_type == "ai_then_human" and org.assign_agents:
+    # Add transfer logic for ai_then_real_agent plan
+    if org.current_plan_type == "ai_then_real_agent" and org.assign_agents:
         transfers = []
         for agent in org.assign_agents:
             if agent.sip:
@@ -323,7 +372,8 @@ async def create_agent(
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
-    await db["aiagents"].insert_one(ai_agent_doc)
+    await db.aiagents.insert_one(ai_agent_doc)
+
     logger.info(f"Saved AI agent {agent_id} for org {org_id}")
 
     # Link agent with organization
@@ -331,7 +381,7 @@ async def create_agent(
     label = f"{org.business_name} AI Agent connection"
 
     async with httpx.AsyncClient() as client:
-        org_api_url = f"http://127.0.0.1:8000/ai-call-routing/assign-phone-to-ai-agent"
+        org_api_url = f"http://127.0.0.1:9050/ai-call-routing/assign-phone-to-ai-agent"
         response = await client.post(
             org_api_url,
             json={
@@ -346,6 +396,7 @@ async def create_agent(
             raise HTTPException(status_code=500, detail=f"Failed to link agent to organization: {response.text}")
 
     logger.info(f"Linked AI agent {agent_id} to org {org_id}")
+
     return {
         "status": "success",
         "agent": agent_response,
