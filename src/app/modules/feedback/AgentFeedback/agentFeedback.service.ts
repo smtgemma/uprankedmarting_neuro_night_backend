@@ -65,19 +65,11 @@ const getAllAgentFeedbacks = async (
   query: Record<string, unknown>,
   user: User
 ) => {
-  const agent = await prisma.agent.findUnique({
-    where: {
-      userId: user?.id,
-    },
-  });
 
-  // console.log("Agent:", agent)
+  // console.log("Query:4353")
   const agentFeedbackQuery = new QueryBuilder(prisma.agentFeedback, query)
     .search(["feedbackText"])
     .filter()
-    .rawFilter({
-      agentId: agent?.id,
-    })
     .sort()
     .paginate()
     .fields();
@@ -85,9 +77,50 @@ const getAllAgentFeedbacks = async (
   const result = await agentFeedbackQuery.execute();
   const meta = await agentFeedbackQuery.countTotal();
 
+  // Get rating statistics for ALL agent feedbacks (not filtered by specific agent)
+  const ratingStats = await prisma.agentFeedback.groupBy({
+    by: ['rating'],
+    _count: {
+      rating: true,
+    },
+  });
+
+  // Calculate total ratings and average for ALL feedbacks
+  let totalRatings = 0;
+  let totalScore = 0;
+  const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+  ratingStats.forEach(stat => {
+    const rating = stat.rating;
+    const count = stat._count.rating;
+    
+    if (rating >= 1 && rating <= 5) {
+      ratingDistribution[rating as keyof typeof ratingDistribution] = count;
+      totalRatings += count;
+      totalScore += rating * count;
+    }
+  });
+
+  const averageRating = totalRatings > 0 ? totalScore / totalRatings : 0;
+
+  // Calculate percentages
+  const ratingPercentages = {
+    1: totalRatings > 0 ? (ratingDistribution[1] / totalRatings) * 100 : 0,
+    2: totalRatings > 0 ? (ratingDistribution[2] / totalRatings) * 100 : 0,
+    3: totalRatings > 0 ? (ratingDistribution[3] / totalRatings) * 100 : 0,
+    4: totalRatings > 0 ? (ratingDistribution[4] / totalRatings) * 100 : 0,
+    5: totalRatings > 0 ? (ratingDistribution[5] / totalRatings) * 100 : 0,
+  };
+
   return {
     meta,
     data: result,
+    ratingStats: {
+      averageRating: parseFloat(averageRating.toFixed(1)),
+      totalRatings,
+      ratingDistribution,
+      ratingPercentages,
+    },
   };
 };
 
