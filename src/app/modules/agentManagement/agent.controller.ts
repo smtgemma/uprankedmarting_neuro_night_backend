@@ -152,6 +152,8 @@ const getAllAgentForAdmin = catchAsync(async (req, res) => {
     "isAvailable",
     "status",
     "viewType",
+    "startDate",
+    "endDate"
   ]);
   const result = await AssignmentService.getAllAgentForAdmin(options, filters);
 

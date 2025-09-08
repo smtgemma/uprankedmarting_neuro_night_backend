@@ -9,6 +9,8 @@ const createAgentFeedback = async (
   userId: string,
   agentId: string
 ): Promise<AgentFeedback> => {
+
+  // console.log("Agent ID:", agentId , "clientId", userId)
   const checkAgentFeedback = await prisma.agentFeedback.findFirst({
     where: {
       agentId: agentId,

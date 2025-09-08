@@ -1,5 +1,3 @@
-
-
 // services/assignment.service.ts
 import { PrismaClient, AssignmentStatus, UserRole, User } from "@prisma/client";
 import ApiError from "../../errors/AppError";
@@ -9,6 +7,7 @@ import {
   paginationHelper,
 } from "../../utils/paginationHelpers";
 import AppError from "../../errors/AppError";
+import { createDateFilter, parseAnyDate } from "../../utils/Date/parseAnyDate";
 
 const prisma = new PrismaClient();
 
@@ -99,7 +98,7 @@ const prisma = new PrismaClient();
 //                 rating: true,
 //               },
 //             },
-            
+
 //             skills: true,
 //             totalCalls: true,
 //             isAvailable: true,
@@ -152,6 +151,7 @@ const getAllAgentFromDB = async (
   const isAvailable = filters?.isAvailable as boolean | string;
   const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
 
+
   if (
     viewType !== undefined &&
     viewType !== "all" &&
@@ -188,10 +188,7 @@ const getAllAgentFromDB = async (
   } else if (viewType === "unassigned") {
     // Unassigned = assignTo is null OR field missing
     whereClause.Agent = {
-      OR: [
-        { assignTo: null },
-        { assignTo: { isSet: false } },
-      ],
+      OR: [{ assignTo: null }, { assignTo: { isSet: false } }],
     };
   }
 
@@ -263,11 +260,15 @@ const getAllAgentFromDB = async (
   ]);
 
   // Calculate average rating for each agent using the fetched feedbacks
-  const usersWithAvgRating = users.map(user => {
+  const usersWithAvgRating = users.map((user) => {
     if (user.Agent && user.Agent.AgentFeedbacks) {
       const feedbacks = user.Agent.AgentFeedbacks;
-      const totalRating = feedbacks.reduce((sum, feedback) => sum + feedback.rating, 0);
-      const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+      const totalRating = feedbacks.reduce(
+        (sum, feedback) => sum + feedback.rating,
+        0
+      );
+      const avgRating =
+        feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
 
       return {
         ...user,
@@ -299,12 +300,100 @@ const getAllAgentFromDB = async (
     users: usersWithAvgRating,
   };
 };
+// const getAllAgentForAdmin = async (
+//   options: IPaginationOptions,
+//   filters: any = {}
+// ) => {
+//   const searchTerm = filters?.searchTerm as string;
+
+//   const { page, limit, skip, sortBy, sortOrder } =
+//     paginationHelper.calculatePagination(options);
+
+//   let whereClause: any = {
+//     isDeleted: false,
+//     role: UserRole.agent,
+//   };
+
+//   // Search functionality
+//   if (searchTerm) {
+//     whereClause.OR = [
+//       { name: { contains: searchTerm, mode: "insensitive" } },
+//       { email: { contains: searchTerm, mode: "insensitive" } },
+//       { phone: { contains: searchTerm, mode: "insensitive" } },
+//     ];
+//   }
+
+//   const [users, total] = await Promise.all([
+//     prisma.user.findMany({
+//       where: whereClause,
+//       select: {
+//         id: true,
+//         name: true,
+//         email: true,
+//         phone: true,
+//         image: true,
+//         bio: true,
+//         createdAt: true,
+//         Agent: {
+//           select: {
+//             id: true,
+//             skills: true,
+//             totalCalls: true,
+//             successCalls: true,
+//             droppedCalls: true,
+//             isAvailable: true,
+//             status: true,
+//             // assignments: {
+//             //   select: {
+//             //     status: true,
+//             //     assignedAt: true,
+//             //     organization: {
+//             //       select: {
+//             //         name: true,
+//             //       },
+//             //     },
+//             //   },
+//             //   orderBy: {
+//             //     assignedAt: 'desc',
+//             //   },
+//             //   take: 1,
+//             // },
+//           },
+//         },
+//       },
+//       orderBy: {
+//         [sortBy as string]: sortOrder,
+//       },
+//       skip: Number(skip),
+//       take: Number(limit),
+//     }),
+//     prisma.user.count({
+//       where: whereClause,
+//     }),
+//   ]);
+
+//   return {
+//     meta: {
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       totalPages: Math.ceil(total / Number(limit)),
+//     },
+//     data: users,
+//   };
+// };
+
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
   filters: any = {}
 ) => {
   const searchTerm = filters?.searchTerm as string;
+  const assignmentStatus = filters?.viewType as string;
+  const isAvailable = filters?.isAvailable as boolean | string;
+  const startDate = filters?.startDate as string; // New: start date filter
+  const endDate = filters?.endDate as string; // New: end date filter
 
+  console.log(filters)
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
@@ -320,6 +409,32 @@ const getAllAgentForAdmin = async (
       { email: { contains: searchTerm, mode: "insensitive" } },
       { phone: { contains: searchTerm, mode: "insensitive" } },
     ];
+  }
+
+  // Date filtering - filter by user creation date
+  if (startDate || endDate) {
+    const dateFilter = createDateFilter(startDate, endDate, "createdAt");
+    whereClause = { ...whereClause, ...dateFilter };
+  }
+
+  // Assignment status filter for PENDING or REMOVAL_REQUESTED
+  if (assignmentStatus) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      assignments: {
+        some: {
+          status: assignmentStatus,
+        },
+      },
+    };
+  }
+
+  // Availability filter
+  if (isAvailable !== undefined) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      isAvailable: isAvailable === "true" || isAvailable === true,
+    };
   }
 
   const [users, total] = await Promise.all([
@@ -342,21 +457,29 @@ const getAllAgentForAdmin = async (
             droppedCalls: true,
             isAvailable: true,
             status: true,
-            // assignments: {
-            //   select: {
-            //     status: true,
-            //     assignedAt: true,
-            //     organization: {
-            //       select: {
-            //         name: true,
-            //       },
-            //     },
-            //   },
-            //   orderBy: {
-            //     assignedAt: 'desc',
-            //   },
-            //   take: 1,
-            // },
+            AgentFeedbacks: {
+              select: {
+                id: true,
+                rating: true,
+              },
+            },
+            assignments: {
+              select: {
+                id: true,
+                status: true,
+                assignedAt: true,
+                organization: {
+                  select: {
+                    id: true,
+                    name: true,
+                    industry: true,
+                  },
+                },
+              },
+              orderBy: {
+                assignedAt: "desc",
+              },
+            },
           },
         },
       },
@@ -371,6 +494,42 @@ const getAllAgentForAdmin = async (
     }),
   ]);
 
+  // Calculate average rating for each agent using the fetched feedbacks
+  const usersWithAvgRating = users.map((user) => {
+    // Safe access to nested properties with optional chaining and fallbacks
+    const agent = user.Agent;
+    const feedbacks = agent?.AgentFeedbacks || [];
+    const assignments = agent?.assignments || [];
+
+    // Calculate average rating
+    const totalRating = feedbacks.reduce(
+      (sum, feedback) => sum + feedback.rating,
+      0
+    );
+    const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+
+    // Get the latest assignment
+    const latestAssignment = assignments.length > 0 ? assignments[0] : null;
+
+    return {
+      ...user,
+      Agent: {
+        id: agent?.id || null,
+        skills: agent?.skills || [],
+        totalCalls: agent?.totalCalls || 0,
+        successCalls: agent?.successCalls || 0,
+        droppedCalls: agent?.droppedCalls || 0,
+        isAvailable: agent?.isAvailable ?? false,
+        status: agent?.status || null,
+        AgentFeedbacks: feedbacks,
+        assignments: assignments,
+        avgRating: parseFloat(avgRating.toFixed(1)),
+        totalFeedbacks: feedbacks.length,
+        latestAssignment: latestAssignment,
+      },
+    };
+  });
+
   return {
     meta: {
       page: Number(page),
@@ -378,7 +537,7 @@ const getAllAgentForAdmin = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
     },
-    data: users,
+    data: usersWithAvgRating,
   };
 };
 // Request assignment (Organization Admin)
@@ -1008,7 +1167,6 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
               select: {
                 id: true,
                 rating: true,
-
               },
             },
           },
@@ -1035,10 +1193,13 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
   ]);
 
   // Transform to match getAllAgentFromDB structure with average rating
-  const formattedData = removalRequests?.map(request => {
+  const formattedData = removalRequests?.map((request) => {
     // Calculate average rating for the agent
     const feedbacks = request.agent.AgentFeedbacks || [];
-    const totalRating = feedbacks.reduce((sum, feedback) => sum + feedback.rating, 0);
+    const totalRating = feedbacks.reduce(
+      (sum, feedback) => sum + feedback.rating,
+      0
+    );
     const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
 
     // Main user data structure (same as getAllAgentFromDB)
@@ -1062,24 +1223,28 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
         assignTo: request.agent.assignTo,
 
         // Organization data
-        organization: request.organization ? {
-          id: request.organization.id,
-          name: request.organization.name,
-          industry: request.organization.industry,
-          address: request.organization.address,
-          websiteLink: request.organization.websiteLink,
-        } : null,
+        organization: request.organization
+          ? {
+              id: request.organization.id,
+              name: request.organization.name,
+              industry: request.organization.industry,
+              address: request.organization.address,
+              websiteLink: request.organization.websiteLink,
+            }
+          : null,
 
         // Assignments data
-        assignments: [{
-          id: request.id,
-          status: request.status,
-          assignedAt: request.assignedAt,
-          approvedAt: request.approvedAt,
-          rejectedAt: request.rejectedAt,
-          reason: request.reason,
-          organizationId: request.organizationId,
-        }],
+        assignments: [
+          {
+            id: request.id,
+            status: request.status,
+            assignedAt: request.assignedAt,
+            approvedAt: request.approvedAt,
+            rejectedAt: request.rejectedAt,
+            reason: request.reason,
+            organizationId: request.organizationId,
+          },
+        ],
 
         // AgentFeedbacks with average rating
         AgentFeedbacks: feedbacks,

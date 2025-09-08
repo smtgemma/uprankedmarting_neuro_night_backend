@@ -42,7 +42,7 @@ router.post(
 
 router.get("/", auth(UserRole.organization_admin, UserRole.super_admin), AssignmentController.getAllAgent);
 router.get("/get-agent-ids", auth(UserRole.organization_admin, UserRole.super_admin), AssignmentController.getAgentsId);
-router.get("/all-agent", auth(UserRole.super_admin), AssignmentController.getAllAgentForAdmin);
+router.get("/all-agent-assignment-request", auth(UserRole.super_admin), AssignmentController.getAllAgentForAdmin);
 router.get("/get-all-assignments-request", auth(UserRole.super_admin), AssignmentController.getApprovalRemovalRequestsForSuperAdmin);
 
 // Admin only routes
