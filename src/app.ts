@@ -16,12 +16,36 @@ app.use(cookieParser());
 app.use(bodyParser.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // Update CORS to include your deployed frontend URL
+// app.use(
+//   cors({
+//     origin: [
+//       "http://localhost:3000", // Local dev
+//       "http://10.0.30.84:3000", // Production frontend
+//     ],
+//     credentials: true,
+//   })
+// );
+
+// app.use(cors());
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://10.0.30.84:3000",
+  "https://your-production-frontend-url.com",
+];
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000", // Local dev
-      "http://10.0.30.84:3000", // Production frontend
-    ],
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          "The CORS policy for this site does not allow access from the specified Origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   })
 );

@@ -24,8 +24,7 @@ const getAllAgentFeedbacks = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: status.OK,
     message: "Agent feedbacks fetched successfully!",
-    meta: result.meta,
-    data: result.data,
+    data: result
   });
 });
 

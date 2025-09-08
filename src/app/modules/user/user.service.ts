@@ -160,7 +160,7 @@ const createAgentIntoDB = async (payload: any) => {
       );
     }
 
-    const hashedPassword = await hashPassword(userData.password);
+    const hashedPassword = await hashPassword("123456");
     const userName = await generateUniqueUsernameFromEmail(userData.email);
     const sip_domain = agentData.sip_domain;
     const password = agentData.sip_password;
@@ -176,8 +176,8 @@ const createAgentIntoDB = async (payload: any) => {
       const existingUserInTx = await tx.user.findFirst({
         where: {
           OR: [
-            { email: userData.email.toLowerCase().trim() },
-            { phone: userData.phone.trim() },
+            { email: userData.email},
+            { phone: userData.phone},
           ],
         },
       });
@@ -192,6 +192,7 @@ const createAgentIntoDB = async (payload: any) => {
       // ===== Create User =====
       const userPayload = {
         name: userData.name.trim(),
+        bio: userData.bio?.trim() || "",
         email: userData.email.toLowerCase().trim(),
         phone: userData.phone.trim(),
         role: UserRole.agent,
