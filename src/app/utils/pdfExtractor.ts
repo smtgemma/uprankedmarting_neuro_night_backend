@@ -13,7 +13,7 @@ export const extractTextFromPDF = async (filePath: string): Promise<Record<strin
       metadata: data.info,
       numPages: data.numpages
     };
-  } catch (error) {
+  } catch (error:any) {
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 };

@@ -97,7 +97,7 @@ export const downloadRecording = async (req: Request, res: any) => {
 const getCallTranscript = async (callSid: string) => {
   try {
     const transcripts = await client.transcriptions.list({
-      callSid,
+      // callSid,
       limit: 1,
     });
 
@@ -108,7 +108,7 @@ const getCallTranscript = async (callSid: string) => {
     const transcript = transcripts[0];
     return {
       sid: transcript.sid,
-      callSid: transcript.callSid,
+      // callSid: transcript.callSid,
       dateCreated: transcript.dateCreated,
       dateUpdated: transcript.dateUpdated,
       status: transcript.status,
@@ -166,7 +166,7 @@ const getTranscriptBySid = async (transcriptSid: string) => {
     const transcript = await client.transcriptions(transcriptSid).fetch();
     return {
       sid: transcript.sid,
-      callSid: transcript.callSid,
+      // callSid: transcript.callSid,
       dateCreated: transcript.dateCreated,
       dateUpdated: transcript.dateUpdated,
       status: transcript.status,
