@@ -173,6 +173,6 @@ if __name__ == "__main__":
         "main:app", 
         port=9050, 
         workers=1,
-        reload=True,
+        reload=False,
         log_level="info"
     )

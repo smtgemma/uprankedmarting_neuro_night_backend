@@ -1,0 +1,67 @@
+services:
+  # Main FastAPI Application
+  callcenter-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: callcenter-api
+    ports:
+      - "9050:9050"
+    env_file:
+      - .env
+    environment:
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_API_KEY: ${TWILIO_API_KEY}
+      TWILIO_API_SECRET: ${TWILIO_API_SECRET}
+      TWILIO_APP_SID: ${TWILIO_APP_SID}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      MONGODB_URL: "mongodb+srv://noyonsaha001:nmnjwIca54FXEmGO@cluster0.foguvuz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+      MONGO_DB_NAME: "uprankedmartin-calling"
+      REDIS_URL: "redis://redis:6379"
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      INSTANCE_ID: "1"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - callcenter-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Service
+  redis:
+    image: redis:7-alpine
+    container_name: callcenter-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - callcenter-network
+    command: >
+      redis-server
+      --save 60 1000
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 8mb
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  
+
+volumes:
+  redis_data:
+    driver: local
+

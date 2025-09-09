@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # Database
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://admin:password123@localhost:27017/callcenter?authSource=admin")
-    MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "")
+    MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "uprankedmartin-calling")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     
     # JWT

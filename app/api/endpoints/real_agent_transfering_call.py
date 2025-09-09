@@ -11,6 +11,7 @@ from bson import ObjectId
 from twilio.twiml.voice_response import VoiceResponse
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
+from twilio.rest import Client
 import httpx
 import jwt
 
@@ -38,6 +39,11 @@ class AgentStatusUpdate(BaseModel):
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
+
+class OutboundCallRequest(BaseModel):
+    to_number: str
+    from_number: Optional[str] = None  # optional, defaults to your Twilio number
+    caller_name: Optional[str] = "Agent"
 
 # Authentication
 security = HTTPBearer()
@@ -949,3 +955,74 @@ async def list_active_calls(request: Request, current_agent: dict = Depends(get_
     except Exception as e:
         logger.error(f"Failed to list calls: {e}")
         raise HTTPException(status_code=500, detail="Failed to list calls")
+    
+@router.post("/twilio/outbound-call")
+async def make_outbound_call(
+    request: Request,
+    request_data: dict,
+    current_agent: dict = Depends(get_current_agent)
+):
+    """Agent initiates an outbound call via Twilio"""
+    shared_state = get_shared_state(request.app)
+    twilio_client: Client = shared_state.twilio_client
+
+    to_number = request_data.get("to_number")
+    from_number = request_data.get("from_number")
+
+    if not to_number or not from_number:
+        raise HTTPException(status_code=400, detail="Missing to_number or from_number")
+
+    try:
+        # Outbound call goes directly to the target number
+        call = twilio_client.calls.create(
+            to=to_number,
+            from_=from_number,
+            url=f"{settings.WEBHOOK_URL}/twilio/outbound-call-handler?agent_id={current_agent['agent_id']}",
+            method="POST",
+            status_callback=f"{settings.WEBHOOK_URL}/twilio/outbound-call-status?agent_id={current_agent['agent_id']}",
+            status_callback_method="POST",
+            status_callback_event=["initiated", "ringing", "answered", "completed", "canceled", "failed", "busy", "no-answer"]
+        )
+
+        logger.info(f"Agent {current_agent['agent_id']} initiated outbound call {call.sid} to {to_number}")
+
+        return {
+            "success": True,
+            "call_sid": call.sid,
+            "to": to_number,
+            "from": from_number
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to make outbound call: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/twilio/outbound-call-handler")
+async def outbound_call_handler(agent_id: str):
+    """TwiML instructions for outbound calls (simple greeting)"""
+    response = VoiceResponse()
+    response.say(
+        "Connecting your call. Please wait...",
+        voice="alice",
+        language="en-US"
+    )
+    return Response(content=str(response), media_type="application/xml")
+
+
+@router.post("/twilio/outbound-call-status")
+async def call_status_handler(request: Request, agent_id: str):
+    """Handle call lifecycle events from Twilio"""
+    form = await request.form()
+    call_sid = form.get("CallSid")
+    call_status = form.get("CallStatus")
+
+    logger.info(f"Call {call_sid} (agent {agent_id}) status update: {call_status}")
+
+    # Hang up or stop further actions if call is finished or failed
+    if call_status in ["completed", "canceled", "failed", "busy", "no-answer"]:
+        logger.info(f"Call {call_sid} ended with status: {call_status}")
+        return Response(content="", media_type="application/xml")
+
+    # Otherwise return empty response
+    return Response(content="", media_type="application/xml")
