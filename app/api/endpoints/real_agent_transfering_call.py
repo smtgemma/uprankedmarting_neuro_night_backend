@@ -21,6 +21,7 @@ from app.core.metrics import (
     update_metrics, get_metrics
 )
 from app.services.shared_state import get_shared_state
+from app.db.database_connection import get_database
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,77 @@ async def find_best_available_agent(redis_manager, organization_id: Optional[str
     
     logger.warning("No available agents found")
     return None
+
+async def get_agent_organization_info(db_manager, agent_id: str):
+    """Get organization information for an agent"""
+    try:
+        # Convert agent_id to ObjectId if it's a string
+        if isinstance(agent_id, str):
+            try:
+                agent_obj_id = ObjectId(agent_id)
+            except:
+                raise HTTPException(status_code=400, detail="Invalid agent ID format")
+        else:
+            agent_obj_id = agent_id
+
+        # Get the agent record
+        agent = await db_manager.db.agents.find_one({
+            "userId": agent_obj_id
+        })
+        
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent record not found")
+        
+        # Get the organization the agent is assigned to
+        organization_id = agent.get("assignTo")
+        if not organization_id:
+            raise HTTPException(status_code=404, detail="Agent not assigned to any organization")
+        
+        # Convert to ObjectId if it's a string
+        if isinstance(organization_id, str):
+            try:
+                organization_obj_id = ObjectId(organization_id)
+            except:
+                raise HTTPException(status_code=400, detail="Invalid organization ID")
+        else:
+            organization_obj_id = organization_id
+        
+        # Get organization details
+        organization = await db_manager.db.organizations.find_one({
+            "_id": organization_obj_id
+        })
+        
+        if not organization:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        
+        # Get the organization's phone number from subscriptions
+        subscription = await db_manager.db.subscriptions.find_one({
+            "organizationId": str(organization_obj_id),
+            "status": "ACTIVE"
+        })
+        
+        if not subscription or not subscription.get("purchasedNumber"):
+            raise HTTPException(status_code=404, detail="No active phone number found for organization")
+        
+        return {
+            "organization": {
+                "id": str(organization["_id"]),
+                "name": organization.get("name", "Unknown Organization"),
+                "phoneNumber": subscription["purchasedNumber"]
+            },
+            "agent": {
+                "id": str(agent["_id"]),
+                "userId": str(agent["userId"]),
+                "jobTitle": agent.get("jobTitle", ""),
+                "department": agent.get("department", "")
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting organization info for agent {agent_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch organization information")
 
 async def handle_websocket_message(shared_state, session_id: str, message: dict):
     message_type = message.get("type")
@@ -956,73 +1028,201 @@ async def list_active_calls(request: Request, current_agent: dict = Depends(get_
         logger.error(f"Failed to list calls: {e}")
         raise HTTPException(status_code=500, detail="Failed to list calls")
     
+
+
+    
+@router.get("/agent/organization-info")
+async def get_agent_organization_info_endpoint(
+    request: Request,
+    current_agent: dict = Depends(get_current_agent)
+):
+    """Get organization information for the current agent"""
+    shared_state = get_shared_state(request.app)
+    db_manager = shared_state.db_manager
+    
+    agent_id = current_agent["agent_id"]
+    organization_info = await get_agent_organization_info(db_manager, agent_id)
+    
+    logger.info(f"Organization info retrieved for agent {agent_id}: {organization_info['organization']['name']}")
+    
+    return {
+        "success": True,
+        "data": organization_info
+    }
+
 @router.post("/twilio/outbound-call")
 async def make_outbound_call(
     request: Request,
     request_data: dict,
     current_agent: dict = Depends(get_current_agent)
 ):
-    """Agent initiates an outbound call via Twilio"""
+    """Agent initiates an outbound call via Twilio with organization validation"""
     shared_state = get_shared_state(request.app)
     twilio_client: Client = shared_state.twilio_client
+    db_manager = shared_state.db_manager
 
     to_number = request_data.get("to_number")
     from_number = request_data.get("from_number")
+    agent_id = current_agent["agent_id"]
 
     if not to_number or not from_number:
         raise HTTPException(status_code=400, detail="Missing to_number or from_number")
 
     try:
-        # Outbound call goes directly to the target number
+        # Get agent's organization info and validate from_number
+        org_info = await get_agent_organization_info(db_manager, agent_id)
+        
+        # Validate that the from_number matches the agent's organization phone number
+        if from_number != org_info["organization"]["phoneNumber"]:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Agent not authorized to use phone number {from_number}. Must use organization number: {org_info['organization']['phoneNumber']}"
+            )
+
+        # Make the outbound call
         call = twilio_client.calls.create(
             to=to_number,
             from_=from_number,
-            url=f"{settings.WEBHOOK_URL}/twilio/outbound-call-handler?agent_id={current_agent['agent_id']}",
+            url=f"{settings.WEBHOOK_URL}/twilio/outbound-call-handler?agent_id={agent_id}&organization_id={org_info['organization']['id']}",
             method="POST",
-            status_callback=f"{settings.WEBHOOK_URL}/twilio/outbound-call-status?agent_id={current_agent['agent_id']}",
+            status_callback=f"{settings.WEBHOOK_URL}/twilio/outbound-call-status?agent_id={agent_id}&organization_id={org_info['organization']['id']}",
             status_callback_method="POST",
             status_callback_event=["initiated", "ringing", "answered", "completed", "canceled", "failed", "busy", "no-answer"]
         )
 
-        logger.info(f"Agent {current_agent['agent_id']} initiated outbound call {call.sid} to {to_number}")
+        logger.info(f"Agent {agent_id} initiated outbound call {call.sid} from {from_number} to {to_number}")
+
+        # Log the call in database for tracking
+        call_log = {
+            "call_sid": call.sid,
+            "agent_id": str(agent_id),
+            "organization_id": org_info['organization']['id'],
+            "to_number": to_number,
+            "from_number": from_number,
+            "call_type": "outbound",
+            "status": "initiated",
+            "created_at": datetime.utcnow()
+        }
+        
+        # Insert call log if you have a calls collection
+        try:
+            await db_manager.db.calls.insert_one(call_log)
+        except Exception as e:
+            logger.warning(f"Failed to log call: {e}")
 
         return {
             "success": True,
             "call_sid": call.sid,
             "to": to_number,
-            "from": from_number
+            "from": from_number,
+            "organization_id": org_info['organization']['id'],
+            "organization_name": org_info['organization']['name']
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to make outbound call: {e}")
         return {"success": False, "error": str(e)}
 
-
 @router.post("/twilio/outbound-call-handler")
-async def outbound_call_handler(agent_id: str):
-    """TwiML instructions for outbound calls (simple greeting)"""
+async def outbound_call_handler(
+    request: Request,
+    agent_id: str, 
+    organization_id: str
+):
+    """TwiML instructions for outbound calls with organization context"""
     response = VoiceResponse()
+    
+    shared_state = get_shared_state(request.app)
+    db_manager = shared_state.db_manager
+    
+    try:
+        # Get organization info for personalized greeting
+        organization = await db_manager.db.organizations.find_one({
+            "_id": ObjectId(organization_id)
+        })
+        
+        if organization:
+            org_name = organization.get("name", "our organization")
+            greeting = f"Hello, you are receiving a call from {org_name}. Please wait while we connect you to one of our agents."
+        else:
+            greeting = "Hello, you are receiving a call. Please wait while we connect you to an agent."
+            
+    except Exception as e:
+        logger.warning(f"Could not get organization info for greeting: {e}")
+        greeting = "Hello, you are receiving a call. Please wait while we connect you to an agent."
+    
     response.say(
-        "Connecting your call. Please wait...",
+        greeting,
         voice="alice",
         language="en-US"
     )
+    
+    # You could add more TwiML instructions here like:
+    # - Connect to the agent's SIP endpoint
+    # - Play hold music
+    # - Set up recording, etc.
+    
     return Response(content=str(response), media_type="application/xml")
 
-
 @router.post("/twilio/outbound-call-status")
-async def call_status_handler(request: Request, agent_id: str):
-    """Handle call lifecycle events from Twilio"""
+async def call_status_handler(
+    request: Request, 
+    agent_id: str, 
+    organization_id: str
+):
+    """Handle call lifecycle events from Twilio with organization context"""
     form = await request.form()
     call_sid = form.get("CallSid")
     call_status = form.get("CallStatus")
+    call_duration = form.get("CallDuration")
 
-    logger.info(f"Call {call_sid} (agent {agent_id}) status update: {call_status}")
+    logger.info(f"Call {call_sid} (agent {agent_id}, org {organization_id}) status update: {call_status}")
 
-    # Hang up or stop further actions if call is finished or failed
+    shared_state = get_shared_state(request.app)
+    db_manager = shared_state.db_manager
+    
+    try:
+        # Update call log in database
+        update_data = {
+            "status": call_status,
+            "updated_at": datetime.utcnow()
+        }
+        
+        if call_duration:
+            update_data["duration"] = int(call_duration)
+            
+        await db_manager.db.calls.update_one(
+            {"call_sid": call_sid},
+            {"$set": update_data}
+        )
+        
+        # Update agent statistics if call completed
+        if call_status in ["completed", "canceled", "failed", "busy", "no-answer"]:
+            increment_data = {"totalCalls": 1}
+            
+            if call_status == "completed":
+                increment_data["successCalls"] = 1
+            else:
+                increment_data["droppedCalls"] = 1
+                
+            # Update agent statistics
+            try:
+                agent_obj_id = ObjectId(agent_id) if isinstance(agent_id, str) else agent_id
+                await db_manager.db.agents.update_one(
+                    {"userId": agent_obj_id},
+                    {"$inc": increment_data}
+                )
+                logger.info(f"Updated agent {agent_id} statistics: {increment_data}")
+            except Exception as e:
+                logger.error(f"Failed to update agent statistics: {e}")
+            
+    except Exception as e:
+        logger.error(f"Failed to update call status: {e}")
+
+    # Handle call end
     if call_status in ["completed", "canceled", "failed", "busy", "no-answer"]:
         logger.info(f"Call {call_sid} ended with status: {call_status}")
-        return Response(content="", media_type="application/xml")
 
-    # Otherwise return empty response
     return Response(content="", media_type="application/xml")

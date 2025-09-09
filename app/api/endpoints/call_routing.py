@@ -32,7 +32,7 @@ async def auto_route(data: AutoRouteRequest, db=Depends(get_database)):
         # 1️⃣ Check payment
         if data.plan.strip().lower() != "only_real_agent":
             raise HTTPException(status_code=403, detail="Plan must be real agnet")
-        if data.payment_status.strip().lower() != "success":
+        if data.payment_status.strip() != "COMPLETED":
             raise HTTPException(status_code=403, detail="Payment not successful.")
 
         # 2️⃣ Find the Twilio phone number SID
