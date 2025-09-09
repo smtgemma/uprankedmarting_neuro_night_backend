@@ -30,9 +30,7 @@ const createServiceFeedback = async (
   return result;
 };
 
-const getAllServiceFeedbacks = async (
-  query: Record<string, unknown>
-) => {
+const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
   const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query)
     .search(["feedbackText"])
     .filter()
@@ -42,6 +40,51 @@ const getAllServiceFeedbacks = async (
 
   const result = await serviceFeedbackQuery.execute();
   const meta = await serviceFeedbackQuery.countTotal();
+
+  return {
+    meta,
+    data: result,
+  };
+};
+
+const getMostValuableServiceFeedbacks = async (
+  query: Record<string, unknown>
+) => {
+  const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query)
+    .search(["feedbackText"])
+    .include({ client: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+      }
+    } })
+    .filter()
+    .sort()
+    .paginate()
+    .fields();
+
+  let result = await serviceFeedbackQuery.execute();
+
+  // 👉 Apply extra condition
+  result = result.filter(
+    (item: any) =>
+      item.rating === 5 && item.feedbackText && item.feedbackText.length > 20
+  );
+
+  // 👉 Sort newest first
+  result.sort(
+    (a: any, b: any) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  // 👉 Fix meta so it's aligned with filtered result
+  const meta = {
+    total: result.length,
+    page: query.page ? Number(query.page) : 1,
+    limit: query.limit ? Number(query.limit) : result.length,
+  };
 
   return {
     meta,
@@ -96,7 +139,6 @@ const deleteServiceFeedback = async (
   id: string,
   user: User
 ): Promise<ServiceFeedback> => {
-
   let checkServiceFeedback = null;
 
   if (user?.role === UserRole.super_admin) {
@@ -171,5 +213,6 @@ export const ServiceFeedbackServices = {
   updateServiceFeedback,
   deleteServiceFeedback,
   getServiceFeedbacksByClient,
+  getMostValuableServiceFeedbacks,
   getServiceFeedbacksByRating,
 };

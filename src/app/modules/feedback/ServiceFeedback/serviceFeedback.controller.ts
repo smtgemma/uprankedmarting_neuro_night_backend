@@ -31,6 +31,17 @@ const getAllServiceFeedbacks = catchAsync(async (req, res) => {
   });
 });
 
+const getMostValuableServiceFeedbacks = catchAsync(async (req, res) => {
+  const result = await ServiceFeedbackServices.getMostValuableServiceFeedbacks(
+    req.query
+  );
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Most valuable service feedbacks fetched successfully!",
+   data: result
+  });
+});
+
 const getSingleServiceFeedback = catchAsync(async (req, res) => {
   const { id } = req.params;
   const result = await ServiceFeedbackServices.getSingleServiceFeedback(id);
@@ -98,6 +109,7 @@ const getServiceFeedbacksByRating = catchAsync(async (req, res) => {
 export const ServiceFeedbackController = {
   createServiceFeedback,
   getAllServiceFeedbacks,
+  getMostValuableServiceFeedbacks,
   getSingleServiceFeedback,
   updateServiceFeedback,
   deleteServiceFeedback,

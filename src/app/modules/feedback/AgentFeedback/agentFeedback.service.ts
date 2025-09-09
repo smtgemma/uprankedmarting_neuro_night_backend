@@ -124,6 +124,7 @@ const getAllAgentFeedbacks = async (
   };
 };
 
+
 const getSingleAgentFeedback = async (id: string) => {
   const result = await prisma.agentFeedback.findUniqueOrThrow({
     where: { id },
@@ -197,7 +198,7 @@ const deleteAgentFeedback = async (id: string, user: User) => {
   if (!checkAgentFeedback) {
     throw new AppError(
       status.NOT_FOUND,
-      "Agent feedback not found or you are not authorized!"
+      "Agent feedback not found"
     );
   }
 
