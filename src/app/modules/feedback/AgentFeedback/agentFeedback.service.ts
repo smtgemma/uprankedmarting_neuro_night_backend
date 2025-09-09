@@ -1,4 +1,4 @@
-import { PrismaClient, AgentFeedback, User, UserRole } from "@prisma/client";
+import {  AgentFeedback, User, UserRole } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";

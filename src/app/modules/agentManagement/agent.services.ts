@@ -394,31 +394,83 @@ const getAllAgentFromDB = async (
 //   };
 // };
 
-const getAllAgentIds = async () => {
-  const agents = await prisma.agent.findMany({
-    where: {
-      assignTo: {
-        isSet: false, // means assignTo is not set OR null
-      },
-    },
-    select: {
-      id: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+const getAllAgentIds = async (user: User) => {
+  let agents;
+
+  if (user?.role === UserRole.super_admin) {
+    agents = await prisma.agent.findMany({
+      select: {
+        id: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
-    },
-  });
+    });
+  } else if (user?.role === UserRole.organization_admin) {
+    const org = await prisma.organization.findFirst({
+      where: { ownerId: user.id },
+      select: { id: true },
+    });
 
-  if (!agents || agents.length === 0) {
-    throw new ApiError(status.NOT_FOUND, "No unassigned agents found!");
+    if (!org) {
+      throw new Error("Organization not found for this admin!");
+    }
+
+    agents = await prisma.agent.findMany({
+      where: {
+        assignments: {
+          some: {
+            organizationId: org.id,
+            status: AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED , 
+          },
+        },
+      },
+      select: {
+        id: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
   }
 
   return agents;
 };
+
+
+// const getAllAgentIds = async () => {
+//   const agents = await prisma.agent.findMany({
+//     where: {
+//       assignTo: {
+//         isSet: false, // means assignTo is not set OR null
+//       },
+//     },
+//     select: {
+//       id: true,
+//       user: {
+//         select: {
+//           id: true,
+//           name: true,
+//           email: true,
+//         },
+//       },
+//     },
+//   });
+
+//   if (!agents || agents.length === 0) {
+//     throw new ApiError(status.NOT_FOUND, "No unassigned agents found!");
+//   }
+
+//   return agents;
+// };
 
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
@@ -629,23 +681,26 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
           in: [
             AssignmentStatus.PENDING,
             AssignmentStatus.APPROVED,
-            AssignmentStatus.REMOVAL_REQUESTED
-          ]
-        }
+            AssignmentStatus.REMOVAL_REQUESTED,
+          ],
+        },
       },
     });
 
     if (activeOtherAssignment) {
       const errorMessages = {
-        [AssignmentStatus.PENDING]: "⚠️ Agent has a pending request in another organization!",
-        [AssignmentStatus.APPROVED]: "✅ Agent is already working in another organization!",
-        [AssignmentStatus.REMOVAL_REQUESTED]: "🔄 Agent has a removal request pending in another organization!",
+        [AssignmentStatus.PENDING]:
+          "⚠️ Agent has a pending request in another organization!",
+        [AssignmentStatus.APPROVED]:
+          "✅ Agent is already working in another organization!",
+        [AssignmentStatus.REMOVAL_REQUESTED]:
+          "🔄 Agent has a removal request pending in another organization!",
       };
 
       throw new ApiError(
         status.BAD_REQUEST,
-        errorMessages[activeOtherAssignment.status] || 
-        `Cannot assign agent: ${activeOtherAssignment.status} in another organization`
+        errorMessages[activeOtherAssignment.status] ||
+          `Cannot assign agent: ${activeOtherAssignment.status} in another organization`
       );
     }
 
@@ -658,24 +713,26 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
           in: [
             AssignmentStatus.PENDING,
             AssignmentStatus.APPROVED,
-            AssignmentStatus.REMOVAL_REQUESTED
-          ]
-        }
+            AssignmentStatus.REMOVAL_REQUESTED,
+          ],
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
 
     if (existingAssignment) {
       const errorMessages = {
         [AssignmentStatus.PENDING]: "⚠️ Assignment request is already pending!",
-        [AssignmentStatus.APPROVED]: "✅ Agent is already assigned to your organization!",
-        [AssignmentStatus.REMOVAL_REQUESTED]: "⚠️ Agent removal is already requested. Please wait for admin approval.",
+        [AssignmentStatus.APPROVED]:
+          "✅ Agent is already assigned to your organization!",
+        [AssignmentStatus.REMOVAL_REQUESTED]:
+          "⚠️ Agent removal is already requested. Please wait for admin approval.",
       };
 
       throw new ApiError(
         status.BAD_REQUEST,
-        errorMessages[existingAssignment.status] || 
-        `Existing assignment with status: ${existingAssignment.status}`
+        errorMessages[existingAssignment.status] ||
+          `Existing assignment with status: ${existingAssignment.status}`
       );
     }
 
@@ -864,7 +921,10 @@ const rejectAssignment = async (assignmentId: string, reason?: string) => {
 const requestAgentRemoval = async (agentUserId: string, user: User) => {
   // Validate input
   if (!agentUserId || !user?.id) {
-    throw new ApiError(status.BAD_REQUEST, "Agent user ID and user information are required!");
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Agent user ID and user information are required!"
+    );
   }
 
   return await prisma.$transaction(async (tx) => {
@@ -940,9 +1000,9 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
       },
     });
 
-    return updatedAssignment
+    return updatedAssignment;
   });
-}; 
+};
 
 // Super admin approves removal request
 const approveAgentRemoval = async (assignmentId: string) => {
@@ -955,7 +1015,7 @@ const approveAgentRemoval = async (assignmentId: string) => {
     const assignment = await tx.agentAssignment.findUnique({
       where: { id: assignmentId },
       include: {
-        agent: true
+        agent: true,
       },
     });
 
@@ -1013,14 +1073,12 @@ const approveAgentRemoval = async (assignmentId: string) => {
   });
 };
 
-
 // Super admin rejects removal request
 const rejectAgentRemoval = async (assignmentId: string, reason?: string) => {
   // Validate input
   if (!assignmentId) {
     throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");
   }
-
 
   return await prisma.$transaction(async (tx) => {
     const assignment = await tx.agentAssignment.findUnique({
@@ -1047,7 +1105,9 @@ const rejectAgentRemoval = async (assignmentId: string, reason?: string) => {
       data: {
         status: AssignmentStatus.APPROVED,
         rejectedAt: null,
-        reason: reason?.trim() || "Removal request rejected by admin. Please contact super admin.",
+        reason:
+          reason?.trim() ||
+          "Removal request rejected by admin. Please contact super admin.",
       },
       include: {
         agent: {
@@ -1270,7 +1330,6 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
     users: formattedData, // Using 'users' key to match getAllAgentFromDB
   };
 };
-
 
 // Get pending assignments (Admin only)
 const getPendingAssignments = async () => {
