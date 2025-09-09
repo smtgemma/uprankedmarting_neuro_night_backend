@@ -236,17 +236,20 @@ const getAllAgentFromDB = async (
                 rating: true,
               },
             },
+            
             skills: true,
             totalCalls: true,
             isAvailable: true,
             status: true,
             assignTo: true,
-            // assignments: {
-            //   select: {
-            //     id: true,
-            //     status: true,
-            //   },
-            // },
+            assignments: {
+              select: {
+                id: true,
+                status: true,
+                // assignedByUser : true,
+                assignedBy: true
+              },
+            },
             organization: {
               select: {
                 id: true,
@@ -672,13 +675,14 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
     });
 
     if (activeOtherAssignment) {
-      const errorMessages = {
+      const errorMessages:any = {
         [AssignmentStatus.PENDING]:
           "⚠️ Agent has a pending request in another organization!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already working in another organization!",
         [AssignmentStatus.REMOVAL_REQUESTED]:
           "🔄 Agent has a removal request pending in another organization!",
+        
       };
 
       throw new ApiError(
@@ -704,8 +708,9 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       orderBy: { createdAt: "desc" },
     });
 
+
     if (existingAssignment) {
-      const errorMessages = {
+      const errorMessages:any = {
         [AssignmentStatus.PENDING]: "⚠️ Assignment request is already pending!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already assigned to your organization!",
@@ -766,6 +771,7 @@ const approveAssignment = async (
       where: {
         agentUserId: agentUserId,
         organizationId: organizationId,
+        status: AssignmentStatus.PENDING,
       },
       include: { agent: true },
     });
@@ -774,12 +780,12 @@ const approveAssignment = async (
       throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
     }
 
-    if (assignment.status !== AssignmentStatus.PENDING) {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        `Cannot approve assignment with status: ${assignment.status}. Only PENDING assignments can be approved.`
-      );
-    }
+    // if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
+    //   throw new ApiError(
+    //     status.BAD_REQUEST,
+    //     "Assignment request is not in removal requested status!"
+    //   );
+    // }
 
     // Check if agent already has an active assignment in other organizations
     const activeAssignment = await tx.agentAssignment.findFirst({
@@ -862,12 +868,12 @@ const rejectAssignment = async (
       throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
     }
 
-    if (assignment.status !== AssignmentStatus.PENDING) {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        `Cannot reject assignment with status: ${assignment.status}. Only PENDING assignments can be rejected.`
-      );
-    }
+    // if (assignment.status !== AssignmentStatus.PENDING) {
+    //   throw new ApiError(
+    //     status.BAD_REQUEST,
+    //     `Cannot reject assignment with status: ${assignment.status}. Only PENDING assignments can be rejected.`
+    //   );
+    // }
 
     // Update the assignment status to REJECTED using the found assignment's ID
     const updatedAssignment = await tx.agentAssignment.update({
