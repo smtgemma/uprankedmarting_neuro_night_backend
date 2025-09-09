@@ -13,8 +13,8 @@ const createSipEndpoint = catchAsync(async (req: Request, res: Response) => {
   
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: result.message,
-    data: result.data,
+    message: "SIP endpoint created successfully!",
+    data: result,
   });
 });
 

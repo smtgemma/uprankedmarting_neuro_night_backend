@@ -8,7 +8,7 @@ export const extractTextFromDocx = async (filePath: string): Promise<Record<stri
       text: result.value,
       messages: result.messages
     };
-  } catch (error) {
+  } catch (error:any) {
     throw new Error(`Failed to extract text from DOCX: ${error.message}`);
   }
 };

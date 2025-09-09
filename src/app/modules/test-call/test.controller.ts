@@ -3,24 +3,24 @@ import status from "http-status";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { Request, Response } from "express";
-import { TestCallService } from "./test.service";
+// import { TestCallService } from "./test.service";
 
 const handleIncomingCall = catchAsync(async (req: Request, res: Response) => {
-  console.log("what i am getting from incomming call", req.body)
-  const { From, To, CallSid } = req.body;
+  // console.log("what i am getting from incomming call", req.body)
+  // const { From, To, CallSid } = req.body;
   
-  const twimlResponse = await TestCallService.handleIncomingCall(From, To, CallSid);
+  // const twimlResponse = await TestCallService.handleIncomingCall(From, To, CallSid);
   
-  res.type('text/xml');
-  res.send(twimlResponse);
+  // res.type('text/xml');
+  // res.send(twimlResponse);
 });
 
 const handleCallStatus = catchAsync(async (req: Request, res: Response) => {
-  const { CallStatus, CallSid, To } = req.body;
+  // const { CallStatus, CallSid, To } = req.body;
   
-  await TestCallService.updateCallStatus(CallStatus, CallSid, To);
+  // await TestCallService.updateCallStatus(CallStatus, CallSid, To);
   
-  res.status(status.OK).send();
+  // res.status(status.OK).send();
 });
 
 // Additional endpoints for managing demo data (for testing)
