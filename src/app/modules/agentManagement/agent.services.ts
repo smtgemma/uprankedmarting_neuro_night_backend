@@ -430,7 +430,6 @@ const getAllAgentForAdmin = async (
   const startDate = filters?.startDate as string; // New: start date filter
   const endDate = filters?.endDate as string; // New: end date filter
 
-  console.log(filters);
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
@@ -500,27 +499,7 @@ const getAllAgentForAdmin = async (
                 rating: true,
               },
             },
-            // assignments: {
-            //   select: {
-            //     id: true,
-            //     status: true,
-            //     assignedAt: true,
-            //     organization: {
-            //       select: {
-            //         id: true,
-            //         name: true,
-            //         industry: true,
-            //       },
-            //     },
-            //   },
-            //   orderBy: {
-            //     assignedAt: "desc",
-            //   },
-            // },
             assignments: {
-              where: {
-                status: AssignmentStatus.APPROVED, // Only show approved assignments
-              },
               select: {
                 id: true,
                 status: true,
@@ -536,8 +515,28 @@ const getAllAgentForAdmin = async (
               orderBy: {
                 assignedAt: "desc",
               },
-              take: 1, // Only get the most recent approved assignment
             },
+            // assignments: {
+            //   where: {
+            //     status: AssignmentStatus.APPROVED, // Only show approved assignments
+            //   },
+            //   select: {
+            //     id: true,
+            //     status: true,
+            //     assignedAt: true,
+            //     organization: {
+            //       select: {
+            //         id: true,
+            //         name: true,
+            //         industry: true,
+            //       },
+            //     },
+            //   },
+            //   orderBy: {
+            //     assignedAt: "desc",
+            //   },
+            //   take: 1, // Only get the most recent approved assignment
+            // },
           },
         },
       },

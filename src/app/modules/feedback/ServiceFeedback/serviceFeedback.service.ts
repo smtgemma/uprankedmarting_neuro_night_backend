@@ -41,11 +41,53 @@ const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
   const result = await serviceFeedbackQuery.execute();
   const meta = await serviceFeedbackQuery.countTotal();
 
+  // 🔹 Get rating statistics for ALL service feedbacks
+  const ratingStats = await prisma.serviceFeedback.groupBy({
+    by: ["rating"],
+    _count: {
+      rating: true,
+    },
+  });
+
+  // 🔹 Calculate total ratings and average
+  let totalRatings = 0;
+  let totalScore = 0;
+  const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+  ratingStats.forEach(stat => {
+    const rating = stat.rating;
+    const count = stat._count.rating;
+
+    if (rating >= 1 && rating <= 5) {
+      ratingDistribution[rating as keyof typeof ratingDistribution] = count;
+      totalRatings += count;
+      totalScore += rating * count;
+    }
+  });
+
+  const averageRating = totalRatings > 0 ? totalScore / totalRatings : 0;
+
+  // 🔹 Percentages
+  const ratingPercentages = {
+    1: totalRatings > 0 ? (ratingDistribution[1] / totalRatings) * 100 : 0,
+    2: totalRatings > 0 ? (ratingDistribution[2] / totalRatings) * 100 : 0,
+    3: totalRatings > 0 ? (ratingDistribution[3] / totalRatings) * 100 : 0,
+    4: totalRatings > 0 ? (ratingDistribution[4] / totalRatings) * 100 : 0,
+    5: totalRatings > 0 ? (ratingDistribution[5] / totalRatings) * 100 : 0,
+  };
+
   return {
     meta,
     data: result,
+    ratingStats: {
+      averageRating: parseFloat(averageRating.toFixed(1)),
+      totalRatings,
+      ratingDistribution,
+      ratingPercentages,
+    },
   };
 };
+
 
 const getMostValuableServiceFeedbacks = async (
   query: Record<string, unknown>
@@ -67,19 +109,19 @@ const getMostValuableServiceFeedbacks = async (
 
   let result = await serviceFeedbackQuery.execute();
 
-  // 👉 Apply extra condition
+  //  Apply extra condition
   result = result.filter(
     (item: any) =>
       item.rating === 5 && item.feedbackText && item.feedbackText.length > 20
   );
 
-  // 👉 Sort newest first
+  //  Sort newest first
   result.sort(
     (a: any, b: any) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  // 👉 Fix meta so it's aligned with filtered result
+  //  Fix meta so it's aligned with filtered result
   const meta = {
     total: result.length,
     page: query.page ? Number(query.page) : 1,
