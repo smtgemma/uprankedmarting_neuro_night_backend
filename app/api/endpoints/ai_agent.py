@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 import httpx
 import logging
-from app.services.elevenlabs import create_eleven_agent
+from app.services.elevenlabs import create_eleven_agent, update_eleven_agent
 from app.db.database_connection import get_database
 from bson import ObjectId
 from datetime import datetime
@@ -30,6 +30,17 @@ class KnowledgeBaseModel(BaseModel):
     name: str  # Maps to AiknowledgeBase.knowledgeBaseName
 
 class AgentCreateRequest(BaseModel):
+    first_message: Optional[str] = None
+    knowledge_base_ids: Optional[List[str]] = None
+    max_duration_seconds: Optional[int] = None
+    stability: Optional[float] = None
+    speed: Optional[float] = None
+    similarity_boost: Optional[float] = None
+    llm: Optional[str] = None
+    temperature: Optional[float] = None
+    daily_limit: Optional[int] = None
+
+class AgentUpdateRequest(BaseModel):
     first_message: Optional[str] = None
     knowledge_base_ids: Optional[List[str]] = None
     max_duration_seconds: Optional[int] = None
@@ -97,21 +108,18 @@ async def get_org_by_id(org_id: str, db=Depends(get_database)) -> OrganizationRe
     # --- Fetch approved agent assignments ---
     # --- Fetch approved assignments for this organization ---
     approved_assignments = await db.AgentAssignment.find(
-        {
-            "status": "APPROVED",
-            "organizationId": ObjectId(org_id)
-        }
+        {"status": "APPROVED", "organizationId": ObjectId(org_id)}
     ).to_list(length=None)
-
     logger.info(f"approved_assignments: {approved_assignments}")
 
-    # Collect agentIds (these are userIds of agents)
-    agent_ids = [assignment["agentId"] for assignment in approved_assignments]
+    # --- FIX: Use the correct key 'agentUserId' ---
+    agent_ids = [assignment["agentUserId"] for assignment in approved_assignments]
+    # --- END OF FIX ---
 
-    # --- Fetch agent details using userId instead of _id ---
+    # --- Fetch agent details using the correct agent_ids ---
     if agent_ids:
         agents_data = await db.agents.find(
-            {"userId": {"$in": agent_ids}}
+            {"userId": {"$in": agent_ids}} # Assuming agent_ids are ObjectIds
         ).to_list(length=None)
     else:
         agents_data = []
@@ -120,8 +128,8 @@ async def get_org_by_id(org_id: str, db=Depends(get_database)) -> OrganizationRe
 
     assign_agents_list = [
         AgentModel(
-            id=str(agent.get("_id", "")),  # Convert ObjectId to string
-            sip=agent.get("sip_address", ""),  # Default empty string if missing
+            id=str(agent.get("_id", "")),
+            sip=agent.get("sip_address", ""),
             status = agent.get("status","")
         )
         for agent in agents_data
@@ -200,7 +208,19 @@ def build_elevenlabs_payload(
     llm = llm if llm is not None else "gemini-2.5-flash"
     temperature = temperature if temperature is not None else 0
     daily_limit = daily_limit if daily_limit is not None else 100000
-    knowledge_base_ids = knowledge_base_ids if knowledge_base_ids else [kb.id for kb in org.knowledge_bases]
+    # Filter knowledge bases correctly (this part of your code is fine)
+    if knowledge_base_ids is not None:
+        selected_kb_ids = set(knowledge_base_ids)
+        kb_payload = [
+            {"id": kb.id, "name": kb.name, "type": "file"}
+            for kb in org.knowledge_bases
+            if kb.id in selected_kb_ids
+        ]
+    else:
+        kb_payload = [
+            {"id": kb.id, "name": kb.name, "type": "file"}
+            for kb in org.knowledge_bases
+        ]
 
     payload = {
         "conversation_config": {
@@ -240,6 +260,7 @@ def build_elevenlabs_payload(
                     "llm": llm,
                     "temperature": temperature,
                     "max_tokens": -1,
+                    "knowledge_base": kb_payload,
                     "built_in_tools": {
                         "end_call": {
                             "name": "end_call",
@@ -261,9 +282,6 @@ def build_elevenlabs_payload(
                         },
                     }
                 },
-                "knowledge_base": [
-                    {"id": kb, "type": "file"} for kb in knowledge_base_ids
-                ],
                 "rag": {
                     "enabled": True,
                     "embedding_model": "multilingual_e5_large_instruct",
@@ -332,7 +350,7 @@ async def create_agent(
     org = await get_org_by_id(org_id, db)
 
     prompt = generate_elevenlabs_prompt(
-        agent_name="SupportBot",
+        agent_name = f"{org.business_name} Call Center Agent",
         organization_name=org.business_name,
         industry_name=org.industry,
         lead_questions=org.lead_questions,
@@ -372,9 +390,9 @@ async def create_agent(
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
-    await db.aiagents.insert_one(ai_agent_doc)
+    result = await db.aiagents.insert_one(ai_agent_doc)
+    logger.info(f"Successfully saved AI agent {agent_id} for org {org_id} with document ID: {result.inserted_id}")
 
-    logger.info(f"Saved AI agent {agent_id} for org {org_id}")
 
     # Link agent with organization
     business_phone = org.business_phone
@@ -401,4 +419,81 @@ async def create_agent(
         "status": "success",
         "agent": agent_response,
         "organization_link": response.json()
+    }
+
+
+# ----------------------------
+# Endpoint: Update Agent
+# ----------------------------
+@router.patch("/{org_id}/agents/{agent_id}")
+async def update_agent(
+    org_id: str,
+    agent_id: str,
+    req: AgentUpdateRequest,
+    db=Depends(get_database)
+):
+    """
+    Partially updates an existing AI agent's configuration using PATCH.
+    """
+    # 1. Validate: Check if the agent exists in our database and belongs to the specified organization.
+    # This prevents users from updating agents that aren't theirs.
+    existing_agent = await db.aiagents.find_one({"agentId": agent_id, "organizationId": org_id})
+    if not existing_agent:
+        raise HTTPException(status_code=404, detail=f"Agent with ID {agent_id} not found or does not belong to organization {org_id}")
+
+    # 2. Build the PARTIAL payload dynamically based on the request.
+    # This structure must exactly match the ElevenLabs API documentation.
+    update_data = req.model_dump(exclude_unset=True)
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update fields were provided in the request body.")
+
+    # We build the 'agent' object first, which will contain all our updates.
+    agent_payload_part = {}
+    
+    # Handle direct properties of the 'agent' object
+    if "first_message" in update_data:
+        agent_payload_part["first_message"] = update_data["first_message"]
+    
+    # Handle nested objects like 'prompt'
+    prompt_payload_part = {}
+    if "knowledge_base_ids" in update_data:
+        # We only fetch the full organization data if we need to update knowledge bases.
+        org = await get_org_by_id(org_id, db)
+        selected_kb_ids = set(update_data["knowledge_base_ids"])
+        prompt_payload_part["knowledge_base"] = [
+            {"id": kb.id, "name": kb.name, "type": "file"}
+            for kb in org.knowledge_bases
+            if kb.id in selected_kb_ids
+        ]
+
+    # If we added anything to the prompt part, we add the entire prompt object to the agent part.
+    if prompt_payload_part:
+        agent_payload_part["prompt"] = prompt_payload_part
+
+    # Finally, construct the full, top-level payload in the required nested structure.
+    final_payload = {
+        "conversation_config": {
+            "agent": agent_payload_part
+        }
+    }
+
+    # 3. Call the ElevenLabs PATCH service with the correctly structured payload.
+    try:
+        update_response = await update_eleven_agent(agent_id, final_payload)
+        logger.info(f"Successfully PATCHED agent {agent_id} at ElevenLabs.")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to PATCH ElevenLabs agent {agent_id}: {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"Failed to update agent at external service: {e.response.text}")
+
+    # 4. Update the 'updatedAt' timestamp in our local database to reflect the change.
+    await db.aiagents.update_one(
+        {"_id": existing_agent["_id"]},
+        {"$set": {"updatedAt": datetime.utcnow()}}
+    )
+
+    return {
+        "status": "success",
+        "message": f"Agent {agent_id} was successfully updated.",
+        "update_response": update_response
     }
