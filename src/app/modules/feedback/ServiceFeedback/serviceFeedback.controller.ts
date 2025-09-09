@@ -26,8 +26,7 @@ const getAllServiceFeedbacks = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: status.OK,
     message: "Service feedbacks fetched successfully!",
-    meta: result.meta,
-    data: result.data,
+    data: result
   });
 });
 
