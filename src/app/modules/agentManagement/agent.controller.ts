@@ -219,7 +219,8 @@ const approveAgentRemoval = catchAsync(async (req: Request, res: Response) => {
 const rejectAgentRemoval = catchAsync(async (req: Request, res: Response) => {
     const {userId, organizationId, reason = "Agent removal rejected by admin."} = req.body;
   const result = await AssignmentService.rejectAgentRemoval(
-    assignmentId,
+    userId,
+    organizationId,
     reason
   );
 

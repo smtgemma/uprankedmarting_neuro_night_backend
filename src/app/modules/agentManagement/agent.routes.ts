@@ -33,10 +33,26 @@ import { AssignmentController } from "./agent.controller";
 
 const router = express.Router();
 
-router.get("/", auth(UserRole.organization_admin, UserRole.super_admin), AssignmentController.getAllAgent);
-router.get("/get-agent-ids", auth(UserRole.organization_admin, UserRole.super_admin), AssignmentController.getAgentsId);
-router.get("/all-agent-assignment-request", auth(UserRole.super_admin), AssignmentController.getAllAgentForAdmin);
-router.get("/get-all-assignments-request", auth(UserRole.super_admin), AssignmentController.getApprovalRemovalRequestsForSuperAdmin);
+router.get(
+  "/",
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AssignmentController.getAllAgent
+);
+router.get(
+  "/get-agent-ids",
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AssignmentController.getAgentsId
+);
+router.get(
+  "/all-agent-assignment-request",
+  auth(UserRole.super_admin),
+  AssignmentController.getAllAgentForAdmin
+);
+router.get(
+  "/get-all-assignments-request",
+  auth(UserRole.super_admin),
+  AssignmentController.getApprovalRemovalRequestsForSuperAdmin
+);
 
 // Admin only routes
 router.get(
@@ -45,14 +61,13 @@ router.get(
   AssignmentController.getPendingAssignments
 );
 
- // ---------------------------
-
+// ---------------------------
 
 router.post(
   "/request/:agentId",
   auth(UserRole.organization_admin),
   AssignmentController.requestAssignment
-); 
+);
 
 router.patch(
   "/approve-agent-assignment",
@@ -68,7 +83,6 @@ router.patch(
 
 // ---------------------------
 
-
 // -----------------------
 router.patch(
   "/:userId/request-agent-removal",
@@ -83,11 +97,10 @@ router.patch(
 );
 
 router.patch(
-    "/:assignmentId/reject-agent-removal",
+  "/reject-agent-removal",
   auth(UserRole.super_admin),
   AssignmentController.rejectAgentRemoval
-)
-
+);
 
 // ----------------------
 

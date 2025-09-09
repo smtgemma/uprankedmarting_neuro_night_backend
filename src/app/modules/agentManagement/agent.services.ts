@@ -185,7 +185,7 @@ const getAllAgentFromDB = async (
       assignTo: userOrganization?.id,
     };
   } else if (viewType === "unassigned") {
-    console.log("unassigned");
+    // console.log("unassigned");
     // Unassigned = assignTo is null OR field missing
     whereClause.Agent = {
       OR: [
@@ -216,7 +216,7 @@ const getAllAgentFromDB = async (
     };
   }
 
-  console.log(whereClause);
+  // console.log(whereClause);
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
@@ -241,12 +241,12 @@ const getAllAgentFromDB = async (
             isAvailable: true,
             status: true,
             assignTo: true,
-            assignments: {
-              select: {
-                id: true,
-                status: true,
-              },
-            },
+            // assignments: {
+            //   select: {
+            //     id: true,
+            //     status: true,
+            //   },
+            // },
             organization: {
               select: {
                 id: true,
@@ -268,7 +268,7 @@ const getAllAgentFromDB = async (
     }),
   ]);
 
-  console.log(users);
+  // console.log(users);
 
   // Calculate average rating for each agent using the fetched feedbacks
   const usersWithAvgRating = users.map((user) => {
@@ -425,7 +425,8 @@ const getAllAgentIds = async (user: User) => {
         assignments: {
           some: {
             organizationId: org.id,
-            status: AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED , 
+            status:
+              AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED,
           },
         },
       },
@@ -444,7 +445,6 @@ const getAllAgentIds = async (user: User) => {
 
   return agents;
 };
-
 
 // const getAllAgentIds = async () => {
 //   const agents = await prisma.agent.findMany({
@@ -551,27 +551,14 @@ const getAllAgentForAdmin = async (
                 rating: true,
               },
             },
-            assignments: {
+            organization: {
               select: {
                 id: true,
-                status: true,
-                assignedAt: true,
-                organization: {
-                  select: {
-                    id: true,
-                    name: true,
-                    industry: true,
-                  },
-                },
-              },
-              orderBy: {
-                assignedAt: "desc",
+                name: true,
+                industry: true,
               },
             },
             // assignments: {
-            //   where: {
-            //     status: AssignmentStatus.APPROVED, // Only show approved assignments
-            //   },
             //   select: {
             //     id: true,
             //     status: true,
@@ -587,7 +574,6 @@ const getAllAgentForAdmin = async (
             //   orderBy: {
             //     assignedAt: "desc",
             //   },
-            //   take: 1, // Only get the most recent approved assignment
             // },
           },
         },
@@ -608,7 +594,6 @@ const getAllAgentForAdmin = async (
     // Safe access to nested properties with optional chaining and fallbacks
     const agent = user.Agent;
     const feedbacks = agent?.AgentFeedbacks || [];
-    const assignments = agent?.assignments || [];
 
     // Calculate average rating
     const totalRating = feedbacks.reduce(
@@ -618,7 +603,6 @@ const getAllAgentForAdmin = async (
     const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
 
     // Get the latest assignment
-    const latestAssignment = assignments.length > 0 ? assignments[0] : null;
 
     return {
       ...user,
@@ -631,10 +615,10 @@ const getAllAgentForAdmin = async (
         isAvailable: agent?.isAvailable ?? false,
         status: agent?.status || null,
         AgentFeedbacks: feedbacks,
-        assignments: assignments,
+        organization: agent?.organization || null,
+        
         avgRating: parseFloat(avgRating.toFixed(1)),
         totalFeedbacks: feedbacks.length,
-        latestAssignment: latestAssignment,
       },
     };
   });
@@ -772,13 +756,16 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
 };
 
 // Approve assignment (Admin only) - Find by agentUserId and organizationId
-const approveAssignment = async (agentUserId: string, organizationId: string) => {
+const approveAssignment = async (
+  agentUserId: string,
+  organizationId: string
+) => {
   return await prisma.$transaction(async (tx) => {
     // Find the assignment by agentUserId and organizationId
     const assignment = await tx.agentAssignment.findFirst({
-      where: { 
+      where: {
         agentUserId: agentUserId,
-        organizationId: organizationId
+        organizationId: organizationId,
       },
       include: { agent: true },
     });
@@ -854,13 +841,17 @@ const approveAssignment = async (agentUserId: string, organizationId: string) =>
 };
 
 // Reject assignment (Admin only)
-const rejectAssignment = async (userId: string, organizationId: string, reason?: string) => {
+const rejectAssignment = async (
+  userId: string,
+  organizationId: string,
+  reason?: string
+) => {
   return await prisma.$transaction(async (tx) => {
     // Find the assignment by userId (agentUserId) and organizationId
     const assignment = await tx.agentAssignment.findFirst({
-      where: { 
+      where: {
         agentUserId: userId,
-        organizationId: organizationId
+        organizationId: organizationId,
       },
       include: {
         agent: true,
@@ -1012,22 +1003,22 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
 };
 
 // Super admin approves removal request
-const approveAgentRemoval = async (userId:string, organizationId:string) => {
-  // Validate input
-  if (!assignmentId) {
-    throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");
-  }
-
+const approveAgentRemoval = async (userId: string, organizationId: string) => {
   return await prisma.$transaction(async (tx) => {
-    const assignment = await tx.agentAssignment.findUnique({
-      where: { id: assignmentId },
+    // Find the removal request by userId (agentUserId) and organizationId
+    const assignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: userId,
+        organizationId: organizationId,
+        status: AssignmentStatus.REMOVAL_REQUESTED,
+      },
       include: {
         agent: true,
       },
     });
 
     if (!assignment) {
-      throw new ApiError(status.NOT_FOUND, "Assignment not found!");
+      throw new ApiError(status.NOT_FOUND, "Removal request not found!");
     }
 
     if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
@@ -1039,7 +1030,7 @@ const approveAgentRemoval = async (userId:string, organizationId:string) => {
 
     // Update assignment status to REJECTED (final removal)
     const updatedAssignment = await tx.agentAssignment.update({
-      where: { id: assignmentId },
+      where: { id: assignment.id },
       data: {
         status: AssignmentStatus.REJECTED,
         rejectedAt: new Date(),
@@ -1081,22 +1072,26 @@ const approveAgentRemoval = async (userId:string, organizationId:string) => {
 };
 
 // Super admin rejects removal request
-const rejectAgentRemoval = async (assignmentId: string, reason?: string) => {
-  // Validate input
-  if (!assignmentId) {
-    throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");
-  }
-
+const rejectAgentRemoval = async (
+  userId: string,
+  organizationId: string,
+  reason?: string
+) => {
   return await prisma.$transaction(async (tx) => {
-    const assignment = await tx.agentAssignment.findUnique({
-      where: { id: assignmentId },
+    // Find the removal request by userId (agentUserId) and organizationId
+    const assignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: userId,
+        organizationId: organizationId,
+        status: AssignmentStatus.REMOVAL_REQUESTED,
+      },
       include: {
         agent: true,
       },
     });
 
     if (!assignment) {
-      throw new ApiError(status.NOT_FOUND, "Assignment not found!");
+      throw new ApiError(status.NOT_FOUND, "Removal request not found!");
     }
 
     if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
@@ -1108,12 +1103,12 @@ const rejectAgentRemoval = async (assignmentId: string, reason?: string) => {
 
     // Revert back to APPROVED status
     const updatedAssignment = await tx.agentAssignment.update({
-      where: { id: assignmentId },
+      where: { id: assignment.id },
       data: {
         status: AssignmentStatus.APPROVED,
         rejectedAt: null,
         reason:
-          reason?.trim() ||
+          reason ||
           "Removal request rejected by admin. Please contact super admin.",
       },
       include: {
