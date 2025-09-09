@@ -192,7 +192,7 @@ const getAllAgentFromDB = async (
         { assignTo: null },
         {
           assignTo: {
-            isSet: false, 
+            isSet: false,
           },
         },
       ],
@@ -216,7 +216,7 @@ const getAllAgentFromDB = async (
     };
   }
 
-  console.log(whereClause)
+  console.log(whereClause);
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({
@@ -268,7 +268,7 @@ const getAllAgentFromDB = async (
     }),
   ]);
 
-  console.log(users)
+  console.log(users);
 
   // Calculate average rating for each agent using the fetched feedbacks
   const usersWithAvgRating = users.map((user) => {
@@ -598,562 +598,482 @@ const getAllAgentForAdmin = async (
   };
 };
 // Request assignment (Organization Admin)
-const requestAgentAssignment = async (agentId: string, user: User) => {
-  // Validate agent exists
-  const agent = await prisma.agent.findUnique({
-    where: { userId: agentId },
-    include: { user: true },
-  });
+const requestAgentAssignment = async (agentUserId: string, user: User) => {
+  // Use transaction for data consistency
+  return await prisma.$transaction(async (tx) => {
+    // 1. Validate agent exists
+    const agent = await tx.agent.findUnique({
+      where: { userId: agentUserId },
+      include: { user: true },
+    });
 
-  if (!agent) {
-    throw new ApiError(status.NOT_FOUND, "Agent not found!");
-  }
+    if (!agent) {
+      throw new ApiError(status.NOT_FOUND, "Agent not found!");
+    }
 
-  // Validate organization exists and user owns it
-  const organization = await prisma.organization.findUnique({
-    where: { ownerId: user.id },
-  });
+    // 2. Validate organization exists and user owns it
+    const organization = await tx.organization.findUnique({
+      where: { ownerId: user.id },
+    });
 
-  if (!organization) {
-    throw new ApiError(status.NOT_FOUND, "Organization not found!");
-  }
+    if (!organization) {
+      throw new ApiError(status.NOT_FOUND, "Organization not found!");
+    }
 
-  // // Check if agent already has a pending or approved assignment to this organization
-  // const existingAssignment = await prisma.agentAssignment.findFirst({
-  //   where: {
-  //     agentId: agentId,
-  //     organizationId: organization.id,
-  //     status: { in: [AssignmentStatus.PENDING, AssignmentStatus.APPROVED] },
-  //   },
-  // });
+    // 3. Check if agent has active assignments in other organizations
+    const activeOtherAssignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: agentUserId,
+        organizationId: { not: organization.id },
+        status: {
+          in: [
+            AssignmentStatus.PENDING,
+            AssignmentStatus.APPROVED,
+            AssignmentStatus.REMOVAL_REQUESTED
+          ]
+        }
+      },
+    });
 
-  // if (existingAssignment) {
-  //   if (existingAssignment.status === "APPROVED") {
-  //     throw new ApiError(
-  //       status.BAD_REQUEST,
-  //       "Agent is already assigned to your organization!"
-  //     );
-  //   }
-  //   if (existingAssignment.status === "PENDING") {
-  //     throw new ApiError(
-  //       status.BAD_REQUEST,
-  //       "Assignment request already pending!"
-  //     );
-  //   }
-  // }
+    if (activeOtherAssignment) {
+      const errorMessages = {
+        [AssignmentStatus.PENDING]: "⚠️ Agent has a pending request in another organization!",
+        [AssignmentStatus.APPROVED]: "✅ Agent is already working in another organization!",
+        [AssignmentStatus.REMOVAL_REQUESTED]: "🔄 Agent has a removal request pending in another organization!",
+      };
 
-  // Check if agent already has an active assignment
-  const activeAssignment = await prisma.agentAssignment.findFirst({
-    where: {
-      agentId: agentId,
-      status: AssignmentStatus.APPROVED,
-    },
-  });
+      throw new ApiError(
+        status.BAD_REQUEST,
+        errorMessages[activeOtherAssignment.status] || 
+        `Cannot assign agent: ${activeOtherAssignment.status} in another organization`
+      );
+    }
 
-  if (activeAssignment) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Agent already has an active assignment to another organization!"
-    );
-  }
+    // 4. Check for existing assignment for this organization
+    const existingAssignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: agentUserId,
+        organizationId: organization.id,
+        status: {
+          in: [
+            AssignmentStatus.PENDING,
+            AssignmentStatus.APPROVED,
+            AssignmentStatus.REMOVAL_REQUESTED
+          ]
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
-  // Create assignment request
-  const assignment = await prisma.agentAssignment.create({
-    data: {
-      agentId: agentId,
-      organizationId: organization.id,
-      assignedBy: user.id,
-      status: AssignmentStatus.PENDING,
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+    if (existingAssignment) {
+      const errorMessages = {
+        [AssignmentStatus.PENDING]: "⚠️ Assignment request is already pending!",
+        [AssignmentStatus.APPROVED]: "✅ Agent is already assigned to your organization!",
+        [AssignmentStatus.REMOVAL_REQUESTED]: "⚠️ Agent removal is already requested. Please wait for admin approval.",
+      };
+
+      throw new ApiError(
+        status.BAD_REQUEST,
+        errorMessages[existingAssignment.status] || 
+        `Existing assignment with status: ${existingAssignment.status}`
+      );
+    }
+
+    // 5. Create assignment request
+    const assignment = await tx.agentAssignment.create({
+      data: {
+        agentUserId: agentUserId,
+        organizationId: organization.id,
+        assignedBy: user.id,
+        status: AssignmentStatus.PENDING,
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
             },
           },
         },
-      },
-      organization: true,
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  return {
-    ...assignment,
-    message: "Assignment request submitted. Waiting for admin approval.",
-  };
+    return assignment;
+  });
 };
 
 // Approve assignment (Admin only)
 const approveAssignment = async (assignmentId: string) => {
-  // console.log(assignmentId);
-  // const assignment = await prisma.agentAssignment.findUnique({
-  //   where: { id: assignmentId },
-  //   include: {
-  //     agent: true,
-  //   },
-  // });
+  return await prisma.$transaction(async (tx) => {
+    const assignment = await tx.agentAssignment.findUnique({
+      where: { id: assignmentId },
+      include: { agent: true },
+    });
 
-  // // console.log("assignment", assignment);
+    if (!assignment) {
+      throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
+    }
 
-  // if (!assignment) {
-  //   throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
-  // }
+    if (assignment.status !== AssignmentStatus.PENDING) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `Cannot approve assignment with status: ${assignment.status}. Only PENDING assignments can be approved.`
+      );
+    }
 
-  // if (assignment.status !== AssignmentStatus.PENDING) {
-  //   throw new ApiError(
-  //     status.BAD_REQUEST,
-  //     "Assignment is not in pending status!"
-  //   );
-  // }
+    // Check if agent already has an active assignment
+    const activeAssignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: assignment.agentUserId,
+        status: AssignmentStatus.APPROVED,
+        id: { not: assignmentId },
+      },
+    });
 
-  const assignment = await prisma.agentAssignment.findUnique({
-    where: { id: assignmentId },
-    include: { agent: true },
-  });
+    if (activeAssignment) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Agent already has an active assignment to another organization!"
+      );
+    }
 
-  if (!assignment) {
-    throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
-  }
-
-  // Check if agent already has an active assignment
-  const activeAssignment = await prisma.agentAssignment.findFirst({
-    where: {
-      agentId: assignment.agentId,
-      status: AssignmentStatus.APPROVED,
-      id: { not: assignmentId },
-    },
-  });
-
-  if (activeAssignment) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Agent already has an active assignment to another organization!"
-    );
-  }
-
-  // Update the assignment status to APPROVED
-  const updatedAssignment = await prisma.agentAssignment.update({
-    where: { id: assignmentId },
-    data: {
-      status: AssignmentStatus.APPROVED,
-      approvedAt: new Date(),
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+    // Update the assignment status to APPROVED
+    const updatedAssignment = await tx.agentAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: AssignmentStatus.APPROVED,
+        approvedAt: new Date(),
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
             },
           },
         },
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
-      organization: true,
-    },
-  });
+    });
 
-  // Also update the agent's assignTo field
-  await prisma.agent.update({
-    where: { userId: assignment.agentId },
-    data: {
-      assignTo: assignment?.organizationId,
-      isAvailable: true,
-    },
-  });
+    // Update the agent's assignTo field
+    await tx.agent.update({
+      where: { userId: assignment.agentUserId },
+      data: {
+        assignTo: assignment.organizationId,
+        isAvailable: true,
+      },
+    });
 
-  return {
-    ...updatedAssignment,
-    message: "Agent assignment approved successfully!",
-  };
+    return updatedAssignment;
+  });
 };
 
 // Reject assignment (Admin only)
-const rejectAssignment = async (assignmentId: string) => {
-  const assignment = await prisma.agentAssignment.findUnique({
-    where: { id: assignmentId },
-    include: {
-      agent: true,
-      organization: true,
-    },
-  });
+const rejectAssignment = async (assignmentId: string, reason?: string) => {
+  return await prisma.$transaction(async (tx) => {
+    const assignment = await tx.agentAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        agent: true,
+        organization: true,
+      },
+    });
 
-  if (!assignment) {
-    throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
-  }
+    if (!assignment) {
+      throw new ApiError(status.NOT_FOUND, "Assignment request not found!");
+    }
 
-  if (assignment.status !== AssignmentStatus.PENDING) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Assignment is not in pending status!"
-    );
-  }
+    if (assignment.status !== AssignmentStatus.PENDING) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `Cannot reject assignment with status: ${assignment.status}. Only PENDING assignments can be rejected.`
+      );
+    }
 
-  // Update the assignment status to REJECTED
-  const updatedAssignment = await prisma.agentAssignment.update({
-    where: { id: assignmentId },
-    data: {
-      status: AssignmentStatus.REJECTED,
-      rejectedAt: new Date(),
-      // reason: reason,
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+    // Update the assignment status to REJECTED
+    const updatedAssignment = await tx.agentAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: AssignmentStatus.REJECTED,
+        rejectedAt: new Date(),
+        reason: reason,
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
             },
           },
         },
-      },
-      organization: true,
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  // For rejection: Only remove organization assignment if this was the current one
-  if (assignment.agent.assignTo === assignment.organizationId) {
-    await prisma.agent.update({
-      where: { userId: assignment.agentId },
+    // Only remove organization assignment if this was the current one
+    if (assignment.agent.assignTo === assignment.organizationId) {
+      await tx.agent.update({
+        where: { userId: assignment.agentUserId },
+        data: {
+          assignTo: null,
+          isAvailable: true,
+        },
+      });
+    }
+
+    return updatedAssignment;
+  });
+};
+
+// Organization admin requests agent removal to super admin
+const requestAgentRemoval = async (agentUserId: string, user: User) => {
+  // Validate input
+  if (!agentUserId || !user?.id) {
+    throw new ApiError(status.BAD_REQUEST, "Agent user ID and user information are required!");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    // Validate agent exists
+    const agent = await tx.agent.findUnique({
+      where: { userId: agentUserId },
+      include: { user: true },
+    });
+
+    if (!agent) {
+      throw new ApiError(status.NOT_FOUND, "Agent not found!");
+    }
+
+    // Validate organization exists and user owns it
+    const organization = await tx.organization.findUnique({
+      where: { ownerId: user.id },
+    });
+
+    if (!organization) {
+      throw new ApiError(status.NOT_FOUND, "Organization not found!");
+    }
+
+    // Check if agent is actually assigned to this organization
+    if (agent.assignTo !== organization.id) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Agent is not assigned to your organization!"
+      );
+    }
+
+    // Find the existing approved assignment
+    const existingAssignment = await tx.agentAssignment.findFirst({
+      where: {
+        agentUserId: agentUserId,
+        organizationId: organization.id,
+        status: AssignmentStatus.APPROVED,
+      },
+    });
+
+    if (!existingAssignment) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "No approved assignment found for this agent!"
+      );
+    }
+
+    // Update assignment status to REMOVAL_REQUESTED
+    const updatedAssignment = await tx.agentAssignment.update({
+      where: { id: existingAssignment.id },
+      data: {
+        status: AssignmentStatus.REMOVAL_REQUESTED,
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return updatedAssignment
+  });
+}; 
+
+// Super admin approves removal request
+const approveAgentRemoval = async (assignmentId: string) => {
+  // Validate input
+  if (!assignmentId) {
+    throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const assignment = await tx.agentAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        agent: true
+      },
+    });
+
+    if (!assignment) {
+      throw new ApiError(status.NOT_FOUND, "Assignment not found!");
+    }
+
+    if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Assignment is not in removal requested status!"
+      );
+    }
+
+    // Update assignment status to REJECTED (final removal)
+    const updatedAssignment = await tx.agentAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: AssignmentStatus.REJECTED,
+        rejectedAt: new Date(),
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Remove agent from organization
+    await tx.agent.update({
+      where: { userId: assignment.agentUserId },
       data: {
         assignTo: null,
         isAvailable: true,
       },
     });
-  }
 
-  return updatedAssignment;
+    return updatedAssignment;
+  });
 };
 
-// Get pending assignments (Admin only)
-const getPendingAssignments = async () => {
-  const pendingAssignments = await prisma.agentAssignment.findMany({
-    where: {
-      status: AssignmentStatus.PENDING,
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-        },
-      },
-      organization: {
-        include: {
-          ownedOrganization: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: {
-      assignedAt: "desc",
-    },
-  });
-
-  return pendingAssignments;
-};
-
-// Get assignment status for an agent
-const getAgentAssignmentStatus = async (agentId: string) => {
-  const assignments = await prisma.agentAssignment.findMany({
-    where: {
-      agentId: agentId,
-    },
-    include: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: {
-      assignedAt: "desc",
-    },
-  });
-
-  const agent = await prisma.agent.findUnique({
-    where: { userId: agentId },
-    select: {
-      assignTo: true,
-      isAvailable: true,
-    },
-  });
-
-  if (!agent) {
-    throw new ApiError(status.NOT_FOUND, "Agent not found!");
-  }
-
-  return {
-    currentOrganization: agent.assignTo,
-    isAvailable: agent.isAvailable,
-    assignmentHistory: assignments,
-  };
-};
-
-// Get assignments for an organization
-const getOrganizationAssignments = async (organizationId: string) => {
-  const assignments = await prisma.agentAssignment.findMany({
-    where: {
-      organizationId: organizationId,
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-        },
-      },
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-    orderBy: {
-      assignedAt: "desc",
-    },
-  });
-
-  return assignments;
-};
-
-// Organization admin requests agent removal to super admin
-const requestAgentRemoval = async (agentId: string, user: User) => {
-  // Validate agent exists
-  const agent = await prisma.agent.findUnique({
-    where: { userId: agentId },
-    include: {
-      user: true,
-    },
-  });
-
-  if (!agent) {
-    throw new ApiError(status.NOT_FOUND, "Agent not found!");
-  }
-
-  // Validate organization exists and user owns it
-  const organization = await prisma.organization.findUnique({
-    where: { ownerId: user.id },
-  });
-
-  if (!organization) {
-    throw new ApiError(status.NOT_FOUND, "Organization not found!");
-  }
-
-  // Check if agent is actually assigned to this organization
-  if (agent.assignTo !== organization.id) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Agent is not assigned to your organization!"
-    );
-  }
-
-  // Find the existing approved assignment
-  const existingAssignment = await prisma.agentAssignment.findFirst({
-    where: {
-      agentId: agentId,
-      organizationId: organization.id,
-      status: AssignmentStatus.APPROVED,
-    },
-  });
-
-  if (!existingAssignment) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "No approved assignment found for this agent!"
-    );
-  }
-
-  // Update assignment status to REMOVAL_REQUESTED
-  const updatedAssignment = await prisma.agentAssignment.update({
-    where: { id: existingAssignment.id },
-    data: {
-      status: AssignmentStatus.REMOVAL_REQUESTED,
-      rejectedAt: new Date(),
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
-      organization: true,
-      assignedByUser: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-  });
-
-  return updatedAssignment;
-};
-
-// Super admin approves removal request
-const approveAgentRemoval = async (assignmentId: string) => {
-  const assignment = await prisma.agentAssignment.findUnique({
-    where: { id: assignmentId },
-    include: {
-      agent: true,
-      organization: true,
-    },
-  });
-
-  if (!assignment) {
-    throw new ApiError(status.NOT_FOUND, "Assignment not found!");
-  }
-
-  if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Assignment is not in removal requested status!"
-    );
-  }
-
-  // Update assignment status to REJECTED (final removal)
-  const updatedAssignment = await prisma.agentAssignment.update({
-    where: { id: assignmentId },
-    data: {
-      status: AssignmentStatus.REJECTED,
-      rejectedAt: new Date(),
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      },
-      organization: true,
-    },
-  });
-
-  // Remove agent from organization
-  await prisma.agent.update({
-    where: { userId: assignment.agentId },
-    data: {
-      assignTo: null,
-      isAvailable: true,
-    },
-  });
-
-  return updatedAssignment;
-};
 
 // Super admin rejects removal request
 const rejectAgentRemoval = async (assignmentId: string, reason?: string) => {
-  const assignment = await prisma.agentAssignment.findUnique({
-    where: { id: assignmentId },
-    include: {
-      agent: true,
-      organization: true,
-    },
-  });
-
-  if (!assignment) {
-    throw new ApiError(status.NOT_FOUND, "Assignment not found!");
+  // Validate input
+  if (!assignmentId) {
+    throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");
   }
 
-  if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Assignment is not in removal requested status!"
-    );
-  }
 
-  // Revert back to APPROVED status
-  const updatedAssignment = await prisma.agentAssignment.update({
-    where: { id: assignmentId },
-    data: {
-      status: AssignmentStatus.APPROVED,
-      rejectedAt: null,
-      reason: reason || "Removal request rejected by super admin",
-    },
-    include: {
-      agent: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+  return await prisma.$transaction(async (tx) => {
+    const assignment = await tx.agentAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        agent: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new ApiError(status.NOT_FOUND, "Assignment not found!");
+    }
+
+    if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Assignment is not in removal requested status!"
+      );
+    }
+
+    // Revert back to APPROVED status
+    const updatedAssignment = await tx.agentAssignment.update({
+      where: { id: assignmentId },
+      data: {
+        status: AssignmentStatus.APPROVED,
+        rejectedAt: null,
+        reason: reason?.trim() || "Removal request rejected by admin. Please contact super admin.",
+      },
+      include: {
+        agent: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
             },
           },
         },
+        organization: true,
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
-      organization: true,
-    },
-  });
+    });
 
-  return updatedAssignment;
+    return updatedAssignment;
+  });
 };
 
 // Get all removal requests for super admin
@@ -1349,6 +1269,133 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
     },
     users: formattedData, // Using 'users' key to match getAllAgentFromDB
   };
+};
+
+
+// Get pending assignments (Admin only)
+const getPendingAssignments = async () => {
+  const pendingAssignments = await prisma.agentAssignment.findMany({
+    where: {
+      status: AssignmentStatus.PENDING,
+    },
+    include: {
+      agent: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      organization: {
+        include: {
+          ownedOrganization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+      assignedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: {
+      assignedAt: "desc",
+    },
+  });
+
+  return pendingAssignments;
+};
+
+// Get assignment status for an agent
+const getAgentAssignmentStatus = async (agentUserId: string) => {
+  const assignments = await prisma.agentAssignment.findMany({
+    where: {
+      agentUserId: agentUserId,
+    },
+    include: {
+      organization: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      assignedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: {
+      assignedAt: "desc",
+    },
+  });
+
+  const agent = await prisma.agent.findUnique({
+    where: { userId: agentUserId },
+    select: {
+      assignTo: true,
+      isAvailable: true,
+    },
+  });
+
+  if (!agent) {
+    throw new ApiError(status.NOT_FOUND, "Agent not found!");
+  }
+
+  return {
+    currentOrganization: agent.assignTo,
+    isAvailable: agent.isAvailable,
+    assignmentHistory: assignments,
+  };
+};
+
+// Get assignments for an organization
+const getOrganizationAssignments = async (organizationId: string) => {
+  const assignments = await prisma.agentAssignment.findMany({
+    where: {
+      organizationId: organizationId,
+    },
+    include: {
+      agent: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      assignedByUser: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: {
+      assignedAt: "desc",
+    },
+  });
+
+  return assignments;
 };
 
 export const AssignmentService = {
@@ -1703,10 +1750,10 @@ export const AssignmentService = {
 // };
 
 // // Request assignment (Organization Admin)
-// const requestAgentAssignment = async (agentId: string, user: User) => {
+// const requestAgentAssignment = async (agentUserId: string, user: User) => {
 //   // Validate agent exists
 //   const agent = await prisma.agent.findUnique({
-//     where: { userId: agentId },
+//     where: { userId: agentUserId },
 //     include: { user: true },
 //   });
 
@@ -1717,7 +1764,7 @@ export const AssignmentService = {
 //   // Check if agent already has an active assignment
 //   const activeAssignment = await prisma.agentAssignment.findFirst({
 //     where: {
-//       agentId: agentId,
+//       agentUserId: agentUserId,
 //       status: AssignmentStatus.APPROVED,
 //     },
 //   });
@@ -1741,7 +1788,7 @@ export const AssignmentService = {
 //   // Check if agent already has a pending or approved assignment to this organization
 //   const existingAssignment = await prisma.agentAssignment.findFirst({
 //     where: {
-//       agentId: agentId,
+//       agentUserId: agentUserId,
 //       organizationId: organization.id,
 //       status: { in: [AssignmentStatus.PENDING, AssignmentStatus.APPROVED] },
 //     },
@@ -1765,7 +1812,7 @@ export const AssignmentService = {
 //   // Create assignment request
 //   const assignment = await prisma.agentAssignment.create({
 //     data: {
-//       agentId: agentId,
+//       agentUserId: agentUserId,
 //       organizationId: organization.id,
 //       assignedBy: user.id,
 //       status: AssignmentStatus.PENDING,
@@ -1820,7 +1867,7 @@ export const AssignmentService = {
 //   // Check if agent already has an active assignment
 //   const activeAssignment = await prisma.agentAssignment.findFirst({
 //     where: {
-//       agentId: assignment.agentId,
+//       agentUserId: assignment.agentUserId,
 //       status: AssignmentStatus.APPROVED,
 //       id: { not: assignmentId },
 //     },
@@ -1858,7 +1905,7 @@ export const AssignmentService = {
 
 //   // Also update the agent's assignTo field
 //   await prisma.agent.update({
-//     where: { userId: assignment.agentId },
+//     where: { userId: assignment.agentUserId },
 //     data: {
 //       assignTo: assignment?.organizationId,
 //       isAvailable: true,
@@ -1925,7 +1972,7 @@ export const AssignmentService = {
 //   // For rejection: Only remove organization assignment if this was the current one
 //   if (assignment.agent.assignTo === assignment.organizationId) {
 //     await prisma.agent.update({
-//       where: { userId: assignment.agentId },
+//       where: { userId: assignment.agentUserId },
 //       data: {
 //         assignTo: null,
 //         isAvailable: true,
@@ -1983,10 +2030,10 @@ export const AssignmentService = {
 // };
 
 // // Get assignment status for an agent
-// const getAgentAssignmentStatus = async (agentId: string) => {
+// const getAgentAssignmentStatus = async (agentUserId: string) => {
 //   const assignments = await prisma.agentAssignment.findMany({
 //     where: {
-//       agentId: agentId,
+//       agentUserId: agentUserId,
 //     },
 //     include: {
 //       organization: {
@@ -2009,7 +2056,7 @@ export const AssignmentService = {
 //   });
 
 //   const agent = await prisma.agent.findUnique({
-//     where: { userId: agentId },
+//     where: { userId: agentUserId },
 //     select: {
 //       assignTo: true,
 //       isAvailable: true,
@@ -2063,7 +2110,7 @@ export const AssignmentService = {
 //   return assignments;
 // };
 
-// const getAllAgentIds = async () => {
+// const getAllagentUserIds = async () => {
 //   const agents = await prisma.agent.findMany({
 //     where: {
 //       assignTo: {
@@ -2090,10 +2137,10 @@ export const AssignmentService = {
 // };
 
 // // Organization admin requests agent removal to super admin
-// const requestAgentRemoval = async (agentId: string, user: User) => {
+// const requestAgentRemoval = async (agentUserId: string, user: User) => {
 //   // Validate agent exists
 //   const agent = await prisma.agent.findUnique({
-//     where: { userId: agentId },
+//     where: { userId: agentUserId },
 //     include: {
 //       user: true,
 //     },
@@ -2123,7 +2170,7 @@ export const AssignmentService = {
 //   // Find the existing approved assignment
 //   const existingAssignment = await prisma.agentAssignment.findFirst({
 //     where: {
-//       agentId: agentId,
+//       agentUserId: agentUserId,
 //       organizationId: organization.id,
 //       status: AssignmentStatus.APPROVED,
 //     },
@@ -2215,7 +2262,7 @@ export const AssignmentService = {
 
 //   // Remove agent from organization
 //   await prisma.agent.update({
-//     where: { userId: assignment.agentId },
+//     where: { userId: assignment.agentUserId },
 //     data: {
 //       assignTo: null,
 //       isAvailable: true,
@@ -2466,7 +2513,7 @@ export const AssignmentService = {
 //   rejectAgentRemoval,
 //   getAllAgentFromDB,
 //   requestAgentRemoval,
-//   getAllAgentIds,
+//   getAllagentUserIds,
 //   getApprovalRemovalRequestsForSuperAdmin,
 //   getAllAgentForAdmin,
 //   approveAssignment,
