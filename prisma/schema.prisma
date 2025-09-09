@@ -195,12 +195,12 @@ enum AssignmentStatus {
   PENDING
   APPROVED
   REJECTED
-  REMOVAL_REQUESTED  // Add this new status
+  REMOVAL_REQUESTED 
 }
 
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String           @db.ObjectId
+  agentUserId        String          @db.ObjectId
   organizationId String           @db.ObjectId
   status         AssignmentStatus @default(PENDING)
   assignedBy     String?          @db.ObjectId // User who made the assignment
@@ -214,11 +214,10 @@ model AgentAssignment {
   updatedAt DateTime @updatedAt
 
   // Relations
-  agent          Agent        @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
 
-  @@unique([agentId, organizationId])
 }
 
 model Organization {
