@@ -9,7 +9,6 @@ const createAgentFeedback = async (
   userId: string,
   agentId: string
 ): Promise<AgentFeedback> => {
-
   // console.log("Agent ID:", agentId , "clientId", userId)
   const checkAgentFeedback = await prisma.agentFeedback.findFirst({
     where: {
@@ -65,10 +64,12 @@ const getAllAgentFeedbacks = async (
   query: Record<string, unknown>,
   user: User
 ) => {
-
   // console.log("Query:4353")
   const agentFeedbackQuery = new QueryBuilder(prisma.agentFeedback, query)
     .search(["feedbackText"])
+    .include({
+      client: { select: { id: true, name: true, email: true, image: true } },
+    })
     .filter()
     .sort()
     .paginate()
@@ -79,7 +80,7 @@ const getAllAgentFeedbacks = async (
 
   // Get rating statistics for ALL agent feedbacks (not filtered by specific agent)
   const ratingStats = await prisma.agentFeedback.groupBy({
-    by: ['rating'],
+    by: ["rating"],
     _count: {
       rating: true,
     },
@@ -90,10 +91,10 @@ const getAllAgentFeedbacks = async (
   let totalScore = 0;
   const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
-  ratingStats.forEach(stat => {
+  ratingStats.forEach((stat) => {
     const rating = stat.rating;
     const count = stat._count.rating;
-    
+
     if (rating >= 1 && rating <= 5) {
       ratingDistribution[rating as keyof typeof ratingDistribution] = count;
       totalRatings += count;
@@ -124,9 +125,8 @@ const getAllAgentFeedbacks = async (
   };
 };
 
-
 const getSingleAgentFeedback = async (id: string) => {
-  const result = await prisma.agentFeedback.findUniqueOrThrow({
+  const result = await prisma.agentFeedback.findFirst({
     where: { id },
     include: {
       agent: {
@@ -196,17 +196,13 @@ const deleteAgentFeedback = async (id: string, user: User) => {
   }
 
   if (!checkAgentFeedback) {
-    throw new AppError(
-      status.NOT_FOUND,
-      "Agent feedback not found"
-    );
+    throw new AppError(status.NOT_FOUND, "Agent feedback not found");
   }
 
   return prisma.agentFeedback.delete({
     where: { id },
   });
 };
-
 
 const getAgentFeedbacksByClient = async (
   query: Record<string, unknown>,

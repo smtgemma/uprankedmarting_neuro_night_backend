@@ -33,6 +33,7 @@ const createServiceFeedback = async (
 const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
   const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query)
     .search(["feedbackText"])
+    .include({ client: { select: { id: true, name: true, email: true , image: true } } })
     .filter()
     .sort()
     .paginate()
