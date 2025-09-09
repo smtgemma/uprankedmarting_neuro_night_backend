@@ -771,11 +771,15 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
   });
 };
 
-// Approve assignment (Admin only)
-const approveAssignment = async (assignmentId: string) => {
+// Approve assignment (Admin only) - Find by agentUserId and organizationId
+const approveAssignment = async (agentUserId: string, organizationId: string) => {
   return await prisma.$transaction(async (tx) => {
-    const assignment = await tx.agentAssignment.findUnique({
-      where: { id: assignmentId },
+    // Find the assignment by agentUserId and organizationId
+    const assignment = await tx.agentAssignment.findFirst({
+      where: { 
+        agentUserId: agentUserId,
+        organizationId: organizationId
+      },
       include: { agent: true },
     });
 
@@ -790,12 +794,12 @@ const approveAssignment = async (assignmentId: string) => {
       );
     }
 
-    // Check if agent already has an active assignment
+    // Check if agent already has an active assignment in other organizations
     const activeAssignment = await tx.agentAssignment.findFirst({
       where: {
-        agentUserId: assignment.agentUserId,
+        agentUserId: agentUserId,
         status: AssignmentStatus.APPROVED,
-        id: { not: assignmentId },
+        organizationId: { not: organizationId }, // Check other organizations
       },
     });
 
@@ -806,9 +810,9 @@ const approveAssignment = async (assignmentId: string) => {
       );
     }
 
-    // Update the assignment status to APPROVED
+    // Update the assignment status to APPROVED using the assignment ID
     const updatedAssignment = await tx.agentAssignment.update({
-      where: { id: assignmentId },
+      where: { id: assignment.id }, // Use the found assignment's ID
       data: {
         status: AssignmentStatus.APPROVED,
         approvedAt: new Date(),
@@ -838,9 +842,9 @@ const approveAssignment = async (assignmentId: string) => {
 
     // Update the agent's assignTo field
     await tx.agent.update({
-      where: { userId: assignment.agentUserId },
+      where: { userId: agentUserId },
       data: {
-        assignTo: assignment.organizationId,
+        assignTo: organizationId,
         isAvailable: true,
       },
     });
@@ -850,13 +854,16 @@ const approveAssignment = async (assignmentId: string) => {
 };
 
 // Reject assignment (Admin only)
-const rejectAssignment = async (assignmentId: string, reason?: string) => {
+const rejectAssignment = async (userId: string, organizationId: string, reason?: string) => {
   return await prisma.$transaction(async (tx) => {
-    const assignment = await tx.agentAssignment.findUnique({
-      where: { id: assignmentId },
+    // Find the assignment by userId (agentUserId) and organizationId
+    const assignment = await tx.agentAssignment.findFirst({
+      where: { 
+        agentUserId: userId,
+        organizationId: organizationId
+      },
       include: {
         agent: true,
-        organization: true,
       },
     });
 
@@ -871,9 +878,9 @@ const rejectAssignment = async (assignmentId: string, reason?: string) => {
       );
     }
 
-    // Update the assignment status to REJECTED
+    // Update the assignment status to REJECTED using the found assignment's ID
     const updatedAssignment = await tx.agentAssignment.update({
-      where: { id: assignmentId },
+      where: { id: assignment.id },
       data: {
         status: AssignmentStatus.REJECTED,
         rejectedAt: new Date(),
@@ -1005,7 +1012,7 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
 };
 
 // Super admin approves removal request
-const approveAgentRemoval = async (assignmentId: string) => {
+const approveAgentRemoval = async (userId:string, organizationId:string) => {
   // Validate input
   if (!assignmentId) {
     throw new ApiError(status.BAD_REQUEST, "Assignment ID is required!");

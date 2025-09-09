@@ -33,7 +33,7 @@ const createServiceFeedback = async (
 const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
   const serviceFeedbackQuery = new QueryBuilder(prisma.serviceFeedback, query)
     .search(["feedbackText"])
-    .include({ client: { select: { id: true, name: true, email: true , image: true } } })
+    .include({ client: { select: { id: true, name: true, email: true, image: true } } })
     .filter()
     .sort()
     .paginate()
@@ -42,33 +42,30 @@ const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
   const result = await serviceFeedbackQuery.execute();
   const meta = await serviceFeedbackQuery.countTotal();
 
-  // 🔹 Get rating statistics for ALL service feedbacks
+  // 🔹 Rating statistics
   const ratingStats = await prisma.serviceFeedback.groupBy({
     by: ["rating"],
-    _count: {
-      rating: true,
-    },
+    _count: { rating: true },
   });
 
-  // 🔹 Calculate total ratings and average
   let totalRatings = 0;
   let totalScore = 0;
-  const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const ratingDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
   ratingStats.forEach(stat => {
     const rating = stat.rating;
     const count = stat._count.rating;
-
     if (rating >= 1 && rating <= 5) {
-      ratingDistribution[rating as keyof typeof ratingDistribution] = count;
+      ratingDistribution[rating] = count;
       totalRatings += count;
       totalScore += rating * count;
     }
   });
 
   const averageRating = totalRatings > 0 ? totalScore / totalRatings : 0;
+  const ratingInPercentage = (averageRating / 5) * 100;
 
-  // 🔹 Percentages
+  // 🔹 Percentages for progress bars
   const ratingPercentages = {
     1: totalRatings > 0 ? (ratingDistribution[1] / totalRatings) * 100 : 0,
     2: totalRatings > 0 ? (ratingDistribution[2] / totalRatings) * 100 : 0,
@@ -79,12 +76,13 @@ const getAllServiceFeedbacks = async (query: Record<string, unknown>) => {
 
   return {
     meta,
-    data: result,
+    data: result, 
     ratingStats: {
-      averageRating: parseFloat(averageRating.toFixed(1)),
-      totalRatings,
-      ratingDistribution,
-      ratingPercentages,
+      averageRating: parseFloat(averageRating.toFixed(1)), // ⭐ 4.8
+      ratingInPercentage: parseFloat(ratingInPercentage.toFixed(2)), // 96.00%
+      totalRatings, // 2005
+      ratingDistribution, // {1: x, 2: y, ...}
+      ratingPercentages, // {1: %, 2: %, ...}
     },
   };
 };

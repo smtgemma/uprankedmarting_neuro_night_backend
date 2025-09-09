@@ -105,6 +105,30 @@ const requestAssignment = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
+// Admin approves assignment
+const approveAssignment = catchAsync(async (req: Request, res: Response) => {
+  const {userId, organizationId} = req.body;
+  const result = await AssignmentService.approveAssignment(userId, organizationId);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Assignment approved successfully!",
+    data: result,
+  });
+});
+
+// Admin rejects assignment
+const rejectAssignment = catchAsync(async (req: Request, res: Response) => {
+const {userId, organizationId, reason = "Assignment rejected by admin."} = req.body;
+  const result = await AssignmentService.rejectAssignment(userId, organizationId, reason);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Assignment rejected successfully!",
+    data: result,
+  });
+});
+
 
 const getAllAgent = catchAsync(async (req, res) => {
   const options = pickOptions(req.query, [
@@ -165,11 +189,11 @@ const getAllAgentForAdmin = catchAsync(async (req, res) => {
     data: result,
   });
 });
-
+// removal request
 const requestAgentRemoval = catchAsync(async (req: Request, res: Response) => {
-  const { agentId } = req.params;
+  const { userId } = req.params;
   const result = await AssignmentService.requestAgentRemoval(
-    agentId,
+    userId,
     req.user as User
   );
 
@@ -179,35 +203,21 @@ const requestAgentRemoval = catchAsync(async (req: Request, res: Response) => {
     data: result,
   });
 });
-// Admin approves assignment
-const approveAssignment = catchAsync(async (req: Request, res: Response) => {
-  const { assignmentId } = req.params;
-  const result = await AssignmentService.approveAssignment(assignmentId);
+
+const approveAgentRemoval = catchAsync(async (req: Request, res: Response) => {
+  const {userId, organizationId} = req.body;
+  const result = await AssignmentService.approveAgentRemoval(userId, organizationId);
 
   sendResponse(res, {
     statusCode: status.OK,
-    message: "Assignment approved successfully!",
-    data: result,
-  });
-});
-
-// Admin rejects assignment
-const rejectAssignment = catchAsync(async (req: Request, res: Response) => {
-  const { assignmentId } = req.params;
-  const reason = req.body?.reason || "Assignment rejected by admin.";
-  const result = await AssignmentService.rejectAssignment(assignmentId, reason);
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Assignment rejected successfully!",
+    message: "Agent removal approved by admin successfully!",
     data: result,
   });
 });
 
 
 const rejectAgentRemoval = catchAsync(async (req: Request, res: Response) => {
-  const { assignmentId } = req.params;
-  const { reason } = req.body;
+    const {userId, organizationId, reason = "Agent removal rejected by admin."} = req.body;
   const result = await AssignmentService.rejectAgentRemoval(
     assignmentId,
     reason
@@ -220,16 +230,6 @@ const rejectAgentRemoval = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const approveAgentRemoval = catchAsync(async (req: Request, res: Response) => {
-  const { assignmentId } = req.params;
-  const result = await AssignmentService.approveAgentRemoval(assignmentId);
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Agent removal approved by admin successfully!",
-    data: result,
-  });
-});
 
 
 const getApprovalRemovalRequestsForSuperAdmin = catchAsync(

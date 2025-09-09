@@ -1,4 +1,4 @@
-import {  AgentFeedback, User, UserRole } from "@prisma/client";
+import { AgentFeedback, User, UserRole } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";
@@ -86,25 +86,30 @@ const getAllAgentFeedbacks = async (
     },
   });
 
-  // Calculate total ratings and average for ALL feedbacks
   let totalRatings = 0;
   let totalScore = 0;
-  const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const ratingDistribution: Record<number, number> = {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
 
   ratingStats.forEach((stat) => {
     const rating = stat.rating;
     const count = stat._count.rating;
-
     if (rating >= 1 && rating <= 5) {
-      ratingDistribution[rating as keyof typeof ratingDistribution] = count;
+      ratingDistribution[rating] = count;
       totalRatings += count;
       totalScore += rating * count;
     }
   });
 
   const averageRating = totalRatings > 0 ? totalScore / totalRatings : 0;
+  const ratingInPercentage = (averageRating / 5) * 100;
 
-  // Calculate percentages
+  // 🔹 Percentages for progress bars
   const ratingPercentages = {
     1: totalRatings > 0 ? (ratingDistribution[1] / totalRatings) * 100 : 0,
     2: totalRatings > 0 ? (ratingDistribution[2] / totalRatings) * 100 : 0,
@@ -117,10 +122,11 @@ const getAllAgentFeedbacks = async (
     meta,
     data: result,
     ratingStats: {
-      averageRating: parseFloat(averageRating.toFixed(1)),
-      totalRatings,
-      ratingDistribution,
-      ratingPercentages,
+      averageRating: parseFloat(averageRating.toFixed(1)), // ⭐ 4.8
+      ratingInPercentage: parseFloat(ratingInPercentage.toFixed(2)), // 96.00%
+      totalRatings, // 2005
+      ratingDistribution, // {1: x, 2: y, ...}
+      ratingPercentages, // {1: %, 2: %, ...}
     },
   };
 };
