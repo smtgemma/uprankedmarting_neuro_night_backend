@@ -245,11 +245,11 @@ const getAllAgentFromDB = async (
             assignments: {
               select: {
                 id: true,
-                organizationId: true,
-                agentUserId: true,
                 status: true,
+                agentUserId: true,
+                organizationId: true,
                 assignedBy: true,
-              },
+              }
             },
             organization: {
               select: {
