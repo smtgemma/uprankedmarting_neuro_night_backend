@@ -153,7 +153,34 @@ const createSubscription = async (
       throw new AppError(status.NOT_FOUND, "Plan not found");
     }
 
-    // 3. Calculate end date based on plan interval
+    // 3. Normalize phone number format
+    let normalizedPurchasedNumber = purchasedNumber;
+    if (!normalizedPurchasedNumber.startsWith('+')) {
+      normalizedPurchasedNumber = `+${normalizedPurchasedNumber}`;
+    }
+
+    // 4. Verify the phone number exists in AvailableTwilioNumber
+    const availableNumber = await tx.availableTwilioNumber.findFirst({
+      where: {
+        OR: [
+          { phoneNumber: normalizedPurchasedNumber },
+          { phoneNumber: normalizedPurchasedNumber.replace('+', '') }
+        ]
+      }
+    });
+
+    if (!availableNumber) {
+      throw new AppError(status.NOT_FOUND, `Phone number ${purchasedNumber} is not available`);
+    }
+
+    if (availableNumber.isPurchased) {
+      throw new AppError(status.BAD_REQUEST, `Phone number ${purchasedNumber} is already purchased`);
+    }
+
+    // Use the exact format from the database
+    const dbPhoneNumber = availableNumber.phoneNumber;
+
+    // 5. Calculate end date based on plan interval
     const startDate = new Date();
     let endDate: Date | null = null;
 
@@ -174,11 +201,11 @@ const createSubscription = async (
       endDate.setDate(endDate.getDate() + (plan.intervalCount || 1));
     }
 
-    // 4. Calculate final amount (base + $20 per agent)
+    // 6. Calculate final amount (base + $20 per agent)
     const finalAmount =
       plan.amount + (numberOfAgents > 0 ? numberOfAgents * 20 : 0);
 
-    // 5. Create payment intent in Stripe
+    // 7. Create payment intent in Stripe
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(finalAmount * 100), // convert to cents
       currency: "usd",
@@ -186,13 +213,14 @@ const createSubscription = async (
         organizationId: organization.id,
         planId,
         numberOfAgents: numberOfAgents?.toString(),
+        purchasedNumber: dbPhoneNumber, // Store in metadata as well
       },
       automatic_payment_methods: {
         enabled: true,
       },
     });
 
-    // 6. Handle existing subscription
+    // 8. Handle existing subscription
     const existingSubscription = await tx.subscription.findFirst({
       where: { organizationId: organization.id, paymentStatus: "PENDING" },
     });
@@ -209,11 +237,14 @@ const createSubscription = async (
           endDate: existingSubscription.endDate || endDate,
           paymentStatus: "PENDING",
           numberOfAgents,
+          purchasedNumber: dbPhoneNumber, // Use the format from database
+          sid,
+          planLevel,
         },
       });
       
     } else {
-      // 7. Create new subscription
+      // 9. Create new subscription
       subscription = await tx.subscription.create({
         data: {
           organizationId: organization.id,
@@ -224,12 +255,14 @@ const createSubscription = async (
           paymentStatus: "PENDING",
           endDate,
           planLevel,
-          purchasedNumber,
+          purchasedNumber: dbPhoneNumber, // Use the format from database
           sid,
           numberOfAgents,
         },
       });
     }
+
+    console.log("Created subscription with phone number:", normalizedPurchasedNumber);
 
     return {
       subscription,
