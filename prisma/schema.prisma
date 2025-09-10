@@ -245,7 +245,6 @@ model Organization {
   tools                 ToolIntegration[]
   availableTwilioNumber AvailableTwilioNumber[]
   voice                 UploadVoice?
-  AiAgent               AiAgent?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
 
@@ -266,16 +265,15 @@ model UploadVoice {
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
-model AiAgent {
+model aiagent {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
   agentId        String @unique
-  organizationId String @unique @db.ObjectId
-
-  Organization Organization @relation(fields: [organizationId], references: [id])
-
+  organizationId String @unique
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("aiagents")
 }
 
 model AiknowledgeBase {
