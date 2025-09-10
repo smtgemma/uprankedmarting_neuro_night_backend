@@ -91,6 +91,16 @@ const updateAgentInfo = catchAsync(async (req, res) => {
   });
 });
 
+const updateAgentSpecificInfo = catchAsync(async (req, res) => {
+  const user = req.user;
+  const result = await UserService.updateAgentSpecificInfo(user as User,  req.body);
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agent info updated successfully!",
+    data: result,
+  });
+})
+
 const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
   const authUser = req.user;
   const { userId } = req.params;
@@ -111,6 +121,7 @@ export const UserController = {
   verifyOTP,
   createUser,
   createAgent,
+  updateAgentSpecificInfo,
   getAllUser,
   updateUser,
   getSingleUserById,

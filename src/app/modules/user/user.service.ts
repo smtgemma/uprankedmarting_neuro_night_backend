@@ -547,6 +547,65 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
   return result;
 };
+
+const updateAgentSpecificInfo = async (user: User, payload: any) => {
+  console.log(payload,45)
+  if(!payload?.image){
+    throw new ApiError(status.BAD_REQUEST, "Image is required");
+  }
+  // Check if user exists and is an agent
+  const targetUser = await prisma.user.findUnique({
+    where: { 
+      id: user.id, 
+      isDeleted: false,
+      role: UserRole.agent // Ensure the user is an agent
+    },
+    include: {
+      Agent: true,
+    },
+  });
+
+  if (!targetUser) {
+    throw new ApiError(status.NOT_FOUND, "Agent not found!");
+  }
+
+  if (!targetUser.Agent) {
+    throw new ApiError(status.BAD_REQUEST, "User is not registered as an agent");
+  }
+
+  // Update only the profile image
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      image: payload?.image,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      image: true,
+      bio: true,
+      role: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      Agent: {
+        select: {
+          id: true,
+          status: true,
+          skills: true,
+          isAvailable: true,
+          totalCalls: true,
+          successCalls: true,
+          droppedCalls: true,
+        }
+      }
+    },
+  });
+
+  return updatedUser;
+}
 const getSingleUserByIdFromDB = async (userId: string) => {
   const user = await prisma.user.findFirst({
     where: {
@@ -608,6 +667,7 @@ const updateUserRoleStatusByAdminIntoDB = async (
 export const UserService = {
   createUserIntoDB,
   createAgentIntoDB,
+  updateAgentSpecificInfo,
   verifyOTP,
   getAllUserFromDB,
   updateUserIntoDB,
