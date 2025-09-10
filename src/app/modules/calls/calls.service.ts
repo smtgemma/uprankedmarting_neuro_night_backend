@@ -31,13 +31,13 @@ export const CallService = {
   },
 
   async handleCallHangup(callControlId: string) {
-    try {
-      await prisma.call.update({
-        where: { callControlId },
-        data: { status: CallStatus.COMPLETED },
-      });
-    } catch (error) {
-      console.error("Hangup processing failed:", error);
-    }
+    // try {
+    //   await prisma.call.update({
+    //     where: { callControlId },
+    //     data: { status: CallStatus.COMPLETED },
+    //   });
+    // } catch (error) {
+    //   console.error("Hangup processing failed:", error);
+    // }
   }
 };

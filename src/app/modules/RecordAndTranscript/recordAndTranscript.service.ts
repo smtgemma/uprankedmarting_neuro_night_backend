@@ -243,13 +243,13 @@ const getOrganizationCallRecords = async (organizationId: string) => {
   try {
     // Get all calls for the organization
     const calls = await prisma.call.findMany({
-      where: { companyId: organizationId },
-      select: { sid: true, call_sid: true },
+      where: { organizationId: organizationId },
+      select: {  call_sid: true },
     });
 
     const callRecords = await Promise.all(
       calls.map(async (call) => {
-        const callSid = call.sid || call.call_sid;
+        const callSid =  call.call_sid;
         if (!callSid) return null;
 
         try {
