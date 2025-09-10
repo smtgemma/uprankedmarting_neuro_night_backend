@@ -236,7 +236,7 @@ const getAllAgentFromDB = async (
                 rating: true,
               },
             },
-            
+
             skills: true,
             totalCalls: true,
             isAvailable: true,
@@ -245,9 +245,10 @@ const getAllAgentFromDB = async (
             assignments: {
               select: {
                 id: true,
+                organizationId: true,
+                agentUserId: true,
                 status: true,
-                // assignedByUser : true,
-                assignedBy: true
+                assignedBy: true,
               },
             },
             organization: {
@@ -554,6 +555,16 @@ const getAllAgentForAdmin = async (
                 rating: true,
               },
             },
+            assignTo: true,
+            assignments: {
+              select: {
+                id: true,
+                organizationId: true,
+                agentUserId: true,
+                status: true,
+                assignedBy: true,
+              },
+            },
             organization: {
               select: {
                 id: true,
@@ -619,7 +630,9 @@ const getAllAgentForAdmin = async (
         status: agent?.status || null,
         AgentFeedbacks: feedbacks,
         organization: agent?.organization || null,
-        
+        assignments: agent?.assignments || [],
+        assignTo: agent?.assignTo || null,
+
         avgRating: parseFloat(avgRating.toFixed(1)),
         totalFeedbacks: feedbacks.length,
       },
@@ -675,14 +688,13 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
     });
 
     if (activeOtherAssignment) {
-      const errorMessages:any = {
+      const errorMessages: any = {
         [AssignmentStatus.PENDING]:
           "⚠️ Agent has a pending request in another organization!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already working in another organization!",
         [AssignmentStatus.REMOVAL_REQUESTED]:
           "🔄 Agent has a removal request pending in another organization!",
-        
       };
 
       throw new ApiError(
@@ -708,9 +720,8 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       orderBy: { createdAt: "desc" },
     });
 
-
     if (existingAssignment) {
-      const errorMessages:any = {
+      const errorMessages: any = {
         [AssignmentStatus.PENDING]: "⚠️ Assignment request is already pending!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already assigned to your organization!",

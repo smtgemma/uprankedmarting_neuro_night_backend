@@ -74,6 +74,64 @@ export const playRecording = async (req: Request, res: any) => {
   }
 };
 
+// Play recording by callSid (gets first recording for that call)
+export const playRecordingByCallSid = async (req:any, res:any) => {
+  const { callSid } = req.params;
+
+  console.log("callSid", callSid)
+  try {
+    // First, get recordings for this call
+    const recordings = await client.recordings.list({ callSid });
+
+    if (recordings.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `No recordings found for call SID: ${callSid}` 
+      });
+    }
+
+    // Use the first recording
+    const recordingSid = recordings[0].sid;
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+
+    const response = await axios.get(url, {
+      responseType: "stream",
+      auth: { username: accountSid, password: authToken },
+      headers: {
+        'Accept': 'audio/mpeg',
+      },
+    });
+
+    // Set proper headers for audio streaming
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Disposition", `inline; filename="${recordingSid}.mp3"`);
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    // Pipe the audio stream to the response
+    response.data.pipe(res);
+
+    response.data.on('error', (error: any) => {
+      console.error('Stream error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          success: false, 
+          message: "Failed to stream recording", 
+          error: error.message 
+        });
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Play recording error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to stream recording", 
+      error: error.message 
+    });
+  }
+};
+
 // Download recording
 export const downloadRecording = async (req: Request, res: any) => {
   const { recordingSid } = req.params;
