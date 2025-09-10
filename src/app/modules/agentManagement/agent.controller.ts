@@ -166,6 +166,19 @@ const getAgentsId = catchAsync(async (req, res) => {
     data: result,
   });
 });
+
+const getAIAgents = catchAsync(async (req: Request, res: Response) => {
+  const result = await AssignmentService.getAIAgentIdsByOrganizationAdmin(
+    req.user as User
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "AI Agents retrieved successfully!",
+    data: result,
+  });
+});
+
 const getAllAgentForAdmin = catchAsync(async (req, res) => {
   const options = pickOptions(req.query, [
     "limit",
@@ -305,6 +318,7 @@ const getOrganizationAssignments = catchAsync(
 
 export const AssignmentController = {
   requestAssignment,
+  getAIAgents,
   requestAgentRemoval,
   approveAgentRemoval,
   rejectAgentRemoval,

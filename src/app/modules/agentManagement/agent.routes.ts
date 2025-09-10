@@ -39,6 +39,12 @@ router.get(
   AssignmentController.getAllAgent
 );
 router.get(
+  '/ai-agents',
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AssignmentController.getAIAgents
+);
+
+router.get(
   "/get-agent-ids",
   auth(UserRole.organization_admin, UserRole.super_admin),
   AssignmentController.getAgentsId
