@@ -357,11 +357,11 @@ model Subscription {
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  companyId  String @db.ObjectId
-  receiverId String @db.ObjectId
+  organizationId  String @db.ObjectId // *
+  receiverId String @db.ObjectId  // *
 
   // Call details
-  call_sid      String? // for Twilio
+  call_sid      String? // 
   callControlId String  @unique
   fromNumber    String
   toNumber      String
@@ -374,7 +374,7 @@ model Call {
   // digits   String?
 
   callTime    DateTime
-  callType    String
+  callType    String // direction
   duration    Int?      @default(0)
   status      String
   callStartAt DateTime  @default(now())
@@ -390,7 +390,7 @@ model Call {
 
   // Relations
   receivedBy Agent        @relation(fields: [receiverId], references: [userId])
-  company    Organization @relation(fields: [companyId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
 
   @@map("calls")
 }
