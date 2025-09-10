@@ -6,22 +6,32 @@ import config from "../../config";
 
 const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
-
   const result = await AuthService.loginUser(email, password);
 
-  const { accessToken, refreshToken } = result;
+  if (!result.isVerified) {
+    return sendResponse(res, {
+      statusCode: status.OK,
+      message: result.message as string,
+      data: { isVerified: false },
+    });
+  }
 
-  res.cookie("refreshToken", refreshToken, {
+  // refreshToken cookie set
+  res.cookie("refreshToken", result.refreshToken, {
     httpOnly: true,
     secure: config.NODE_ENV === "production",
     sameSite: config.NODE_ENV === "production" ? "strict" : "lax",
     maxAge: 24 * 60 * 60 * 1000,
   });
 
-  sendResponse(res, {
+  return sendResponse(res, {
     statusCode: status.OK,
     message: "User logged in successfully!",
-    data: { accessToken, refreshToken },
+    data: {
+      isVerified: true,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    },
   });
 });
 

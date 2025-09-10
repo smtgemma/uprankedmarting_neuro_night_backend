@@ -9,13 +9,13 @@ const router = Router();
 
 // Prefix: /api/v1/agent-feedback
 router.post(
-  '/',
+  '/create-agent-feedback/:agentId',
   auth(UserRole.organization_admin),
   validateRequest(AgentFeedbackValidation.createAgentFeedbackValidation),
   AgentFeedbackController.createAgentFeedback
 );
 
-router.get('/', AgentFeedbackController.getAllAgentFeedbacks);
+router.get('/',auth(UserRole.super_admin), AgentFeedbackController.getAllAgentFeedbacks);
 
 router.get(
   '/:id',
@@ -36,7 +36,7 @@ router.delete(
 );
 
 router.get(
-  '/get-my-feedbacks',
+  '/get-my-agents-feedback',
   auth(UserRole.organization_admin),
   AgentFeedbackController.getAgentFeedbacksByClient
 );

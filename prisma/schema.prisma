@@ -91,7 +91,7 @@ model User {
   email     String  @unique
   password  String
   image     String? @default("")
-  bio       String?
+  bio       String? @default("")
   phone     String  @unique
   isDeleted Boolean @default(false)
 
@@ -115,14 +115,15 @@ model User {
   ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
   ServiceFeedbacks  ServiceFeedback[]
   AgentFeedbacks    AgentFeedback[]
+  assignedAgents    AgentAssignment[] @relation("AssignmentMadeBy")
 
   @@map("users")
 }
 
 enum AgentStatus {
-  AVAILABLE
-  BUSY
-  OFFLINE
+  free
+  busy
+  offline
 }
 
 enum CallStatus {
@@ -135,19 +136,20 @@ enum CallStatus {
   CANCELED
 }
 
+enum employmentType {
+  part_time
+  full_time
+  contract
+}
+
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
 
-  // Add these fields for SIP integration:
-  sipUsername String? // Required for SIP authentication
-  extension   String? // Internal extension number
-
-  twilioIdentity String? @unique // e.g., "agent_101"
-
-  // displayName    String
-  // identity       String      @unique // used by Voice SDK
-  status AgentStatus @default(OFFLINE)
+  status       AgentStatus @default(offline)
+  sip_address  String?
+  sip_username String?
+  sip_password String?
 
   // Personal info
   dateOfBirth    DateTime
@@ -156,13 +158,20 @@ model Agent {
   emergencyPhone String
   ssn            String?
 
-  // Professional info
-  skills      String[]
-  employeeId  String
-  isAvailable Boolean  @default(true)
-  assignTo    String?  @db.ObjectId
+  // Professional info 
+  skills String[] @default([])
 
-  officeHours       Int
+  employeeId  String?
+  isAvailable Boolean @default(true)
+  assignTo    String? @db.ObjectId
+
+  // employment information
+  jobTitle       String
+  employmentType employmentType
+  department     String
+
+  workEndTime       String?
+  workStartTime     String?
   startWorkDateTime DateTime?
   endWorkDateTime   DateTime?
 
@@ -177,20 +186,47 @@ model Agent {
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
 
+  assignments AgentAssignment[]
+
   @@map("agents")
+}
+
+enum AssignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REMOVAL_REQUESTED
+}
+
+model AgentAssignment {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  agentUserId    String           @db.ObjectId
+  organizationId String           @db.ObjectId
+  status         AssignmentStatus @default(PENDING)
+  assignedBy     String?          @db.ObjectId // User who made the assignment
+  assignedAt     DateTime         @default(now())
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  reason         String? // Reason for rejection if applicable
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
 }
 
 model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  // Add SIP domain field
-  sipDomain String? // Stores the Twilio SIP domain like "company.sip.twilio.com"
-
   name               String
   industry           String?
   address            String
   websiteLink        String
-  organizationNumber String? @unique
+  organizationNumber String?
   ownerId            String? @unique @db.ObjectId
 
   agentVoiceUrl String?
@@ -204,46 +240,69 @@ model Organization {
   agents                Agent[] // One Organization can have multiple Agents
   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions         Subscription[]
-  documents             CompanyDoc[]
+  documents             OrganizationDoc[]
   calls                 Call[]
   tools                 ToolIntegration[]
   availableTwilioNumber AvailableTwilioNumber[]
+  voice                 UploadVoice?
+  AiknowledgeBase       AiknowledgeBase[]
+  AgentAssignment       AgentAssignment[]
 
   @@map("organizations")
 }
 
 model UploadVoice {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  voiceId   String @unique @db.ObjectId
-  voiceName String
-}
-
-model AiAgent {
-  id             String  @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String? @db.ObjectId
-  agentId        String  @unique @db.ObjectId
-
-  // for voice
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CompanyDoc {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  companyId String @db.ObjectId
-  docFor    DocFor @default(AI)
-  content   Json
+  id                    String  @id @default(auto()) @map("_id") @db.ObjectId
+  voiceId               String  @unique @db.ObjectId
+  voiceName             String
+  requires_verification Boolean
+  organizationId        String  @unique @db.ObjectId
 
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Organization @relation(fields: [companyId], references: [id])
+  Organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+model aiagent {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String @unique
+  organizationId String @unique
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("aiagents")
+}
+
+model AiknowledgeBase {
+  id                String       @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId    String       @db.ObjectId
+  knowledgeBaseId   String       @unique
+  knowledgeBaseName String
+  Organization      Organization @relation(fields: [organizationId], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrganizationDoc {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String @db.ObjectId
+  docFor         DocFor @default(AI)
+  content        Json
 
   // ai
-  docId   String?
-  docName String?
+  aiDocId   String?
+  aiDocName String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("company_docs")
 }
@@ -285,7 +344,7 @@ model Subscription {
   planLevel       PlanLevel
   purchasedNumber String
   sid             String
-  numberOfAgents  Int                @default(0)
+  numberOfAgents  Int?               @default(0)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
@@ -295,40 +354,48 @@ model Subscription {
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  companyId  String @db.ObjectId
-  receiverId String @db.ObjectId
+  organizationId String @db.ObjectId // *
+  receiverId     String @db.ObjectId // *
 
-  // Call details
-  call_sid      String? // for Twilio
-  callControlId String  @unique
-  fromNumber    String
-  toNumber      String
-  sid           String?
-
-  // orgId     String
-  // agentId   String?
-
-  ivrState String?
-  digits   String?
-
-  callTime    DateTime
-  callType    String
-  duration    Int?      @default(0)
-  status      String
-  callStartAt DateTime  @default(now())
-  callEndAt   DateTime?
-
-  // Call artifacts
+  from_number String
+  to_number   String
+  account_sid String?
+  call_sid    String?
+  call_status String
   recordingUrl String?
   summary      String?
 
+  callTime DateTime @default(now()) // 
+  // "created_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+  callType          String // direction
+  call_duration     Int?
+  call_started_at   DateTime  @default(now())
+  call_completed_at DateTime?
+  // "call_completed_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+  
+  call_transcript String?
+  recording_duration Int?
+  recording_sid String?
+  recording_status String?
+  recording_url String?
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  receivedBy Agent        @relation(fields: [receiverId], references: [userId])
-  company    Organization @relation(fields: [companyId], references: [id])
+  receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // orgId     String
+  // agentId   String?
+
+  // ivrState String?
+  // digits   String?
+  // Call details
+  // callControlId String  @unique
 
   @@map("calls")
 }
@@ -359,7 +426,7 @@ model AgentFeedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agent  Agent @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  agent  Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
   client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@map("agent_feedbacks")

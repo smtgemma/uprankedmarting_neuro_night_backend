@@ -4,6 +4,7 @@ import config from "../../config";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
+import { User } from "@prisma/client";
 // Initialize Twilio client
 const twilioClient = new Twilio(
   config.twilio.account_sid || "AC3c7b7f9af62077ff16931a102df853ff",
@@ -59,16 +60,16 @@ const fetchAndStoreAvailableNumbers = async () => {
 const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) => {
   const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
   
-  const searchableFields = ['phoneNumber', 'friendlyName',  'countryCode'];
+  const searchableFields = ['phoneNumber', 'friendlyName', 'countryCode'];
   
-  const customFilters: Record<string, any> = {};
+  const customFilters: Record<string, any> = {
+    isPurchased: Boolean(query?.isPurchased)
+  };
   
-  // Filter by phone number pattern
   if (query.phoneNumberPattern) {
     customFilters.phoneNumber = { contains: query.phoneNumberPattern as string };
   }
   
-  // Filter by capability (SMS, Voice, etc.)
   if (query.capability) {
     const capabilities = Array.isArray(query.capability) 
       ? query.capability 
@@ -79,7 +80,10 @@ const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) =>
   const result = await queryBuilder
     .search(searchableFields)
     .filter()
-    .rawFilter(customFilters) 
+    .rawFilter(customFilters)
+    .include({
+      organization: true
+    })
     .sort()
     .paginate()
     .fields()

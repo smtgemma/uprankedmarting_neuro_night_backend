@@ -1,19 +1,12 @@
-import status from "http-status";
 import auth from "../../middlewares/auth";
 import { UserRole } from "@prisma/client";
-import { upload } from "../../utils/upload";
-import ApiError from "../../errors/AppError";
-import { UserValidation } from "./user.validation";
 import { UserController } from "./user.controller";
-import validateRequest from "../../middlewares/validateRequest";
 import { NextFunction, Request, Response, Router } from "express";
 import { multerUpload } from "../../config/multer.config";
-import prisma from "../../utils/prisma";
-import  twilio  from "twilio";
 
 const router = Router();
 
-router.get("/", auth(UserRole.super_admin), UserController.getAllUser);
+router.get("/", UserController.getAllUser);
 
 router.get(
   "/:userId",
@@ -66,7 +59,8 @@ router.get(
 //   }
 // });
 
-router.post("/register", UserController.createUser);
+router.post("/register-user", UserController.createUser);
+router.post("/register-agent", UserController.createAgent);
 
 router.post(
   "/verify-otp",
@@ -76,8 +70,8 @@ router.post(
 
 router.patch(
   "/update",
-  auth(UserRole.organization_admin, UserRole.super_admin),
   multerUpload.single("file"),
+  auth(UserRole.organization_admin, UserRole.super_admin),
   (req: Request, res: Response, next: NextFunction) => {
     const file = req.file;
     if (req?.body?.data) {
@@ -94,8 +88,8 @@ router.patch(
 
 router.patch(
   "/agent-info/update/:id",
-  auth(UserRole.super_admin),
   multerUpload.single("file"),
+  auth(UserRole.super_admin),
   (req: Request, res: Response, next: NextFunction) => {
     const file = req.file;
     if (req?.body?.data) {
@@ -107,6 +101,21 @@ router.patch(
 
     // validateRequest(UserValidation.updateUserValidationSchema),
     UserController.updateAgentInfo(req, res, next);
+  }
+);
+
+router.patch(
+  "/agents/profile",
+
+  multerUpload.single("file"),
+  auth(UserRole.agent),
+  (req: Request, res: Response, next: NextFunction) => {
+    const file = req.file;
+    if (file) {
+      req.body.image = file?.path;
+    }
+
+    UserController.updateAgentSpecificInfo(req, res, next);
   }
 );
 

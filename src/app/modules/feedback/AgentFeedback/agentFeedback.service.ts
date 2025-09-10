@@ -1,17 +1,56 @@
-import { PrismaClient, AgentFeedback } from "@prisma/client";
+import { AgentFeedback, User, UserRole } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";
 import status from "http-status";
 
 const createAgentFeedback = async (
-  data: { rating: number; feedbackText?: string; agentId: string },
-  userId: string
+  data: { rating: number; feedbackText?: string },
+  userId: string,
+  agentId: string
 ): Promise<AgentFeedback> => {
+  // console.log("Agent ID:", agentId , "clientId", userId)
+  const checkAgentFeedback = await prisma.agentFeedback.findFirst({
+    where: {
+      agentId: agentId,
+      clientId: userId,
+    },
+  });
+
+  if (checkAgentFeedback) {
+    throw new AppError(status.BAD_REQUEST, "Agent feedback already exists!");
+  }
+
+  const checkisAgentAssignToMyOrganization =
+    await prisma.organization.findFirst({
+      where: {
+        ownerId: userId,
+      },
+      include: {
+        agents: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+  const isAgentInOrg = checkisAgentAssignToMyOrganization?.agents?.some(
+    (agent) => agent.id.toString() === agentId
+  );
+
+  if (!isAgentInOrg) {
+    console.log("Agent not found in this organization:", agentId);
+    throw new AppError(
+      status.BAD_REQUEST,
+      "Agent is not assigned to your organization!"
+    );
+  }
+
   const serviceData = {
     rating: data.rating,
     feedbackText: data.feedbackText || undefined,
-    agentId: data.agentId,
+    agentId: agentId,
     clientId: userId,
   };
 
@@ -21,9 +60,16 @@ const createAgentFeedback = async (
   return result;
 };
 
-const getAllAgentFeedbacks = async (query: Record<string, unknown>) => {
+const getAllAgentFeedbacks = async (
+  query: Record<string, unknown>,
+  user: User
+) => {
+  // console.log("Query:4353")
   const agentFeedbackQuery = new QueryBuilder(prisma.agentFeedback, query)
     .search(["feedbackText"])
+    .include({
+      client: { select: { id: true, name: true, email: true, image: true } },
+    })
     .filter()
     .sort()
     .paginate()
@@ -32,22 +78,87 @@ const getAllAgentFeedbacks = async (query: Record<string, unknown>) => {
   const result = await agentFeedbackQuery.execute();
   const meta = await agentFeedbackQuery.countTotal();
 
+  // Get rating statistics for ALL agent feedbacks (not filtered by specific agent)
+  const ratingStats = await prisma.agentFeedback.groupBy({
+    by: ["rating"],
+    _count: {
+      rating: true,
+    },
+  });
+
+  let totalRatings = 0;
+  let totalScore = 0;
+  const ratingDistribution: Record<number, number> = {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
+
+  ratingStats.forEach((stat) => {
+    const rating = stat.rating;
+    const count = stat._count.rating;
+    if (rating >= 1 && rating <= 5) {
+      ratingDistribution[rating] = count;
+      totalRatings += count;
+      totalScore += rating * count;
+    }
+  });
+
+  const averageRating = totalRatings > 0 ? totalScore / totalRatings : 0;
+  const ratingInPercentage = (averageRating / 5) * 100;
+
+  // 🔹 Percentages for progress bars
+  const ratingPercentages = {
+    1: totalRatings > 0 ? (ratingDistribution[1] / totalRatings) * 100 : 0,
+    2: totalRatings > 0 ? (ratingDistribution[2] / totalRatings) * 100 : 0,
+    3: totalRatings > 0 ? (ratingDistribution[3] / totalRatings) * 100 : 0,
+    4: totalRatings > 0 ? (ratingDistribution[4] / totalRatings) * 100 : 0,
+    5: totalRatings > 0 ? (ratingDistribution[5] / totalRatings) * 100 : 0,
+  };
+
   return {
     meta,
     data: result,
+    ratingStats: {
+      averageRating: parseFloat(averageRating.toFixed(1)), // ⭐ 4.8
+      ratingInPercentage: parseFloat(ratingInPercentage.toFixed(2)), // 96.00%
+      totalRatings, // 2005
+      ratingDistribution, // {1: x, 2: y, ...}
+      ratingPercentages, // {1: %, 2: %, ...}
+    },
   };
 };
 
-const getSingleAgentFeedback = async (
-  id: string
-): Promise<AgentFeedback | null> => {
-  const result = await prisma.agentFeedback.findUnique({
+const getSingleAgentFeedback = async (id: string) => {
+  const result = await prisma.agentFeedback.findFirst({
     where: { id },
     include: {
-      agent: true, // Include all agent fields to avoid strict typing issues
-      client: true, // Include all client fields to avoid strict typing issues
+      agent: {
+        select: {
+          id: true,
+          gender: true,
+          address: true,
+          emergencyPhone: true,
+          ssn: true,
+          skills: true,
+        },
+      },
+      client: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          image: true,
+        },
+      },
     },
   });
+  if (!result) {
+    throw new AppError(status.NOT_FOUND, "Agent feedback not found!");
+  }
   return result;
 };
 
@@ -74,22 +185,29 @@ const updateAgentFeedback = async (
   return result;
 };
 
-const deleteAgentFeedback = async (
-  id: string,
-  clientId: string
-): Promise<AgentFeedback> => {
-  const checkAgentFeedback = await prisma.agentFeedback.findUnique({
-    where: { id },
-  });
+const deleteAgentFeedback = async (id: string, user: User) => {
+  let checkAgentFeedback = null;
 
-  if (!checkAgentFeedback) {
-    throw new AppError(status.NOT_FOUND, "Agent feedback not found!");
+  if (user?.role === UserRole.super_admin) {
+    checkAgentFeedback = await prisma.agentFeedback.findUnique({
+      where: { id },
+    });
+  } else if (user?.role === UserRole.organization_admin) {
+    checkAgentFeedback = await prisma.agentFeedback.findFirst({
+      where: {
+        id,
+        clientId: user.id,
+      },
+    });
   }
 
-  const result = await prisma.agentFeedback.delete({
+  if (!checkAgentFeedback) {
+    throw new AppError(status.NOT_FOUND, "Agent feedback not found");
+  }
+
+  return prisma.agentFeedback.delete({
     where: { id },
   });
-  return result;
 };
 
 const getAgentFeedbacksByClient = async (

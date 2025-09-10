@@ -38,35 +38,12 @@ const getAllOrganizations = async () => {
 };
 
 const getSingleOrganization = async (organizationId: string) => {
+
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: {
-      id: true,
-      name: true,
-      industry: true,
-      organizationNumber: true,
-      ownerId: true,
-      subscriptions: {
-        select: {
-          id: true,
-          amount: true,
-          startDate: true,
-          endDate: true,
-          paymentStatus: true,
-          planLevel: true,
-          purchasedNumber: true,
-          sid: true,
-          numberOfAgents: true,
-          status: true,
-          plan: {
-            select: {
-              id: true,
-              planName: true,
-            },
-          },
-        },
-      },
-    },
+    // include: {
+      
+    // }
   });
 
   if (!organization) {

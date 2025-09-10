@@ -2,6 +2,7 @@ import status from "http-status";
 import { ServiceFeedbackServices } from "./serviceFeedback.service";
 import catchAsync from "../../../utils/catchAsync";
 import sendResponse from "../../../utils/sendResponse";
+import { User } from "@prisma/client";
 
 const createServiceFeedback = catchAsync(async (req, res) => {
   const userId = req.user.id as string;
@@ -25,8 +26,18 @@ const getAllServiceFeedbacks = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: status.OK,
     message: "Service feedbacks fetched successfully!",
-    meta: result.meta,
-    data: result.data,
+    data: result
+  });
+});
+
+const getMostValuableServiceFeedbacks = catchAsync(async (req, res) => {
+  const result = await ServiceFeedbackServices.getMostValuableServiceFeedbacks(
+    req.query
+  );
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Most valuable service feedbacks fetched successfully!",
+   data: result
   });
 });
 
@@ -58,7 +69,7 @@ const deleteServiceFeedback = catchAsync(async (req, res) => {
   const { id } = req.params;
   const result = await ServiceFeedbackServices.deleteServiceFeedback(
     id,
-    req.user.id as string
+    req.user as User
   );
   sendResponse(res, {
     statusCode: status.OK,
@@ -97,6 +108,7 @@ const getServiceFeedbacksByRating = catchAsync(async (req, res) => {
 export const ServiceFeedbackController = {
   createServiceFeedback,
   getAllServiceFeedbacks,
+  getMostValuableServiceFeedbacks,
   getSingleServiceFeedback,
   updateServiceFeedback,
   deleteServiceFeedback,

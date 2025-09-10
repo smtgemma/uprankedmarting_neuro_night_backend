@@ -15,7 +15,9 @@ router.post(
   ServiceFeedbackController.createServiceFeedback
 );
 
-router.get('/', ServiceFeedbackController.getAllServiceFeedbacks);
+router.get('/', auth(UserRole.super_admin),ServiceFeedbackController.getAllServiceFeedbacks);
+
+router.get('/testimonial-feedback', ServiceFeedbackController.getMostValuableServiceFeedbacks);
 
 router.get(
   '/:id',

@@ -7,9 +7,14 @@ import { CallRoutes } from "../modules/calls/calls.route";
 import { ServiceFeedbackRoutes } from "../modules/feedback/ServiceFeedback/serviceFeedback.route";
 import { AgentFeedbackRoutes } from "../modules/feedback/AgentFeedback/agentFeedback.route";
 import { TwilioPhoneNumberRoutes } from "../modules/availableNumbers/availableNumbers.routes";
-import { AgentRoutes } from "../modules/agentManagement/agent.routes";
 import { TestCallRoutes } from "../modules/test-call/test.route";
+import { CompanyDocRoutes } from "../modules/companyDoc/companyDoc.routes";
+import { RecordAndTranscriptRoutes } from "../modules/RecordAndTranscript/recordAndTranscript.routes";
+import { SipRoutes } from "../modules/sip/sip.route";
 import { OrganizationRoutes } from "../modules/organization/organization.routes";
+import { AssignmentRoutes } from "../modules/agentManagement/agent.routes";
+import { ToolsRoutes } from "../modules/tools/tools.route";
+import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
 
 const router = Router();
 
@@ -52,12 +57,32 @@ const moduleRoutes = [
   },
   {
     path: "/agents",
-    route: AgentRoutes,
+    route: AssignmentRoutes,
+  },
+  {
+    path: "/company-docs",
+    route: CompanyDocRoutes,
+  },
+  {
+    path: "/call-logs",
+    route: RecordAndTranscriptRoutes,
+  },
+  {
+    path: "/sip",
+    route: SipRoutes,
   },
   {
     path: "/organizations",
     route: OrganizationRoutes,
   },
+  {
+    path: "/tools",
+    route: ToolsRoutes,
+  },
+  {
+    path: "/organization-admins",
+    route: ClientManagementRoutes,
+  }
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
