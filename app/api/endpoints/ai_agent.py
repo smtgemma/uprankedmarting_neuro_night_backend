@@ -3,7 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 import httpx
 import logging
-from app.services.elevenlabs import create_eleven_agent, update_eleven_agent
+from app.services.elevenlabs import create_eleven_agent, update_eleven_agent, get_agent_data
 from app.db.database_connection import get_database
 from bson import ObjectId
 from datetime import datetime
@@ -62,12 +62,21 @@ class OrganizationResponse(BaseModel):
     knowledge_bases: List[KnowledgeBaseModel] = []
     lead_questions: List[str] = []
 
+class AgentDataResponse(BaseModel):
+    first_message: Optional[str] = None
+    knowledge_base_ids: Optional[List[str]] = []
+    max_duration_seconds: Optional[int] = None
+    stability: Optional[float] = None
+    speed: Optional[float] = None
+    similarity_boost: Optional[float] = None
+    llm: Optional[str] = None
+    temperature: Optional[float] = None
+    daily_limit: Optional[int] = None
+
 # ----------------------------
 # Helper: Fetch organization by ID
 # ----------------------------
-# ----------------------------
-# Helper: Fetch organization by ID
-# ----------------------------
+
 async def get_org_by_id(org_id: str, db=Depends(get_database)) -> OrganizationResponse:
     # --- Validate org_id ---
     try:
@@ -349,6 +358,16 @@ async def create_agent(
 ):
     org = await get_org_by_id(org_id, db)
 
+    existing_agent = await db.aiagents.find_one({"organizationId": org_id})
+    if existing_agent:
+        logger.error(f"Agent already exists for organization {org_id}. Only updates are allowed.")
+        raise HTTPException(
+            status_code=409,
+            detail="An AI agent already exists for this organization. You can only update the existing agent."
+        )
+
+
+
     prompt = generate_elevenlabs_prompt(
         agent_name = f"{org.business_name} Call Center Agent",
         organization_name=org.business_name,
@@ -497,3 +516,31 @@ async def update_agent(
         "message": f"Agent {agent_id} was successfully updated.",
         "update_response": update_response
     }
+
+# ----------------------------
+# Endpoint: Get Agent Info
+# ----------------------------
+@router.get("/{org_id}/agents/{agent_id}", response_model=AgentDataResponse)
+async def get_agent_info(org_id: str, agent_id: str):
+    try:
+        data = await get_agent_data(agent_id)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Extract the relevant fields
+    return {
+    "first_message": data.get("conversation_config", {}).get("agent", {}).get("first_message"),
+    "knowledge_base_ids": [
+        kb.get("id") for kb in data.get("conversation_config", {}).get("agent", {}).get("prompt", {}).get("knowledge_base", [])
+        if isinstance(kb, dict) and "id" in kb
+    ],
+    "max_duration_seconds": data.get("conversation_config", {}).get("conversation", {}).get("max_duration_seconds"),
+    "stability": data.get("conversation_config", {}).get("tts", {}).get("stability"),
+    "speed": data.get("conversation_config", {}).get("tts", {}).get("speed"),
+    "similarity_boost": data.get("conversation_config", {}).get("tts", {}).get("similarity_boost"),
+    "llm": data.get("conversation_config", {}).get("agent", {}).get("prompt", {}).get("llm"),
+    "temperature": data.get("conversation_config", {}).get("agent", {}).get("prompt", {}).get("temperature"),
+    "daily_limit": data.get("platform_settings", {}).get("call_limits", {}).get("daily_limit")
+}
