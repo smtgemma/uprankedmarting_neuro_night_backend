@@ -1,52 +1,106 @@
 import { UserRole } from "@prisma/client";
 import prisma from "../../utils/prisma";
-import QueryBuilder from "../../builder/QueryBuilder";
 
 const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
-  // console.log("Query:4353")
-  const agentFeedbackQuery = new QueryBuilder(prisma.user, query)
-    .search(["name", "email", "phone"])
-    .rawFilter({ role: UserRole.organization_admin, isDeleted: false })
-    // .filter()
-    // .select({
-    //   phone: true,
-    //   name: true,
-    //   email: true,
-    //   image: true,
-    //   bio: true,
-    //   role: true,
-    //   status: true,
-    //   ownedOrganization: true,
-    // })
-    .sort()
-    .paginate()
-    .fields();
+  const {
+    page = 1,
+    limit = 10,
+    search,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = query;
 
-  const result = await agentFeedbackQuery.execute();
-  const meta = await agentFeedbackQuery.countTotal();
+  const where: any = {
+    role: UserRole.organization_admin,
+    isDeleted: false,
+  };
 
-  //   const result = await prisma.user.findMany({
-  //     where: {
-  //       role: UserRole.organization_admin, // Only get organization admins
-  //       isDeleted: false // Exclude deleted users,
-  //     },
-  //     select: {
-  //       id: true,
-  //       phone: true,
-  //       name: true,
-  //       email: true,
-  //       image: true,
-  //       bio: true,
-  //       role: true,
-  //       status: true,
-  //       ownedOrganization: true,
-  //     },
-  //     orderBy: {
-  //       createdAt: 'desc'
-  //     }
-  //   });
+  // Add search functionality
+  if (search) {
+    where.OR = [
+      { name: { contains: search as string, mode: "insensitive" } },
+      { email: { contains: search as string, mode: "insensitive" } },
+      { phone: { contains: search as string, mode: "insensitive" } },
+    ];
+  }
 
-  return result;
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        image: true,
+        bio: true,
+        status: true,
+        role: true,
+        // createdAt: true,
+        // updatedAt: true,
+        ownedOrganization: {
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+            address: true,
+            websiteLink: true,
+            organizationNumber: true,
+            subscriptions: {
+              select: {
+                id: true,
+                startDate: true,
+                endDate: true,
+                amount: true,
+                paymentStatus: true,
+                status: true,
+                planLevel: true,
+                purchasedNumber: true,
+                numberOfAgents: true,
+                // createdAt: true,
+                // updatedAt: true,
+                // plan: {
+                //   select: {
+                //     id: true,
+                //     planName: true,
+                //     amount: true,
+                //     currency: true,
+                //     interval: true,
+                //     intervalCount: true,
+                //     description: true,
+                //     features: true,
+                //     planLevel: true,
+                //     createdAt: true,
+                //     updatedAt: true
+                //   }
+                // }
+              },
+              orderBy: {
+                createdAt: "desc",
+              },
+            },
+            agents: true,
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  return {
+    data: users,
+    meta: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+  };
 };
 
 export const ClientManagementServices = {
