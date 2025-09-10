@@ -80,8 +80,9 @@ const handlePaymentIntentSucceeded = async (
     payment.plan.intervalCount
   );
 
-  // Update subscription in a transaction
+// Update subscription, organization, and availableTwilioNumber in a transaction
   await prisma.$transaction([
+    // Update subscription
     prisma.subscription.update({
       where: { id: payment.id },
       data: {
@@ -89,6 +90,22 @@ const handlePaymentIntentSucceeded = async (
         status: SubscriptionStatus.ACTIVE,
         startDate,
         endDate,
+      },
+    }),
+    // Update organizationNumber in Organization
+    prisma.organization.update({
+      where: { id: payment.organizationId },
+      data: {
+        organizationNumber: payment.purchasedNumber,
+      },
+    }),
+    // Update AvailableTwilioNumber
+    prisma.availableTwilioNumber.update({
+      where: { phoneNumber: payment.purchasedNumber },
+      data: {
+        isPurchased: true,
+        purchasedByOrganizationId: payment.organizationId,
+        purchasedAt: new Date(),
       },
     }),
   ]);
