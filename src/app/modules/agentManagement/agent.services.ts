@@ -236,7 +236,7 @@ const getAllAgentFromDB = async (
                 rating: true,
               },
             },
-            
+
             skills: true,
             totalCalls: true,
             isAvailable: true,
@@ -246,9 +246,10 @@ const getAllAgentFromDB = async (
               select: {
                 id: true,
                 status: true,
-                // assignedByUser : true,
-                assignedBy: true
-              },
+                agentUserId: true,
+                organizationId: true,
+                assignedBy: true,
+              }
             },
             organization: {
               select: {
@@ -449,6 +450,71 @@ const getAllAgentIds = async (user: User) => {
   return agents;
 };
 
+// const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
+//   try {
+//     // 1. User থেকে organization বের করি
+//     const org = await prisma.organization.findFirst({
+//       where: {
+//         ownerId: user?.id,
+//       },
+//       select: { id: true, name: true },
+//     });
+
+//     console.log("Organization:", org);
+
+//     if (!org) {
+//       throw new Error("Organization not found for this user!");
+//     }
+
+//     console.log("Organization ID from DB:", org.id);
+//     console.log("Organization ID type:", typeof org.id);
+
+//     // // 2. Debug: Check what's actually in the aiAgent collection
+//     // const allAIAgents = await prisma.aiAgent.findMany();
+//     // console.log("All AI Agents in DB:", allAIAgents);
+
+//     // 3. Try different query approaches
+
+//     // Approach 1: Direct string comparison (most likely to work)
+//     const aiAgent = await prisma.aiagent.findFirst({
+//       where: {
+//         organizationId: org.id, // Try direct comparison
+//       },
+//     });
+
+//     console.log("AI Agent found (direct comparison):", aiAgent);
+
+//     // Approach 2: If above doesn't work, try with toString()
+//     if (!aiAgent) {
+//       const aiAgent2 = await prisma.aiagent.findFirst({
+//         where: {
+//           organizationId: org.id.toString(), // Explicit toString
+//         },
+//       });
+//       console.log("AI Agent found (toString):", aiAgent2);
+//     }
+
+//     // Approach 3: Try with the exact string from your data
+//     if (!aiAgent) {
+//       const aiAgent3 = await prisma.aiagent.findFirst({
+//         where: {
+//           organizationId: "68c07f6ed7e7d6c718ff8099", // Hardcoded from your data
+//         },
+//       });
+//       console.log("AI Agent found (hardcoded):", aiAgent3);
+//     }
+
+//     return {
+//       organization: org,
+//       aiAgent: aiAgent || null,
+//     };
+
+//   } catch (error) {
+//     console.error("Error in getAIAgentIdsByOrganizationAdmin:", error);
+//     throw error;
+//   }
+// };
+
 // const getAllAgentIds = async () => {
 //   const agents = await prisma.agent.findMany({
 //     where: {
@@ -475,6 +541,90 @@ const getAllAgentIds = async (user: User) => {
 //   return agents;
 // };
 
+
+const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
+  try {
+    const org = await prisma.organization.findFirst({
+      where: {
+        ownerId: user?.id,
+      },
+      select: { id: true, name: true },
+    });
+
+    // console.log("Organization:", org);
+
+    if (!org) {
+      throw new Error("Organization not found for this user!");
+    }
+
+    // 2. Use Prisma query (not raw) since we know the data exists
+    const aiAgent = await prisma.aiagent.findFirst({
+      where: {
+        organizationId: org.id
+      },
+      select: {
+        agentId: true,
+        organizationId: true,
+      }
+    });
+
+    // console.log("AI Agent found with Prisma:", aiAgent);
+
+    // 3. If Prisma query doesn't work, fall back to raw query
+    if (!aiAgent) {
+      console.log("Prisma query failed, trying raw MongoDB query...");
+      
+      const rawResult = await prisma.$runCommandRaw({
+        find: "aiagents",
+        filter: {
+          organizationId: org.id
+        }
+      });
+
+      // console.log("Raw MongoDB result:", rawResult);
+      
+      return {
+        organization: org,
+        aiAgents: rawResult.documents || [],
+        source: "raw"
+      };
+    }
+
+    return {
+      aiAgents: aiAgent ? [aiAgent] : [], // Return as array for consistency
+    };
+
+  } catch (error) {
+    console.error("Error in getAIAgentIdsByOrganizationAdmin:", error);
+    
+    // Fallback to raw query if Prisma fails
+    try {
+      const org = await prisma.organization.findFirst({
+        where: {
+          ownerId: user?.id,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (org) {
+        const rawResult = await prisma.$runCommandRaw({
+          find: "aiagents",
+          filter: {
+            organizationId: org.id
+          }
+        });
+
+        return {
+          aiAgents: rawResult.documents || [],
+        };
+      }
+    } catch (fallbackError) {
+      console.error("Fallback query also failed:", fallbackError);
+    }
+
+    throw error;
+  }
+};
 const getAllAgentForAdmin = async (
   options: IPaginationOptions,
   filters: any = {}
@@ -554,6 +704,16 @@ const getAllAgentForAdmin = async (
                 rating: true,
               },
             },
+            assignTo: true,
+            assignments: {
+              select: {
+                id: true,
+                organizationId: true,
+                agentUserId: true,
+                status: true,
+                assignedBy: true,
+              },
+            },
             organization: {
               select: {
                 id: true,
@@ -619,7 +779,9 @@ const getAllAgentForAdmin = async (
         status: agent?.status || null,
         AgentFeedbacks: feedbacks,
         organization: agent?.organization || null,
-        
+        assignments: agent?.assignments || [],
+        assignTo: agent?.assignTo || null,
+
         avgRating: parseFloat(avgRating.toFixed(1)),
         totalFeedbacks: feedbacks.length,
       },
@@ -675,14 +837,13 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
     });
 
     if (activeOtherAssignment) {
-      const errorMessages:any = {
+      const errorMessages: any = {
         [AssignmentStatus.PENDING]:
           "⚠️ Agent has a pending request in another organization!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already working in another organization!",
         [AssignmentStatus.REMOVAL_REQUESTED]:
           "🔄 Agent has a removal request pending in another organization!",
-        
       };
 
       throw new ApiError(
@@ -708,9 +869,8 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       orderBy: { createdAt: "desc" },
     });
 
-
     if (existingAssignment) {
-      const errorMessages:any = {
+      const errorMessages: any = {
         [AssignmentStatus.PENDING]: "⚠️ Assignment request is already pending!",
         [AssignmentStatus.APPROVED]:
           "✅ Agent is already assigned to your organization!",
@@ -1468,6 +1628,7 @@ const getOrganizationAssignments = async (organizationId: string) => {
 export const AssignmentService = {
   requestAgentAssignment,
   approveAgentRemoval,
+  getAIAgentIdsByOrganizationAdmin,
   rejectAgentRemoval,
   getAllAgentFromDB,
   requestAgentRemoval,

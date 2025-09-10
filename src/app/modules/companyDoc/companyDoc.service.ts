@@ -16,12 +16,12 @@ const removeFileExtension = (filename: string): string => {
 };
 
 const createCompanyDoc = async (req: Request) => {
-  const { docFor } = req.body;
-  const file = req.file;
+  const { docFor } = req?.body;
+  const file = req?.file;
 
-  // console.log("File:", file)
+  console.log("File:", file)
 
-  const user = req.user;
+  const user = req?.user;
 
   const Organization = await prisma.organization.findUnique({
     where: { ownerId: user?.id },
@@ -104,6 +104,7 @@ const getAllCompanyDocs = async (query: Record<string, unknown>) => {
 };
 
 const getSingleCompanyDoc = async (id: string) => {
+  console.log(id)
   return await prisma.organizationDoc.findUnique({
     where: { id },
     include: { organization: true },

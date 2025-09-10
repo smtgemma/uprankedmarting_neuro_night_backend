@@ -195,12 +195,12 @@ enum AssignmentStatus {
   PENDING
   APPROVED
   REJECTED
-  REMOVAL_REQUESTED 
+  REMOVAL_REQUESTED
 }
 
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
-  agentUserId        String          @db.ObjectId
+  agentUserId    String           @db.ObjectId
   organizationId String           @db.ObjectId
   status         AssignmentStatus @default(PENDING)
   assignedBy     String?          @db.ObjectId // User who made the assignment
@@ -217,7 +217,6 @@ model AgentAssignment {
   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
-
 }
 
 model Organization {
@@ -246,7 +245,6 @@ model Organization {
   tools                 ToolIntegration[]
   availableTwilioNumber AvailableTwilioNumber[]
   voice                 UploadVoice?
-  AiAgent               AiAgent?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
 
@@ -267,16 +265,15 @@ model UploadVoice {
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
-model AiAgent {
+model aiagent {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
   agentId        String @unique
-  organizationId String @unique @db.ObjectId
-
-  Organization Organization @relation(fields: [organizationId], references: [id])
-
+  organizationId String @unique
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("aiagents")
 }
 
 model AiknowledgeBase {
@@ -357,40 +354,48 @@ model Subscription {
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  companyId  String @db.ObjectId
-  receiverId String @db.ObjectId
+  organizationId String @db.ObjectId // *
+  receiverId     String @db.ObjectId // *
 
-  // Call details
-  call_sid      String? // for Twilio
-  callControlId String  @unique
-  fromNumber    String
-  toNumber      String
-  sid           String?
-
-  // orgId     String
-  // agentId   String?
-
-  // ivrState String?
-  // digits   String?
-
-  callTime    DateTime
-  callType    String
-  duration    Int?      @default(0)
-  status      String
-  callStartAt DateTime  @default(now())
-  callEndAt   DateTime?
-
-  // Call artifacts
+  from_number String
+  to_number   String
+  account_sid String?
+  call_sid    String?
+  call_status String
   recordingUrl String?
   summary      String?
 
+  callTime DateTime @default(now()) // 
+  // "created_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+  callType          String // direction
+  call_duration     Int?
+  call_started_at   DateTime  @default(now())
+  call_completed_at DateTime?
+  // "call_completed_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+  
+  call_transcript String?
+  recording_duration Int?
+  recording_sid String?
+  recording_status String?
+  recording_url String?
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  receivedBy Agent        @relation(fields: [receiverId], references: [userId])
-  company    Organization @relation(fields: [companyId], references: [id])
+  receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // orgId     String
+  // agentId   String?
+
+  // ivrState String?
+  // digits   String?
+  // Call details
+  // callControlId String  @unique
 
   @@map("calls")
 }

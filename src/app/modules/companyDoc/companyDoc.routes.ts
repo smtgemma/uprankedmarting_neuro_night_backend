@@ -32,8 +32,8 @@ const router = express.Router();
 
 router.post(
   "/",
+  uploadDocument.single("document"), 
   auth(UserRole.organization_admin),
-  uploadDocument.single("document"), // Use document-specific upload
   (req: Request, res: Response, next: NextFunction) => {
     console.log("File uploaded:", req.file);
 
