@@ -14,6 +14,7 @@ import { SipRoutes } from "../modules/sip/sip.route";
 import { OrganizationRoutes } from "../modules/organization/organization.routes";
 import { AssignmentRoutes } from "../modules/agentManagement/agent.routes";
 import { ToolsRoutes } from "../modules/tools/tools.route";
+import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
 
 const router = Router();
 
@@ -78,6 +79,10 @@ const moduleRoutes = [
     path: "/tools",
     route: ToolsRoutes,
   },
+  {
+    path: "/organization-admins",
+    route: ClientManagementRoutes,
+  }
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
