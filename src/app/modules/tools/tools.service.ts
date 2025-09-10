@@ -3,6 +3,9 @@ import axios from "axios";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
 import config from "../../config";
+import path from "path";
+import ExcelJS from "exceljs";
+import fs from "fs";
 
 
 // interface CreateLeadPayload {
@@ -134,6 +137,55 @@ const createHubSpotLead = async () => {
   }
 };
 
+
+// =======================================
+
+
+const exportOrganizationData = async (organizationId: string, res: any) => {
+  // 1. Fetch all organizations matching this ID
+  const organizations = await prisma.organization.findMany({
+    where: { id: organizationId },
+  });
+
+  if (!organizations || organizations.length === 0) {
+    throw new AppError(status.NOT_FOUND, "No organization found");
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Organizations");
+
+  // 2. Dynamically create headers
+  const headers = Object.keys(organizations[0]);
+  sheet.addRow(headers);
+
+  // helper function to stringify values
+  const stringifyValue = (val: any): string => {
+    if (val instanceof Date) return val.toISOString();
+    if (typeof val === "object" && val !== null) return JSON.stringify(val);
+    return val ?? "";
+  };
+
+  // 3. Add all organizations
+  organizations.forEach((org) => {
+    sheet.addRow(headers.map((key) => stringifyValue((org as any)[key])));
+  });
+
+  // 4. Stream file
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename=org-${organizationId}.xlsx`
+  );
+
+  await workbook.xlsx.write(res);
+  res.end();
+};
+
+
 export const ToolsService = {
   createHubSpotLead,
+  exportOrganizationData,
 };

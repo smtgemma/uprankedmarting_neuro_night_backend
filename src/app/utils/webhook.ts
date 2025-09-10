@@ -93,6 +93,7 @@ const handlePaymentIntentSucceeded = async (
       },
     }),
     // Update organizationNumber in Organization
+    // console.log("Payment Number:", payment.purchasedNumber),  
     prisma.organization.update({
       where: { id: payment.organizationId },
       data: {

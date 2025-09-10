@@ -25,6 +25,13 @@ const createHubSpotLead = catchAsync(async (req, res) => {
   });
 });
 
+
+const exportOrganizationData = catchAsync(async (req, res) => {
+  const { organizationId } = req.params;
+  await ToolsService.exportOrganizationData(organizationId, res);
+});
+
 export const ToolsController = {
   createHubSpotLead,
+  exportOrganizationData,
 };

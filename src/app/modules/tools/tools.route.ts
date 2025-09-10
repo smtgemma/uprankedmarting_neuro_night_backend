@@ -15,4 +15,10 @@ router.post(
   ToolsController.createHubSpotLead
 );
 
+router.get(
+  "/export/:organizationId",
+  // auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.exportOrganizationData
+);
+
 export const ToolsRoutes = router;
