@@ -175,10 +175,7 @@ const createAgentIntoDB = async (payload: any) => {
       // ===== Double-check for existing user INSIDE transaction =====
       const existingUserInTx = await tx.user.findFirst({
         where: {
-          OR: [
-            { email: userData.email},
-            { phone: userData.phone},
-          ],
+          OR: [{ email: userData.email }, { phone: userData.phone }],
         },
       });
 
@@ -369,7 +366,7 @@ const getAllUserFromDB = async (query: Record<string, unknown>) => {
 // user.service.ts
 const updateUserIntoDB = async (user: User, payload: any) => {
   const currentUserId = user?.id;
-
+  // console.log("update user info ", user, payload);
   const isUserExist = await prisma.user.findUnique({
     where: { id: currentUserId },
     include: {
@@ -385,7 +382,8 @@ const updateUserIntoDB = async (user: User, payload: any) => {
     payload.image = isUserExist.image;
   }
 
-  const { userData, organizationData } = payload;
+  const userData = payload?.userData;
+  const organizationData = payload?.organizationData;
 
   if (userData?.email || userData?.phone) {
     const checkIfNumberOrEmailExists = await prisma.user.findFirst({
@@ -446,6 +444,7 @@ const updateUserIntoDB = async (user: User, payload: any) => {
 };
 
 const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
+  console.log("update agent info", user, agentId, payload);
   const currentUserRole = user?.role;
 
   // Only super_admin can access this function
@@ -538,7 +537,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           emergencyPhone: agentData.emergencyPhone,
           ssn: agentData.ssn,
           skills: agentData.skills,
-          dateOfBirth:  new Date(agentData.dateOfBirth)
+          dateOfBirth: new Date(agentData.dateOfBirth),
         },
       });
     }

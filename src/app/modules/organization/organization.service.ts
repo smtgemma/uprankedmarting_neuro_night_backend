@@ -2,7 +2,6 @@ import status from "http-status";
 // import QueryBuilder from "../../builder/QueryBuilder";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
-import { AssignmentStatus } from "@prisma/client";
 
 const getAllOrganizations = async () => {
   const organizations = await prisma.organization.findMany({
