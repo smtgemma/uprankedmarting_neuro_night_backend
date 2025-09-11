@@ -5,7 +5,6 @@ import { ToolsValidation } from "./tools.validation";
 import { ToolsController } from "./tools.controller";
 import validateRequest from "../../middlewares/validateRequest";
 
-
 const router = Router();
 
 router.post(
@@ -19,6 +18,12 @@ router.get(
   "/export/:organizationId",
   // auth(UserRole.super_admin, UserRole.organization_admin),
   ToolsController.exportOrganizationData
+);
+
+router.get(
+  "/organization/:orgId",
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.getQuestionsByOrganization
 );
 
 export const ToolsRoutes = router;

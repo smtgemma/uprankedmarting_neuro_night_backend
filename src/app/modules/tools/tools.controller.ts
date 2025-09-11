@@ -31,7 +31,20 @@ const exportOrganizationData = catchAsync(async (req, res) => {
   await ToolsService.exportOrganizationData(organizationId, res);
 });
 
+// Get all questions by organization ID
+const getQuestionsByOrganization = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const result = await ToolsService.getQuestionsByOrganization(orgId);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Questions fetched successfully!",
+    data: result,
+  });
+});
+
 export const ToolsController = {
   createHubSpotLead,
   exportOrganizationData,
+  getQuestionsByOrganization,
 };

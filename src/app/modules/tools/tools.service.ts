@@ -7,7 +7,6 @@ import path from "path";
 import ExcelJS from "exceljs";
 import fs from "fs";
 
-
 // interface CreateLeadPayload {
 //   organizationId: string;
 // }
@@ -110,7 +109,10 @@ const createHubSpotLead = async () => {
   // Get HubSpot API key from environment
   const hubspotApiKey = config.hubspot_api_key;
   if (!hubspotApiKey) {
-    throw new AppError(status.INTERNAL_SERVER_ERROR, "HubSpot API key not configured");
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      "HubSpot API key not configured"
+    );
   }
 
   // Send POST request to HubSpot
@@ -133,13 +135,14 @@ const createHubSpotLead = async () => {
     };
   } catch (error) {
     console.error("Error creating HubSpot lead:", error);
-    throw new AppError(status.INTERNAL_SERVER_ERROR, "Failed to create HubSpot lead");
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      "Failed to create HubSpot lead"
+    );
   }
 };
 
-
 // =======================================
-
 
 const exportOrganizationData = async (organizationId: string, res: any) => {
   // 1. Fetch all organizations matching this ID
@@ -184,8 +187,18 @@ const exportOrganizationData = async (organizationId: string, res: any) => {
   res.end();
 };
 
+const getQuestionsByOrganization = async (organizationId: string) => {
+  const questions = await prisma.question.findMany({
+    where: {
+      org_id: organizationId,
+    },
+  });
+
+  return questions;
+};
 
 export const ToolsService = {
   createHubSpotLead,
   exportOrganizationData,
+  getQuestionsByOrganization,
 };

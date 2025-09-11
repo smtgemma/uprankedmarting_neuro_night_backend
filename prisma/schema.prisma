@@ -20,19 +20,6 @@ enum UserStatus {
   DELETED
 }
 
-// enum CallStatus {
-//   INITIATED
-//   ANSWERED
-//   MISSED
-//   DROPPED
-// }
-
-// enum PlanLevel {
-//   ESSENTIALS
-//   GROWTH
-//   ENTERPRISE
-//   CUSTOM
-// }
 enum PlanLevel {
   only_real_agent
   only_ai
@@ -247,6 +234,7 @@ model Organization {
   voice                 UploadVoice?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
+  questions             Question[] // ADD THIS LINE - Questions relation
 
   @@map("organizations")
 }
@@ -303,6 +291,7 @@ model OrganizationDoc {
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  // REMOVE THIS LINE: questions             Question[]
 
   @@map("company_docs")
 }
@@ -366,16 +355,10 @@ model Call {
   summary      String?
 
   callTime DateTime @default(now()) // 
-  // "created_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
   callType          String // direction
   call_duration     Int?
   call_started_at   DateTime  @default(now())
   call_completed_at DateTime?
-  // "call_completed_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
   
   call_transcript String?
   recording_duration Int?
@@ -389,13 +372,6 @@ model Call {
   // Relations
   receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
   organization Organization @relation(fields: [organizationId], references: [id])
-  // orgId     String
-  // agentId   String?
-
-  // ivrState String?
-  // digits   String?
-  // Call details
-  // callControlId String  @unique
 
   @@map("calls")
 }
@@ -465,4 +441,20 @@ model AvailableTwilioNumber {
   organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
 
   @@map("available_twilio_numbers")
+}
+
+model Question {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  org_id           String   @db.ObjectId
+  question_text    String
+  question_keywords String[] @default([])
+  
+    // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@map("questions")
 }
