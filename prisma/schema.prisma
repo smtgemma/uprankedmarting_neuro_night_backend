@@ -252,6 +252,8 @@ model Organization {
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
 
+  aiagent aiagent?
+
   @@map("organizations")
 }
 
@@ -270,14 +272,45 @@ model UploadVoice {
 }
 
 model aiagent {
-  id             String   @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String   @unique
-  organizationId String   @unique
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String @unique
+  organizationId String @unique @db.ObjectId
+
   // Timestamps
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  // 1-to-many Relation with aicalllogs
+  callLogs aicalllogs[]
 
   @@map("aiagents")
+}
+
+model aicalllogs {
+  id       String  @id @default(auto()) @map("_id") @db.ObjectId
+  agent_id String?
+
+  aiAgentId String @db.ObjectId
+
+  agent_name           String?
+  conversation_id      String?
+  start_time_unix_secs Int?
+  call_duration_secs   Int?
+  message_count        Int?
+  status               String?
+  call_successful      String?
+  direction            String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Many-to-1 Relation with aiagent
+  aiagent aiagent @relation(fields: [aiAgentId], references: [id])
+
+  @@map("aicalllogs")
 }
 
 model AiknowledgeBase {
@@ -358,28 +391,32 @@ model Subscription {
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  organizationId String @db.ObjectId // *
-  receiverId     String @db.ObjectId // *
+  organizationId String @db.ObjectId
+  agentId        String @db.ObjectId
 
-  from_number  String
-  to_number    String
-  account_sid  String?
-  call_sid     String?
+  from_number       String
+  to_number         String
+  callTime          DateTime  @default(now())
+  callType          String // direction
   call_status  String
-  recordingUrl String?
-  summary      String?
-
-  callTime          DateTime  @default(now()) // 
+  call_duration     Int?
+  call_started_at   DateTime  @default(now()) // Date formate 
   // "created_at": {
   //     "$date": "2025-09-10T00:22:06.362Z"
   //   },
-  callType          String // direction
-  call_duration     Int?
-  call_started_at   DateTime  @default(now())
   call_completed_at DateTime?
   // "call_completed_at": {
   //     "$date": "2025-09-10T00:22:06.362Z"
   //   },
+
+  account_sid  String? 
+  call_sid     String?
+
+  recordingUrl String?
+  summary      String? 
+
+  // ai agent info needed with relation objectId
+
 
   call_transcript    String?
   recording_duration Int?
@@ -387,16 +424,16 @@ model Call {
   recording_status   String?
   recording_url      String?
 
-  from_country   String?
-  to_city        String?
-  to_state       String?
-  to_zip         String?
-  to_country     String?
-  caller_country String?
-  called_city    String?
-  called_state   String?
-  called_zip     String?
-  called_country String?
+  // from_country   String?
+  // to_city        String?
+  // to_state       String?
+  // to_zip         String?
+  // to_country     String?
+  // caller_country String?
+  // called_city    String?
+  // called_state   String?
+  // called_zip     String?
+  // called_country String?
 
   processed               Boolean @default(false)
   transcription_requested Boolean @default(false)
@@ -406,11 +443,11 @@ model Call {
   updatedAt DateTime @updatedAt
 
   // Relations
-  receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
+  receivedBy   Agent        @relation(fields: [agentId], references: [userId])
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([call_sid])
-  @@map("calls")
+  @@map("call_records")
 }
 
 // model Call {

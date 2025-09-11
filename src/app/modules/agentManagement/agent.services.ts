@@ -249,7 +249,7 @@ const getAllAgentFromDB = async (
                 agentUserId: true,
                 organizationId: true,
                 assignedBy: true,
-              }
+              },
             },
             organization: {
               select: {
@@ -543,10 +543,9 @@ const getAllAgentIds = async (user: User) => {
 
 const getAgentsManagementInfo = async (
   options: IPaginationOptions,
-  filters: any = {},
+  filters: any = {}
 ) => {
   const searchTerm = filters?.searchTerm as string;
-
 
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
@@ -555,7 +554,6 @@ const getAgentsManagementInfo = async (
     isDeleted: false,
     role: UserRole.agent,
   };
-
 
   // Search functionality
   if (searchTerm) {
@@ -576,9 +574,11 @@ const getAgentsManagementInfo = async (
         name: true,
         email: true,
         phone: true,
-        bio: true,
-        image: true,
-        Agent: true
+        // bio: true,
+        // image: true,
+        Agent: {
+          select: {},
+        },
       },
       orderBy: {
         [sortBy as string]: sortOrder,
@@ -590,7 +590,6 @@ const getAgentsManagementInfo = async (
       where: whereClause,
     }),
   ]);
-
 
   return {
     meta: {
@@ -621,12 +620,12 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
     // 2. Use Prisma query (not raw) since we know the data exists
     const aiAgent = await prisma.aiagent.findFirst({
       where: {
-        organizationId: org.id
+        organizationId: org.id,
       },
       select: {
         agentId: true,
         organizationId: true,
-      }
+      },
     });
 
     // console.log("AI Agent found with Prisma:", aiAgent);
@@ -634,30 +633,29 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
     // 3. If Prisma query doesn't work, fall back to raw query
     if (!aiAgent) {
       console.log("Prisma query failed, trying raw MongoDB query...");
-      
+
       const rawResult = await prisma.$runCommandRaw({
         find: "aiagents",
         filter: {
-          organizationId: org.id
-        }
+          organizationId: org.id,
+        },
       });
 
       // console.log("Raw MongoDB result:", rawResult);
-      
+
       return {
         organization: org,
         aiAgents: rawResult.documents || [],
-        source: "raw"
+        source: "raw",
       };
     }
 
     return {
       aiAgents: aiAgent ? [aiAgent] : [], // Return as array for consistency
     };
-
   } catch (error) {
     console.error("Error in getAIAgentIdsByOrganizationAdmin:", error);
-    
+
     // Fallback to raw query if Prisma fails
     try {
       const org = await prisma.organization.findFirst({
@@ -671,8 +669,8 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
         const rawResult = await prisma.$runCommandRaw({
           find: "aiagents",
           filter: {
-            organizationId: org.id
-          }
+            organizationId: org.id,
+          },
         });
 
         return {
@@ -769,7 +767,12 @@ const getAllAgentForAdmin = async (
             assignments: {
               select: {
                 id: true,
-                organizationId: true,
+                organization: {
+                  select: {
+                    id: true,
+                    name: true
+                  },
+                },
                 agentUserId: true,
                 status: true,
                 assignedBy: true,
@@ -816,7 +819,7 @@ const getAllAgentForAdmin = async (
   // Calculate average rating for each agent using the fetched feedbacks
   const usersWithAvgRating = users.map((user) => {
     // Safe access to nested properties with optional chaining and fallbacks
-    const agent = user.Agent;
+    const agent = user?.Agent;
     const feedbacks = agent?.AgentFeedbacks || [];
 
     // Calculate average rating
@@ -1079,7 +1082,7 @@ const rejectAssignment = async (
       where: {
         agentUserId: userId,
         organizationId: organizationId,
-        status: AssignmentStatus.PENDING
+        status: AssignmentStatus.PENDING,
       },
       include: {
         agent: true,

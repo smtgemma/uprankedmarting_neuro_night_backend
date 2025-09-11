@@ -68,7 +68,6 @@ const loginUser = async (email: string, password: string) => {
   };
 };
 
-
 const verifyOTP = async (
   email: string,
   otp: number,
@@ -382,7 +381,8 @@ const getMe = async (email: string) => {
 };
 
 const getSingleUser = async (id: string) => {
-  console.log(id)
+  console.log(id);
+
   const user = await prisma.user.findFirst({
     where: {
       id,
@@ -398,10 +398,23 @@ const getSingleUser = async (id: string) => {
     throw new ApiError(status.NOT_FOUND, "User not found");
   }
 
-  const { password, ...rest } = user;
+  let Agent = null;
+  if (user.Agent) {
+    Agent = {
+      ...user.Agent,
+      sip_password: user.Agent.sip_password ? "********" : null, // Hide sensitive field
+    };
+  }
 
-  return rest;
+  // remove password from user object
+  const { password, ...restUser } = user;
+
+  return {
+    ...restUser,
+    Agent,
+  };
 };
+
 
 export const AuthService = {
   getMe,
