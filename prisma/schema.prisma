@@ -155,8 +155,8 @@ model Agent {
   dateOfBirth    DateTime
   gender         String
   address        String
-  emergencyPhone String? @unique
-  ssn            String? @unique
+  emergencyPhone String?  @unique
+  ssn            String?  @unique
 
   // Professional info 
   skills String[] @default([])
@@ -179,6 +179,10 @@ model Agent {
   totalCalls   Int @default(0)
   successCalls Int @default(0)
   droppedCalls Int @default(0)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   user           User            @relation(fields: [userId], references: [id])
@@ -394,7 +398,7 @@ model Call {
   called_zip     String?
   called_country String?
 
-  processed Boolean @default(false)
+  processed               Boolean @default(false)
   transcription_requested Boolean @default(false)
 
   // Timestamps

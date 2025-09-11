@@ -124,4 +124,13 @@ router.get(
   AssignmentController.getOrganizationAssignments
 );
 
+// Get Agents Management Info by super admin
+router.get(
+  "/agents-management-info",
+  auth(UserRole.super_admin),
+  AssignmentController.getAgentsManagementInfo
+);
+
+
+
 export const AssignmentRoutes = router;

@@ -156,6 +156,30 @@ const getAllAgent = catchAsync(async (req, res) => {
   });
 });
 
+const getAgentsManagementInfo = catchAsync(async (req, res) => {
+  const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const filters = pickOptions(req.query, [
+    "searchTerm"
+  ]);
+  const result = await AssignmentService.getAgentsManagementInfo(
+    options,
+    filters
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agents are retrieved successfully!",
+    data: result,
+  });
+});
+
+
+
 const getAgentsId = catchAsync(async (req, res) => {
   const user = req.user as User;
   const result = await AssignmentService.getAllAgentIds(user);
@@ -319,6 +343,7 @@ const getOrganizationAssignments = catchAsync(
 export const AssignmentController = {
   requestAssignment,
   getAIAgents,
+  getAgentsManagementInfo,
   requestAgentRemoval,
   approveAgentRemoval,
   rejectAgentRemoval,

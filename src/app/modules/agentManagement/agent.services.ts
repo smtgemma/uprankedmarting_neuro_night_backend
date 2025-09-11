@@ -544,20 +544,9 @@ const getAllAgentIds = async (user: User) => {
 const getAgentsManagementInfo = async (
   options: IPaginationOptions,
   filters: any = {},
-  user: User
 ) => {
   const searchTerm = filters?.searchTerm as string;
-  const isAvailable = filters?.isAvailable as boolean | string;
-  const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
 
-  if (
-    viewType !== undefined &&
-    viewType !== "all" &&
-    viewType !== "my-agents" &&
-    viewType !== "unassigned"
-  ) {
-    throw new AppError(status.BAD_REQUEST, "Invalid view type!");
-  }
 
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
@@ -567,36 +556,6 @@ const getAgentsManagementInfo = async (
     role: UserRole.agent,
   };
 
-  // Handle view type filtering
-  if (user?.role === UserRole.organization_admin && viewType === "my-agents") {
-    const userOrganization = await prisma.organization.findUnique({
-      where: { ownerId: user?.id },
-    });
-
-    if (!userOrganization) {
-      throw new AppError(
-        status.NOT_FOUND,
-        "Organization not found for this user!"
-      );
-    }
-
-    whereClause.Agent = {
-      assignTo: userOrganization?.id,
-    };
-  } else if (viewType === "unassigned") {
-    // console.log("unassigned");
-    // Unassigned = assignTo is null OR field missing
-    whereClause.Agent = {
-      OR: [
-        { assignTo: null },
-        {
-          assignTo: {
-            isSet: false,
-          },
-        },
-      ],
-    };
-  }
 
   // Search functionality
   if (searchTerm) {
@@ -605,14 +564,6 @@ const getAgentsManagementInfo = async (
       { email: { contains: searchTerm, mode: "insensitive" } },
       { phone: { contains: searchTerm, mode: "insensitive" } },
     ];
-  }
-
-  // Availability filter
-  if (isAvailable !== undefined) {
-    whereClause.Agent = {
-      ...whereClause.Agent,
-      isAvailable: isAvailable === "true" || isAvailable === true,
-    };
   }
 
   // console.log(whereClause);
@@ -627,38 +578,7 @@ const getAgentsManagementInfo = async (
         phone: true,
         bio: true,
         image: true,
-        Agent: {
-          select: {
-            AgentFeedbacks: {
-              select: {
-                id: true,
-                rating: true,
-              },
-            },
-
-            skills: true,
-            totalCalls: true,
-            isAvailable: true,
-            status: true,
-            assignTo: true,
-            assignments: {
-              select: {
-                id: true,
-                status: true,
-                agentUserId: true,
-                organizationId: true,
-                assignedBy: true,
-              }
-            },
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                industry: true,
-              },
-            },
-          },
-        },
+        Agent: true
       },
       orderBy: {
         [sortBy as string]: sortOrder,
@@ -671,38 +591,6 @@ const getAgentsManagementInfo = async (
     }),
   ]);
 
-  // console.log(users);
-
-  // Calculate average rating for each agent using the fetched feedbacks
-  const usersWithAvgRating = users.map((user) => {
-    if (user.Agent && user.Agent.AgentFeedbacks) {
-      const feedbacks = user.Agent.AgentFeedbacks;
-      const totalRating = feedbacks.reduce(
-        (sum, feedback) => sum + feedback.rating,
-        0
-      );
-      const avgRating =
-        feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
-
-      return {
-        ...user,
-        Agent: {
-          ...user.Agent,
-          avgRating: parseFloat(avgRating.toFixed(1)), // Round to 1 decimal place
-          totalFeedbacks: feedbacks.length,
-        },
-      };
-    }
-
-    return {
-      ...user,
-      Agent: {
-        ...user.Agent,
-        avgRating: 0,
-        totalFeedbacks: 0,
-      },
-    };
-  });
 
   return {
     meta: {
@@ -711,7 +599,7 @@ const getAgentsManagementInfo = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
     },
-    users: usersWithAvgRating,
+    data: users,
   };
 };
 
@@ -1191,6 +1079,7 @@ const rejectAssignment = async (
       where: {
         agentUserId: userId,
         organizationId: organizationId,
+        status: AssignmentStatus.PENDING
       },
       include: {
         agent: true,
@@ -1800,6 +1689,7 @@ const getOrganizationAssignments = async (organizationId: string) => {
 
 export const AssignmentService = {
   requestAgentAssignment,
+  getAgentsManagementInfo,
   approveAgentRemoval,
   getAIAgentIdsByOrganizationAdmin,
   rejectAgentRemoval,
