@@ -26,4 +26,18 @@ router.get(
   ToolsController.getQuestionsByOrganization
 );
 
+
+router.get(
+  "/organization/:orgId/export",
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.getQuestionsByOrganization
+);
+
+router.post(
+  "/add-questions-to-sheets/:orgId",
+  // auth(UserRole.organization_admin, UserRole.super_admin),
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.addQuestionToGoogleSheets
+);
+
 export const ToolsRoutes = router;

@@ -34,11 +34,27 @@ const exportOrganizationData = catchAsync(async (req, res) => {
 // Get all questions by organization ID
 const getQuestionsByOrganization = catchAsync(async (req, res) => {
   const { orgId } = req.params;
-  const result = await ToolsService.getQuestionsByOrganization(orgId);
+  const result = await ToolsService.getQuestionsByOrganization(orgId, res);
+  
+  // If result is not null, send JSON response (for fetch-only case)
+  if (result) {
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Questions fetched successfully!",
+      data: result,
+    });
+  }
+  // If result is null, the response was handled by Excel export
+});
+
+
+const addQuestionToGoogleSheets = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const result = await ToolsService.addQuestionToGoogleSheets(orgId);
 
   sendResponse(res, {
-    statusCode: status.OK,
-    message: "Questions fetched successfully!",
+    statusCode: status.CREATED,
+    message: "Questions added to Google Sheets successfully",
     data: result,
   });
 });
@@ -47,4 +63,5 @@ export const ToolsController = {
   createHubSpotLead,
   exportOrganizationData,
   getQuestionsByOrganization,
+  addQuestionToGoogleSheets,
 };

@@ -254,12 +254,12 @@ model UploadVoice {
 }
 
 model aiagent {
-  id             String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String @unique
-  organizationId String @unique
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String   @unique
+  organizationId String   @unique
   // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("aiagents")
 }
@@ -346,28 +346,28 @@ model Call {
   organizationId String @db.ObjectId // *
   receiverId     String @db.ObjectId // *
 
-  from_number String
-  to_number   String
-  account_sid String?
-  call_sid    String?
-  call_status String
+  from_number  String
+  to_number    String
+  account_sid  String?
+  call_sid     String?
+  call_status  String
   recordingUrl String?
   summary      String?
 
-  callTime DateTime @default(now()) // 
+  callTime          DateTime  @default(now()) // 
   callType          String // direction
   call_duration     Int?
   call_started_at   DateTime  @default(now())
   call_completed_at DateTime?
-  
-  call_transcript String?
+
+  call_transcript    String?
   recording_duration Int?
-  recording_sid String?
-  recording_status String?
-  recording_url String?
+  recording_sid      String?
+  recording_status   String?
+  recording_url      String?
   // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Relations
   receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
@@ -444,12 +444,12 @@ model AvailableTwilioNumber {
 }
 
 model Question {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  org_id           String   @db.ObjectId
-  question_text    String
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  org_id            String   @db.ObjectId
+  question_text     String
   question_keywords String[] @default([])
-  
-    // Timestamps
+
+  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
