@@ -160,10 +160,10 @@ const createAgentIntoDB = async (payload: any) => {
       );
     }
 
-    const hashedPassword = await hashPassword("123456");
-    const userName = await generateUniqueUsernameFromEmail(userData.email);
-    const sip_domain = agentData.sip_domain;
-    const password = agentData.sip_password;
+    const hashedPassword = await hashPassword(userData?.password);
+    const userName = await generateUniqueUsernameFromEmail(userData?.email);
+    const sip_domain = agentData?.sip_domain;
+    const password = agentData?.sip_password;
 
     const sipInfo = await TwilioSipService.createSipEndpoint({
       userName,
@@ -232,10 +232,10 @@ const createAgentIntoDB = async (payload: any) => {
       };
 
       const EmailPayload = {
-        name: createdUser.name,
-        email: createdUser.email,
-        phone: createdUser.phone,
-        password: userData.password,
+        name: createdUser?.name,
+        email: createdUser?.email,
+        phone: createdUser?.phone,
+        password: userData?.password,
         sip_address: sipInfo?.fullSipUri,
         sip_username: userName,
         sip_password: password,
@@ -444,7 +444,7 @@ const updateUserIntoDB = async (user: User, payload: any) => {
 };
 
 const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
-  console.log("update agent info", user, agentId, payload);
+  // console.log("update agent info", user, agentId, payload);
   const currentUserRole = user?.role;
 
   // Only super_admin can access this function
@@ -549,7 +549,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 };
 
 const updateAgentSpecificInfo = async (user: User, payload: any) => {
-  console.log(payload,45)
+  // console.log(payload,45)
   if(!payload?.image){
     throw new ApiError(status.BAD_REQUEST, "Image is required");
   }
