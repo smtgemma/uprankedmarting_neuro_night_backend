@@ -266,12 +266,12 @@ model UploadVoice {
 }
 
 model aiagent {
-  id             String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String @unique
-  organizationId String @unique
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String   @unique
+  organizationId String   @unique
   // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("aiagents")
 }
@@ -357,15 +357,15 @@ model Call {
   organizationId String @db.ObjectId // *
   receiverId     String @db.ObjectId // *
 
-  from_number String
-  to_number   String
-  account_sid String?
-  call_sid    String?
-  call_status String
+  from_number  String
+  to_number    String
+  account_sid  String?
+  call_sid     String?
+  call_status  String
   recordingUrl String?
   summary      String?
 
-  callTime DateTime @default(now()) // 
+  callTime          DateTime  @default(now()) // 
   // "created_at": {
   //     "$date": "2025-09-10T00:22:06.362Z"
   //   },
@@ -376,12 +376,27 @@ model Call {
   // "call_completed_at": {
   //     "$date": "2025-09-10T00:22:06.362Z"
   //   },
-  
-  call_transcript String?
+
+  call_transcript    String?
   recording_duration Int?
-  recording_sid String?
-  recording_status String?
-  recording_url String?
+  recording_sid      String?
+  recording_status   String?
+  recording_url      String?
+
+  from_country   String?
+  to_city        String?
+  to_state       String?
+  to_zip         String?
+  to_country     String?
+  caller_country String?
+  called_city    String?
+  called_state   String?
+  called_zip     String?
+  called_country String?
+
+  processed Boolean @default(false)
+  transcription_requested Boolean @default(false)
+
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -389,14 +404,8 @@ model Call {
   // Relations
   receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
   organization Organization @relation(fields: [organizationId], references: [id])
-  // orgId     String
-  // agentId   String?
 
-  // ivrState String?
-  // digits   String?
-  // Call details
-  // callControlId String  @unique
-
+  @@index([call_sid])
   @@map("calls")
 }
 
@@ -424,7 +433,7 @@ model Call {
 //   recording_sid String?
 //   recording_status String?
 //   recording_url String?
-  
+
 //   from_country String?
 //   to_city String?
 //   to_state String?
@@ -435,7 +444,7 @@ model Call {
 //   called_state String?
 //   called_zip String?
 //   called_country String?
-  
+
 //   processed Boolean @default(false)
 //   transcription_requested Boolean @default(false)
 
