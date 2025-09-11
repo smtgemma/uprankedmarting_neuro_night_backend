@@ -400,6 +400,55 @@ model Call {
   @@map("calls")
 }
 
+// model Call {
+//   id String @id @default(auto()) @map("_id") @db.ObjectId
+
+//   organizationId String @db.ObjectId
+//   receiverId String @db.ObjectId
+
+//   from_number String
+//   to_number String
+//   account_sid String?
+//   call_sid String? @unique
+//   call_status String
+//   recordingUrl String?
+//   summary String?
+
+//   callTime DateTime @default(now())
+//   callType String
+//   call_duration Int?
+//   call_started_at DateTime @default(now())
+//   call_completed_at DateTime?
+//   call_transcript String?
+//   recording_duration Int?
+//   recording_sid String?
+//   recording_status String?
+//   recording_url String?
+  
+//   from_country String?
+//   to_city String?
+//   to_state String?
+//   to_zip String?
+//   to_country String?
+//   caller_country String?
+//   called_city String?
+//   called_state String?
+//   called_zip String?
+//   called_country String?
+  
+//   processed Boolean @default(false)
+//   transcription_requested Boolean @default(false)
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   receivedBy Agent @relation(fields: [receiverId], references: [userId])
+//   organization Organization @relation(fields: [organizationId], references: [id])
+
+//   @@map("calls")
+//   @@index([call_sid])
+// }
+
 model ServiceFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
