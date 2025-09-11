@@ -5,7 +5,7 @@ import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 
 const getAllOrganizationAdmins = catchAsync(async (req: Request, res: Response) => {
-  const result = await ClientManagementServices.getAllOrganizationAdmin();
+  const result = await ClientManagementServices.getAllOrganizationAdmin(req.query);
 
   sendResponse(res, {
     statusCode: status.OK,

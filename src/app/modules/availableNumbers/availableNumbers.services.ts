@@ -22,7 +22,6 @@ const fetchAndStoreAvailableNumbers = async () => {
         update: {
           sid: number.sid,
           friendlyName: number.friendlyName,
-          isPurchased: true, // Mark as purchased
           purchasedAt: new Date(),
           capabilities: {
             voice: number.capabilities.voice,
