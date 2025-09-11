@@ -129,8 +129,21 @@ const getMe = catchAsync(async (req, res) => {
   });
 });
 
+const getSingleUser = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await AuthService.getSingleUser(id);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "User fetched successfully!",
+    data: result,
+  });
+})
+
 export const AuthController = {
   login,
+  getSingleUser,
   verifyOTP,
   changePassword,
   forgotPassword,

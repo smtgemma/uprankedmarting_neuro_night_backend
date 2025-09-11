@@ -381,8 +381,31 @@ const getMe = async (email: string) => {
   return rest;
 };
 
+const getSingleUser = async (id: string) => {
+  console.log(id)
+  const user = await prisma.user.findFirst({
+    where: {
+      id,
+      isDeleted: false,
+    },
+    include: {
+      Agent: true,
+      ownedOrganization: true,
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found");
+  }
+
+  const { password, ...rest } = user;
+
+  return rest;
+};
+
 export const AuthService = {
   getMe,
+  getSingleUser,
   loginUser,
   verifyOTP,
   refreshToken,

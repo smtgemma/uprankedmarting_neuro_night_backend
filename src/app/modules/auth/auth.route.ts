@@ -8,10 +8,17 @@ import  twilio  from "twilio";
 
 const router = Router();
 
+
 router.get(
   "/me",
   auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
   AuthController.getMe
+);
+
+router.get(
+  "/get-user/:id",
+  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
+  AuthController.getSingleUser
 );
 
 router.post(
