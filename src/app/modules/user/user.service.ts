@@ -761,7 +761,9 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     );
   }
 
-  const { userData, agentData } = payload;
+  const userData = payload?.userData;
+  const agentData = payload?.agentData;
+  const image = payload?.image;
 
   if (!agentId) {
     throw new ApiError(
@@ -821,7 +823,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
   const result = await prisma.$transaction(async (transactionClient) => {
     let updatedUser = targetUser;
-    let updatedAgent = targetUser.Agent;
+    let updatedAgent = targetUser?.Agent;
 
     // Update user data if provided
     if (userData) {
@@ -850,7 +852,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           name: userData.name,
           bio: userData.bio,
           phone: userData.phone,
-          image: payload?.image,
+          image: image || targetUser?.image,
           role: userData.role, // Super admin can change role
         },
         include: {
