@@ -151,13 +151,42 @@ const createAgentIntoDB = async (payload: any) => {
       },
     });
 
-    // console.log("existingUser", existingUser)
-
     if (existingUser) {
       throw new ApiError(
         status.BAD_REQUEST,
         "User with this email or phone already exists!"
       );
+    }
+
+    // ===== Check for unique emergencyPhone and ssn =====
+    if (agentData.emergencyPhone) {
+      const existingEmergencyPhone = await prisma.agent.findFirst({
+        where: {
+          emergencyPhone: agentData.emergencyPhone.trim(),
+        },
+      });
+
+      if (existingEmergencyPhone) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "Emergency phone number already exists!"
+        );
+      }
+    }
+
+    if (agentData.ssn) {
+      const existingSSN = await prisma.agent.findFirst({
+        where: {
+          ssn: agentData.ssn,
+        },
+      });
+
+      if (existingSSN) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "SSN already exists!"
+        );
+      }
     }
 
     const hashedPassword = await hashPassword(userData?.password);
@@ -184,6 +213,37 @@ const createAgentIntoDB = async (payload: any) => {
           status.BAD_REQUEST,
           "User with this email or phone already exists!"
         );
+      }
+
+      // ===== Double-check for unique emergencyPhone and ssn INSIDE transaction =====
+      if (agentData.emergencyPhone) {
+        const existingEmergencyPhoneInTx = await tx.agent.findFirst({
+          where: {
+            emergencyPhone: agentData.emergencyPhone.trim(),
+          },
+        });
+
+        if (existingEmergencyPhoneInTx) {
+          throw new ApiError(
+            status.BAD_REQUEST,
+            "Emergency phone number already exists!"
+          );
+        }
+      }
+
+      if (agentData.ssn) {
+        const existingSSNInTx = await tx.agent.findFirst({
+          where: {
+            ssn: agentData.ssn,
+          },
+        });
+
+        if (existingSSNInTx) {
+          throw new ApiError(
+            status.BAD_REQUEST,
+            "SSN already exists!"
+          );
+        }
       }
 
       // ===== Create User =====
@@ -216,10 +276,8 @@ const createAgentIntoDB = async (payload: any) => {
         jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
         employmentType: agentData.employmentType || employmentType.full_time,
         department: agentData.department?.trim() || "Customer Service",
-        // Keep as strings (no Date conversion)
         workStartTime: agentData.workStartTime,
         workEndTime: agentData.workEndTime,
-        // Convert only DateTime fields
         startWorkDateTime: agentData.startWorkDateTime
           ? new Date(agentData.startWorkDateTime)
           : null,
@@ -268,6 +326,8 @@ const createAgentIntoDB = async (payload: any) => {
         userId: "User ID",
         twilioIdentity: "Twilio Identity",
         employeeId: "Employee ID",
+        emergencyPhone: "Emergency Phone",
+        ssn: "SSN",
       };
 
       const fieldName = fieldMap[field] || field || "Field";
@@ -282,6 +342,163 @@ const createAgentIntoDB = async (payload: any) => {
     );
   }
 };
+// const createAgentIntoDB = async (payload: any) => {
+//   const { userData, agentData } = payload;
+
+//   // Validate required fields
+//   if (!userData?.email || !userData?.phone) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "Email and phone are required fields"
+//     );
+//   }
+
+//   if (!agentData?.sip_domain || !agentData?.sip_password) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "SIP domain and password are required"
+//     );
+//   }
+
+//   try {
+//     // ===== Check for existing user OUTSIDE transaction first =====
+//     const existingUser = await prisma.user.findFirst({
+//       where: {
+//         OR: [{ email: userData.email }, { phone: userData.phone }],
+//       },
+//     });
+
+//     // console.log("existingUser", existingUser)
+
+//     if (existingUser) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "User with this email or phone already exists!"
+//       );
+//     }
+
+//     const hashedPassword = await hashPassword(userData?.password);
+//     const userName = await generateUniqueUsernameFromEmail(userData?.email);
+//     const sip_domain = agentData?.sip_domain;
+//     const password = agentData?.sip_password;
+
+//     const sipInfo = await TwilioSipService.createSipEndpoint({
+//       userName,
+//       password,
+//       sip_domain,
+//     });
+
+//     const result = await prisma.$transaction(async (tx) => {
+//       // ===== Double-check for existing user INSIDE transaction =====
+//       const existingUserInTx = await tx.user.findFirst({
+//         where: {
+//           OR: [{ email: userData.email }, { phone: userData.phone }],
+//         },
+//       });
+
+//       if (existingUserInTx) {
+//         throw new ApiError(
+//           status.BAD_REQUEST,
+//           "User with this email or phone already exists!"
+//         );
+//       }
+
+//       // ===== Create User =====
+//       const userPayload = {
+//         name: userData.name.trim(),
+//         bio: userData.bio?.trim() || "",
+//         email: userData.email.toLowerCase().trim(),
+//         phone: userData.phone.trim(),
+//         role: UserRole.agent,
+//         password: hashedPassword,
+//         isVerified: true,
+//       };
+
+//       const createdUser = await tx.user.create({
+//         data: userPayload,
+//       });
+
+//       // ===== Create Agent =====
+//       const agentPayload = {
+//         userId: createdUser.id,
+//         dateOfBirth: new Date(agentData.dateOfBirth),
+//         gender: agentData.gender,
+//         address: agentData.address?.trim(),
+//         emergencyPhone: agentData.emergencyPhone?.trim() || "",
+//         ssn: agentData.ssn,
+//         skills: agentData.skills || [],
+//         sip_address: sipInfo?.fullSipUri,
+//         sip_username: userName,
+//         sip_password: password,
+//         jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
+//         employmentType: agentData.employmentType || employmentType.full_time,
+//         department: agentData.department?.trim() || "Customer Service",
+//         // Keep as strings (no Date conversion)
+//         workStartTime: agentData.workStartTime,
+//         workEndTime: agentData.workEndTime,
+//         // Convert only DateTime fields
+//         startWorkDateTime: agentData.startWorkDateTime
+//           ? new Date(agentData.startWorkDateTime)
+//           : null,
+//         endWorkDateTime: agentData.endWorkDateTime
+//           ? new Date(agentData.endWorkDateTime)
+//           : null,
+//         totalCalls: 0,
+//         successCalls: 0,
+//         droppedCalls: 0,
+//       };
+
+//       const EmailPayload = {
+//         name: createdUser?.name,
+//         email: createdUser?.email,
+//         phone: createdUser?.phone,
+//         password: userData?.password,
+//         sip_address: sipInfo?.fullSipUri,
+//         sip_username: userName,
+//         sip_password: password,
+//       };
+
+//       const createdAgent = await tx.agent.create({
+//         data: agentPayload,
+//       });
+
+//       await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
+
+//       return {
+//         user: { ...createdUser, password: undefined },
+//         agent: createdAgent,
+//       };
+//     });
+
+//     return {
+//       ...result,
+//       message: "Agent created successfully!",
+//     };
+//   } catch (error: any) {
+//     console.error("Error creating agent:", error);
+
+//     if (error.code === "P2002") {
+//       const field = error.meta?.target?.[0];
+//       const fieldMap: { [key: string]: string } = {
+//         email: "Email",
+//         phone: "Phone",
+//         userId: "User ID",
+//         twilioIdentity: "Twilio Identity",
+//         employeeId: "Employee ID",
+//       };
+
+//       const fieldName = fieldMap[field] || field || "Field";
+//       throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
+//     }
+
+//     if (error instanceof ApiError) throw error;
+
+//     throw new ApiError(
+//       status.INTERNAL_SERVER_ERROR,
+//       "Failed to create agent: " + error.message
+//     );
+//   }
+// };
 const verifyOTP = async (email: string, otp: number) => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -443,8 +660,103 @@ const updateUserIntoDB = async (user: User, payload: any) => {
   return restData;
 };
 
+// const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
+//   // console.log("update agent info", user, agentId, payload);
+//   const currentUserRole = user?.role;
+
+//   // Only super_admin can access this function
+//   if (currentUserRole !== UserRole.super_admin) {
+//     throw new ApiError(
+//       status.FORBIDDEN,
+//       "Only super admin can update agent information"
+//     );
+//   }
+
+//   const { userData, agentData } = payload;
+
+//   if (!agentId) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "targetUserId is required to update agent information"
+//     );
+//   }
+
+//   // Check if target user exists and is an agent
+//   const targetUser = await prisma.user.findUnique({
+//     where: { id: agentId, isDeleted: false },
+//     include: {
+//       Agent: true,
+//     },
+//   });
+
+//   if (!targetUser) {
+//     throw new ApiError(status.NOT_FOUND, "User not found!");
+//   }
+
+//   if (!targetUser.Agent) {
+//     throw new ApiError(status.BAD_REQUEST, "Target user is not an agent");
+//   }
+
+
+
+//   const result = await prisma.$transaction(async (transactionClient) => {
+//     let updatedUser = targetUser;
+//     let updatedAgent = targetUser?.Agent;
+
+//     // Update user data if provided
+//     if (userData) {
+//       // ===== Check for existing user =====
+//       const existingUser = await prisma.user.findFirst({
+//         where: {
+//           OR: [{ email: userData.email }, { phone: userData.phone }],
+//         },
+//         include: {
+//           Agent: true,
+//         },
+//       });
+//       if (existingUser) {
+//         throw new ApiError(
+//           status.BAD_REQUEST,
+//           "User with this email or phone already exists!"
+//         );
+//       }
+
+//       updatedUser = await transactionClient.user.update({
+//         where: { id: agentId },
+//         data: {
+//           name: userData.name,
+//           bio: userData.bio,
+//           phone: userData.phone,
+//           image: payload?.image,
+//           role: userData.role, // Super admin can change role
+//         },
+//         include: {
+//           Agent: true,
+//         },
+//       });
+//     }
+
+//     // Update agent data if provided
+//     if (agentData) {
+//       updatedAgent = await transactionClient.agent.update({
+//         where: { userId: agentId },
+//         data: {
+//           ...agentData,
+//           emergencyPhone: agentData.emergencyPhone,
+//           ssn: agentData.ssn,
+//           skills: agentData.skills,
+//           dateOfBirth: new Date(agentData.dateOfBirth),
+//         },
+//       });
+//     }
+
+//     return { ...updatedUser, password: null };
+//   });
+
+//   return result;
+// };
+
 const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
-  // console.log("update agent info", user, agentId, payload);
   const currentUserRole = user?.role;
 
   // Only super_admin can access this function
@@ -480,15 +792,37 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "Target user is not an agent");
   }
 
-  // console.log(targetUser);
-  if (
-    targetUser?.Agent?.ssn === agentData?.ssn ||
-    targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
-  ) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "SSN or Emergency Phone number already exists!"
-    );
+  // Validate emergencyPhone and ssn uniqueness before transaction
+  if (agentData?.emergencyPhone) {
+    const existingEmergencyPhone = await prisma.agent.findFirst({
+      where: {
+        emergencyPhone: agentData.emergencyPhone.trim(),
+        userId: { not: agentId } // Exclude the current agent
+      },
+    });
+
+    if (existingEmergencyPhone) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "Emergency phone number already exists for another agent!"
+      );
+    }
+  }
+
+  if (agentData?.ssn) {
+    const existingSSN = await prisma.agent.findFirst({
+      where: {
+        ssn: agentData.ssn,
+        userId: { not: agentId } // Exclude the current agent
+      },
+    });
+
+    if (existingSSN) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "SSN already exists for another agent!"
+      );
+    }
   }
 
   const result = await prisma.$transaction(async (transactionClient) => {
@@ -498,14 +832,17 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     // Update user data if provided
     if (userData) {
       // ===== Check for existing user =====
-      const existingUser = await prisma.user.findFirst({
+      const existingUser = await transactionClient.user.findFirst({
         where: {
-          OR: [{ email: userData.email }, { phone: userData.phone }],
-        },
-        include: {
-          Agent: true,
+          OR: [
+            { email: userData.email, id: { not: agentId } },
+            { phone: userData.phone, id: { not: agentId } }
+          ],
         },
       });
+
+      console.log("existingUser", existingUser)
+      
       if (existingUser) {
         throw new ApiError(
           status.BAD_REQUEST,
@@ -530,6 +867,39 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
     // Update agent data if provided
     if (agentData) {
+      // Double-check emergencyPhone and ssn uniqueness inside transaction
+      if (agentData.emergencyPhone) {
+        const existingEmergencyPhoneInTx = await transactionClient.agent.findFirst({
+          where: {
+            emergencyPhone: agentData.emergencyPhone.trim(),
+            userId: { not: agentId }
+          },
+        });
+
+        if (existingEmergencyPhoneInTx) {
+          throw new ApiError(
+            status.BAD_REQUEST,
+            "Emergency phone number already exists for another agent!"
+          );
+        }
+      }
+
+      if (agentData.ssn) {
+        const existingSSNInTx = await transactionClient.agent.findFirst({
+          where: {
+            ssn: agentData.ssn,
+            userId: { not: agentId }
+          },
+        });
+
+        if (existingSSNInTx) {
+          throw new ApiError(
+            status.BAD_REQUEST,
+            "SSN already exists for another agent!"
+          );
+        }
+      }
+
       updatedAgent = await transactionClient.agent.update({
         where: { userId: agentId },
         data: {
@@ -537,7 +907,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           emergencyPhone: agentData.emergencyPhone,
           ssn: agentData.ssn,
           skills: agentData.skills,
-          dateOfBirth: new Date(agentData.dateOfBirth),
+          dateOfBirth: agentData.dateOfBirth ? new Date(agentData.dateOfBirth) : undefined,
         },
       });
     }
@@ -547,7 +917,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
   return result;
 };
-
 const updateAgentSpecificInfo = async (user: User, payload: any) => {
   // console.log(payload,45)
   if(!payload?.image){
