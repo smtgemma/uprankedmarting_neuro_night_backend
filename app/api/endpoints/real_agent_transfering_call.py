@@ -1,14 +1,14 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 from typing import Optional, Dict
 import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from bson import ObjectId
-from twilio.twiml.voice_response import VoiceResponse
+from twilio.twiml.voice_response import VoiceResponse, Dial
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.rest import Client
@@ -22,6 +22,7 @@ from app.core.metrics import (
 )
 from app.services.shared_state import get_shared_state
 from app.db.database_connection import get_database
+from app.api.models.ai_agent_model import Call, CallStatus, CallType
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,11 @@ class TokenRefreshRequest(BaseModel):
     refresh_token: str
 
 class OutboundCallRequest(BaseModel):
-    to_number: str
-    from_number: Optional[str] = None  # optional, defaults to your Twilio number
-    caller_name: Optional[str] = "Agent"
+    to_number: str = Field(
+        ..., 
+        example="+15551234567", 
+        description="The recipient's phone number in E.164 format."
+    )
 
 # Authentication
 security = HTTPBearer()
@@ -128,7 +131,7 @@ async def find_best_available_agent(redis_manager, organization_id: Optional[str
     logger.warning("No available agents found")
     return None
 
-async def get_agent_organization_info(db_manager, agent_id: str):
+async def get_agent_organization_info(agent_id: str):
     """Get organization information for an agent"""
     try:
         # Convert agent_id to ObjectId if it's a string
@@ -140,8 +143,10 @@ async def get_agent_organization_info(db_manager, agent_id: str):
         else:
             agent_obj_id = agent_id
 
+        db = get_database()
+
         # Get the agent record
-        agent = await db_manager.db.agents.find_one({
+        agent = await db.agents.find_one({
             "userId": agent_obj_id
         })
         
@@ -163,18 +168,21 @@ async def get_agent_organization_info(db_manager, agent_id: str):
             organization_obj_id = organization_id
         
         # Get organization details
-        organization = await db_manager.db.organizations.find_one({
+        organization = await db.organizations.find_one({
             "_id": organization_obj_id
         })
+        print("Organization Id", organization_obj_id)
+        
         
         if not organization:
             raise HTTPException(status_code=404, detail="Organization not found")
         
         # Get the organization's phone number from subscriptions
-        subscription = await db_manager.db.subscriptions.find_one({
-            "organizationId": str(organization_obj_id),
+        subscription = await db.subscriptions.find_one({
+            "organizationId": organization_obj_id,
             "status": "ACTIVE"
         })
+        print("subscription", subscription)
         
         if not subscription or not subscription.get("purchasedNumber"):
             raise HTTPException(status_code=404, detail="No active phone number found for organization")
@@ -476,7 +484,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.info(f"WebSocket disconnected for session {session_id}: code={e.code}, reason={e.reason}")
         await shared_state.websocket_manager.disconnect(session_id)
         # Update agent status to offline
-        agent_session = await shared_state.redis_manager.get_agent_session_by_session_id(session_id)
+        agent_session = await shared_state.redis_manager.get_agent_session(session_id)
+
         if agent_session:
             agent_id = agent_session.get("agent_id")
             await shared_state.redis_manager.update_agent_status(agent_id, "offline")
@@ -492,7 +501,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             "data": {"message": f"Server error: {str(e)}"}
         }))
         await shared_state.websocket_manager.disconnect(session_id)
-        agent_session = await shared_state.redis_manager.get_agent_session_by_session_id(session_id)
+        agent_session = await shared_state.redis_manager.get_agent_session(session_id)
         if agent_session:
             agent_id = agent_session.get("agent_id")
             await shared_state.redis_manager.update_agent_status(agent_id, "offline")
@@ -697,7 +706,6 @@ async def update_agent_status(
 async def handle_incoming_call(request: Request):
     """Handle incoming Twilio calls with connection validation"""
     shared_state = get_shared_state(request.app)
-    
     form_data = await request.form()
     CallSid = form_data.get("CallSid")
     From = form_data.get("From")
@@ -739,6 +747,20 @@ async def handle_incoming_call(request: Request):
         
         # Find best available agent
         agent_id = await find_best_available_agent(shared_state.redis_manager, organization_id)
+        # Log call start
+        call_log = Call(
+            call_sid=CallSid,
+            organizationId=ObjectId(organization_id) if organization_id else None,
+            agentId=ObjectId(agent_id) if agent_id else None,
+            from_number=From,
+            to_number=To,
+            callType=CallType.INCOMING,
+            call_status=CallStatus.INITIATED,
+
+            call_time=datetime.now(timezone.utc),
+            call_started_at=datetime.now(timezone.utc) if agent_id else None
+        )
+        await call_log.insert()
         
         if agent_id:
             # Store call in Redis
@@ -1033,15 +1055,12 @@ async def list_active_calls(request: Request, current_agent: dict = Depends(get_
     
 @router.get("/agent/organization-info")
 async def get_agent_organization_info_endpoint(
-    request: Request,
     current_agent: dict = Depends(get_current_agent)
 ):
     """Get organization information for the current agent"""
-    shared_state = get_shared_state(request.app)
-    db_manager = shared_state.db_manager
     
     agent_id = current_agent["agent_id"]
-    organization_info = await get_agent_organization_info(db_manager, agent_id)
+    organization_info = await get_agent_organization_info( agent_id)
     
     logger.info(f"Organization info retrieved for agent {agent_id}: {organization_info['organization']['name']}")
     
@@ -1053,7 +1072,7 @@ async def get_agent_organization_info_endpoint(
 @router.post("/twilio/outbound-call")
 async def make_outbound_call(
     request: Request,
-    request_data: dict,
+    call_data: OutboundCallRequest,  
     current_agent: dict = Depends(get_current_agent)
 ):
     """Agent initiates an outbound call via Twilio with organization validation"""
@@ -1061,25 +1080,21 @@ async def make_outbound_call(
     twilio_client: Client = shared_state.twilio_client
     db_manager = shared_state.db_manager
 
-    to_number = request_data.get("to_number")
-    from_number = request_data.get("from_number")
+    to_number = call_data.to_number
     agent_id = current_agent["agent_id"]
 
-    if not to_number or not from_number:
-        raise HTTPException(status_code=400, detail="Missing to_number or from_number")
-
     try:
-        # Get agent's organization info and validate from_number
-        org_info = await get_agent_organization_info(db_manager, agent_id)
+        # ### UPDATED ###
+        # Securely get the agent's organization info, including the official phone number.
+        org_info = await get_agent_organization_info(agent_id)
         
-        # Validate that the from_number matches the agent's organization phone number
-        if from_number != org_info["organization"]["phoneNumber"]:
-            raise HTTPException(
-                status_code=403, 
-                detail=f"Agent not authorized to use phone number {from_number}. Must use organization number: {org_info['organization']['phoneNumber']}"
-            )
+        # The from_number is now taken directly from the database lookup, not user input.
+        from_number = org_info["organization"]["phoneNumber"]
 
-        # Make the outbound call
+        # ### UPDATED ###
+        # The previous validation block that compared user input is no longer needed and has been removed.
+
+        # Make the outbound call using the secure, internally-fetched `from_number`.
         call = twilio_client.calls.create(
             to=to_number,
             from_=from_number,
@@ -1087,12 +1102,12 @@ async def make_outbound_call(
             method="POST",
             status_callback=f"{settings.WEBHOOK_URL}/twilio/outbound-call-status?agent_id={agent_id}&organization_id={org_info['organization']['id']}",
             status_callback_method="POST",
-            status_callback_event=["initiated", "ringing", "answered", "completed", "canceled", "failed", "busy", "no-answer"]
+            status_callback_event=["initiated", "ringing", "answered", "completed"]
         )
 
         logger.info(f"Agent {agent_id} initiated outbound call {call.sid} from {from_number} to {to_number}")
 
-        # Log the call in database for tracking
+        # Log the call in the database for tracking
         call_log = {
             "call_sid": call.sid,
             "agent_id": str(agent_id),
@@ -1104,7 +1119,6 @@ async def make_outbound_call(
             "created_at": datetime.utcnow()
         }
         
-        # Insert call log if you have a calls collection
         try:
             await db_manager.db.calls.insert_one(call_log)
         except Exception as e:
@@ -1114,7 +1128,7 @@ async def make_outbound_call(
             "success": True,
             "call_sid": call.sid,
             "to": to_number,
-            "from": from_number,
+            "from": from_number, # Return the number that was used
             "organization_id": org_info['organization']['id'],
             "organization_name": org_info['organization']['name']
         }
@@ -1123,46 +1137,53 @@ async def make_outbound_call(
         raise
     except Exception as e:
         logger.error(f"Failed to make outbound call: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail="An internal error occurred while attempting to make the call.")
 
 @router.post("/twilio/outbound-call-handler")
 async def outbound_call_handler(
     request: Request,
     agent_id: str, 
-    organization_id: str
+    organization_id: str  # You might not need this, but it's good to have
 ):
-    """TwiML instructions for outbound calls with organization context"""
+    """TwiML instructions to connect an answered outbound call to the originating agent."""
     response = VoiceResponse()
-    
-    shared_state = get_shared_state(request.app)
-    db_manager = shared_state.db_manager
+    response.say("The connection was successful. This is a test message.")
+
+    db = get_database()
     
     try:
-        # Get organization info for personalized greeting
-        organization = await db_manager.db.organizations.find_one({
-            "_id": ObjectId(organization_id)
-        })
+        # --- NEW LOGIC: Find the agent to connect to ---
+        print("agent_id", agent_id)
+        agent_obj_id = ObjectId(agent_id)
         
-        if organization:
-            org_name = organization.get("name", "our organization")
-            greeting = f"Hello, you are receiving a call from {org_name}. Please wait while we connect you to one of our agents."
-        else:
-            greeting = "Hello, you are receiving a call. Please wait while we connect you to an agent."
+        # NOTE: This assumes `agent_id` is the document's _id. 
+        # If it's the `userId`, change the query to {"userId": agent_obj_id}
+        agent = await db.agents.find_one({"userId": agent_obj_id})
+        print("agent", agent)
+
+        if agent and agent.get("sip_address"):
+            sip_address = agent["sip_address"]
+            print(f"Found SIP Address: {sip_address}")
             
+            # Get the organization's phone number to use as the Caller ID for the agent
+            org_info = await get_agent_organization_info(agent_id)
+            caller_id = org_info["organization"]["phoneNumber"]
+
+            # Use the <Dial> verb to connect the call
+            dial = Dial(caller_id=caller_id) # This sets the caller ID the agent sees
+            dial.sip(sip_address)
+            response.append(dial)
+            
+        else:
+            # Fallback if we can't find the agent or their SIP address
+            logger.error(f"Could not find agent or SIP address for agent_id: {agent_id}")
+            response.say("We're sorry, we could not connect you at this time. Goodbye.")
+            response.hangup()
+
     except Exception as e:
-        logger.warning(f"Could not get organization info for greeting: {e}")
-        greeting = "Hello, you are receiving a call. Please wait while we connect you to an agent."
-    
-    response.say(
-        greeting,
-        voice="alice",
-        language="en-US"
-    )
-    
-    # You could add more TwiML instructions here like:
-    # - Connect to the agent's SIP endpoint
-    # - Play hold music
-    # - Set up recording, etc.
+        logger.error(f"Error in outbound_call_handler for agent {agent_id}: {e}")
+        response.say("We're sorry, an error occurred. Goodbye.")
+        response.hangup()
     
     return Response(content=str(response), media_type="application/xml")
 

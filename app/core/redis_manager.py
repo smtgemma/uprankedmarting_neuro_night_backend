@@ -256,3 +256,16 @@ class RedisManager:
                     # If last_activity is invalid, clean it up
                     await self.redis_client.delete(key)
                     logger.info(f"Cleaned up agent session with invalid timestamp: {key}")
+
+
+async def get_agent_session_by_session_id(self, session_id: str) -> Optional[dict]:
+    """Get agent session by session_id (from WebSocket)"""
+    # Look for the WebSocket session in Redis
+    websocket_data = await self.get_websocket_session(session_id)
+    
+    if websocket_data and websocket_data.get("agent_id"):
+        agent_id = websocket_data["agent_id"]
+        # Fetch the corresponding agent session using agent_id
+        return await self.get_agent_session(agent_id)
+    
+    return None

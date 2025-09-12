@@ -6,6 +6,9 @@ import logging
 from datetime import datetime, timezone
 from twilio.rest import Client as TwilioClient
 import json
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
+from app.api.models.ai_agent_model import Call, Agent, Organization, AIAgent, AICallLog
 
 from app.core.config import settings
 from app.core.redis_manager import RedisManager
@@ -67,6 +70,14 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(health_monitor(shared_state))
         
         logger.info(f"Application started successfully on instance {settings.INSTANCE_ID}")
+
+        client = AsyncIOMotorClient(settings.MONGODB_URL)
+        # Initialize Beanie with all document models
+        await init_beanie(
+            database=client.get_database(settings.MONGO_DB_NAME),
+            document_models=[Call, Agent, Organization, AIAgent, AICallLog]
+        )
+        logger.info("Beanie initialized with Call, Agent, Organization, AIAgent, and AICallLog models")
         
     except Exception as e:
         logger.error(f"Failed to start application: {e}")
@@ -146,6 +157,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+@app.get("/")
+def home():
+    # It's common practice for APIs to return JSON responses.
+    # FastAPI automatically converts Python dicts to JSON.
+    return {"message": "AI Server is ready to run...."}
+
 # CORS middleware
 origins = [
     "http://localhost:3000",
@@ -171,8 +188,8 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app", 
-        port=9050, 
+        port=9000, 
         workers=1,
-        reload=False,
+        reload=True,
         log_level="info"
     )
