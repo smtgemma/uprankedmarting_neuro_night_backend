@@ -257,19 +257,6 @@ model Organization {
   @@map("organizations")
 }
 
-model UploadVoice {
-  id                    String  @id @default(auto()) @map("_id") @db.ObjectId
-  voiceId               String  @unique @db.ObjectId
-  voiceName             String
-  requires_verification Boolean
-  organizationId        String  @unique @db.ObjectId
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  Organization Organization @relation(fields: [organizationId], references: [id])
-}
 
 model aiagent {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
@@ -313,6 +300,78 @@ model aicalllogs {
   @@map("aicalllogs")
 }
 
+
+model Call {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String @db.ObjectId
+  agentId        String @db.ObjectId
+
+  from_number       String
+  to_number         String
+  callTime          DateTime  @default(now())
+  callType          String // direction
+  call_status  String
+  call_duration     Int?
+  call_started_at   DateTime  @default(now()) // Date formate 
+  // "created_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+  call_completed_at DateTime?
+  // "call_completed_at": {
+  //     "$date": "2025-09-10T00:22:06.362Z"
+  //   },
+
+  account_sid  String? 
+  call_sid     String?
+
+
+  call_transcript    String?
+  recording_duration Int?
+  recording_sid      String?
+  recording_status   String?
+  recording_url      String?
+
+  processed               Boolean @default(false)
+  transcription_requested Boolean @default(false)
+
+  // from_country   String?
+  // to_city        String?
+  // to_state       String?
+  // to_zip         String?
+  // to_country     String?
+  // caller_country String?
+  // called_city    String?
+  // called_state   String?
+  // called_zip     String?
+  // called_country String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  receivedBy   Agent        @relation(fields: [agentId], references: [userId])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([call_sid])
+  @@map("call_records")
+}
+
+
+model UploadVoice {
+  id                    String  @id @default(auto()) @map("_id") @db.ObjectId
+  voiceId               String  @unique @db.ObjectId
+  voiceName             String
+  requires_verification Boolean
+  organizationId        String  @unique @db.ObjectId
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Organization Organization @relation(fields: [organizationId], references: [id])
+}
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   organizationId    String       @db.ObjectId
@@ -386,68 +445,6 @@ model Subscription {
   updatedAt       DateTime           @updatedAt
 
   @@map("subscriptions")
-}
-
-model Call {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  organizationId String @db.ObjectId
-  agentId        String @db.ObjectId
-
-  from_number       String
-  to_number         String
-  callTime          DateTime  @default(now())
-  callType          String // direction
-  call_status  String
-  call_duration     Int?
-  call_started_at   DateTime  @default(now()) // Date formate 
-  // "created_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
-  call_completed_at DateTime?
-  // "call_completed_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
-
-  account_sid  String? 
-  call_sid     String?
-
-  recordingUrl String?
-  summary      String? 
-
-  // ai agent info needed with relation objectId
-
-
-  call_transcript    String?
-  recording_duration Int?
-  recording_sid      String?
-  recording_status   String?
-  recording_url      String?
-
-  // from_country   String?
-  // to_city        String?
-  // to_state       String?
-  // to_zip         String?
-  // to_country     String?
-  // caller_country String?
-  // called_city    String?
-  // called_state   String?
-  // called_zip     String?
-  // called_country String?
-
-  processed               Boolean @default(false)
-  transcription_requested Boolean @default(false)
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  receivedBy   Agent        @relation(fields: [agentId], references: [userId])
-  organization Organization @relation(fields: [organizationId], references: [id])
-
-  @@index([call_sid])
-  @@map("call_records")
 }
 
 // model Call {
