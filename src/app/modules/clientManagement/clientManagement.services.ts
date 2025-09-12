@@ -36,8 +36,8 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
         bio: true,
         status: true,
         role: true,
-        // createdAt: true,
-        // updatedAt: true,
+        createdAt: true,
+        updatedAt: true,
         ownedOrganization: {
           select: {
             id: true,
@@ -93,13 +93,13 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
   ]);
 
   return {
-    data: users,
     meta: {
       total,
       page: Number(page),
       limit: Number(limit),
       totalPages: Math.ceil(total / Number(limit)),
     },
+    data: users,
   };
 };
 

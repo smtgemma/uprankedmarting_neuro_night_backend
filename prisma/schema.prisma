@@ -268,7 +268,7 @@ model aiagent {
   organization Organization @relation(fields: [organizationId], references: [id])
   callLogs aicalllogs[] // 1-to-many relation
 
-  @@map("aiagents")
+  @@map("aiagent")
 }
 
 model aicalllogs {

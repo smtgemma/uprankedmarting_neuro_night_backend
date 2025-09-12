@@ -576,6 +576,31 @@ const getAgentsManagementInfo = async (
         name: true,
         email: true,
         phone: true,
+        // "id": "68c307fe072c5a263a704f89",
+        //             "userId": "68c307fd072c5a263a704f88",
+        //             "status": "offline",
+        //             "sip_address": "sip:agentsanim65934@test-uprank.sip.twilio.com",
+        //             "sip_username": "agentsanim65934",
+        //             "sip_password": "Securepassword123",
+        //             "dateOfBirth": "2000-01-01T00:00:00.000Z",
+        //             "gender": "male",
+        //             "address": "Updated Address Street",
+        //             "emergencyPhone": "01743034999",
+        //             "ssn": "12347-455-43789",
+        //             "skills": [
+        //                 "customer service",
+        //                 "sales",
+        //                 "technical support",
+        //                 "communication"
+        //             ],
+        //             "employeeId": null,
+        //             "isAvailable": true,
+        //             "assignTo": "68c211cc6864cb0ea1959230",
+        //             "jobTitle": "Senior Customer Service Agent",
+        //             "employmentType": "full_time",
+        //             "department": "Customer Success",
+        //             "workEndTime": "17:00:00",
+        //             "workStartTime": "09:00:00",
         Agent: true,
         // bio: true,
         // image: true,
@@ -602,6 +627,94 @@ const getAgentsManagementInfo = async (
     data: users,
   };
 };
+const getSingleAgentInfo = async (
+  options: IPaginationOptions,
+  filters: any = {}
+) => {
+  const searchTerm = filters?.searchTerm as string;
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  let whereClause: any = {
+    isDeleted: false,
+    role: UserRole.agent,
+  };
+
+
+
+  // Search functionality
+  if (searchTerm) {
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { phone: { contains: searchTerm, mode: "insensitive" } },
+    ];
+  }
+
+  // console.log(whereClause);
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        // "id": "68c307fe072c5a263a704f89",
+        //             "userId": "68c307fd072c5a263a704f88",
+        //             "status": "offline",
+        //             "sip_address": "sip:agentsanim65934@test-uprank.sip.twilio.com",
+        //             "sip_username": "agentsanim65934",
+        //             "sip_password": "Securepassword123",
+        //             "dateOfBirth": "2000-01-01T00:00:00.000Z",
+        //             "gender": "male",
+        //             "address": "Updated Address Street",
+        //             "emergencyPhone": "01743034999",
+        //             "ssn": "12347-455-43789",
+        //             "skills": [
+        //                 "customer service",
+        //                 "sales",
+        //                 "technical support",
+        //                 "communication"
+        //             ],
+        //             "employeeId": null,
+        //             "isAvailable": true,
+        //             "assignTo": "68c211cc6864cb0ea1959230",
+        //             "jobTitle": "Senior Customer Service Agent",
+        //             "employmentType": "full_time",
+        //             "department": "Customer Success",
+        //             "workEndTime": "17:00:00",
+        //             "workStartTime": "09:00:00",
+        Agent: true,
+        // bio: true,
+        // image: true,
+        // Agent: true,
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.user.count({
+      where: whereClause,
+    }),
+  ]);
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: users,
+  };
+};
+
+
 
 const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
   try {

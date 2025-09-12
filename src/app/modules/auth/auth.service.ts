@@ -8,6 +8,7 @@ import { hashPassword } from "../../helpers/hashPassword";
 import { RefreshPayload } from "./auth.interface";
 import { sendEmail } from "../../utils/sendEmail";
 import { generateOTPData } from "../../utils/otp";
+import { User, UserRole } from "@prisma/client";
 
 const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
@@ -380,9 +381,56 @@ const getMe = async (email: string) => {
   return rest;
 };
 
-const getSingleUser = async (id: string) => {
-  console.log(id);
+// const getSingleUser = async (id: string) => {
+//   const user = await prisma.user.findFirst({
+//     where: {
+//       id,
+//       isDeleted: false,
+//     },
+//     include: {
+//       Agent: true,
+//       ownedOrganization: true,
+//     },
+//   });
 
+//   if (!user) {
+//     throw new ApiError(status.NOT_FOUND, "User not found");
+//   }
+
+//   let Agent = null;
+//   if (user.Agent) {
+//     Agent = {
+//       ...user.Agent,
+//       sip_password: user.Agent.sip_password ? "********" : null, // Hide sensitive field
+//     };
+//   }
+
+//   // remove password from user object
+//   const { password, ...restUser } = user;
+
+//   return {
+//     ...restUser,
+//     Agent,
+//   };
+// };
+const getSingleUser = async (id: string, AuthUser: User) => {
+  console.log(AuthUser);
+  let org_admin_Info = null;
+  if (AuthUser.role === UserRole.organization_admin) {
+    org_admin_Info = await prisma.user.findFirst({
+      where: {
+        id: AuthUser.id,
+      },
+      select: {
+        id: true,
+        ownedOrganization: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+  }
   const user = await prisma.user.findFirst({
     where: {
       id,
@@ -402,7 +450,14 @@ const getSingleUser = async (id: string) => {
   if (user.Agent) {
     Agent = {
       ...user.Agent,
-      sip_password: user.Agent.sip_password ? "********" : null, // Hide sensitive field
+      sip_password: !user.Agent.sip_password
+        ? "********"
+        : AuthUser.role === UserRole.super_admin
+        ? user.Agent.sip_password
+        : AuthUser.role === UserRole.organization_admin &&
+          org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
+        ? user.Agent.sip_password
+        : "********",
     };
   }
 
@@ -415,9 +470,9 @@ const getSingleUser = async (id: string) => {
   };
 };
 
-
 export const AuthService = {
   getMe,
+  // getSingleUserForAdmin,
   getSingleUser,
   loginUser,
   verifyOTP,
