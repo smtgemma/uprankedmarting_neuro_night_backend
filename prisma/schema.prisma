@@ -181,8 +181,8 @@ model Agent {
   droppedCalls Int @default(0)
 
   // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt  //later should be required
 
   // Relations
   user           User            @relation(fields: [userId], references: [id])
@@ -257,48 +257,41 @@ model Organization {
   @@map("organizations")
 }
 
-
 model aiagent {
-  id             String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String @unique
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId String @unique // ElevenLabs agent ID
   organizationId String @unique @db.ObjectId
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-
-  // 1-to-many Relation with aicalllogs
-  callLogs aicalllogs[]
+  callLogs aicalllogs[] // 1-to-many relation
 
   @@map("aiagents")
 }
 
 model aicalllogs {
-  id       String  @id @default(auto()) @map("_id") @db.ObjectId
-  agent_id String?
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  agent_id String // links to aiagent.agentId
 
-  aiAgentId String @db.ObjectId
-
-  agent_name           String?
-  conversation_id      String?
+  agent_name String?
+  conversation_id String?
   start_time_unix_secs Int?
-  call_duration_secs   Int?
-  message_count        Int?
-  status               String?
-  call_successful      String?
-  direction            String?
+  call_duration_secs Int?
+  message_count Int?
+  status String?
+  call_successful String?
+  direction String?
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Many-to-1 Relation with aiagent
-  aiagent aiagent @relation(fields: [aiAgentId], references: [id])
+  aiagent aiagent @relation(fields: [agent_id], references: [agentId])
 
   @@map("aicalllogs")
 }
+
 
 
 model Call {

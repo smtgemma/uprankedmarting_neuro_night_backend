@@ -555,6 +555,8 @@ const getAgentsManagementInfo = async (
     role: UserRole.agent,
   };
 
+
+
   // Search functionality
   if (searchTerm) {
     whereClause.OR = [
@@ -574,11 +576,10 @@ const getAgentsManagementInfo = async (
         name: true,
         email: true,
         phone: true,
+        Agent: true,
         // bio: true,
         // image: true,
-        Agent: {
-          select: {},
-        },
+        // Agent: true,
       },
       orderBy: {
         [sortBy as string]: sortOrder,
