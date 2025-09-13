@@ -917,7 +917,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   return result;
 };
 const updateAgentSpecificInfo = async (user: User, payload: any) => {
-  // console.log(payload,45)
   if (!payload?.image) {
     throw new ApiError(status.BAD_REQUEST, "Image is required");
   }

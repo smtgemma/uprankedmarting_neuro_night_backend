@@ -176,7 +176,7 @@ model Agent {
   endWorkDateTime   DateTime?
 
   // Call metrics
-  totalCalls   Int @default(0)
+  // totalCalls   Int @default(0)
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 

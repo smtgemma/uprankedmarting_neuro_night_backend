@@ -238,7 +238,6 @@ const getAllAgentFromDB = async (
             },
 
             skills: true,
-            totalCalls: true,
             isAvailable: true,
             status: true,
             assignTo: true,
@@ -732,7 +731,7 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
     }
 
     // 2. Use Prisma query (not raw) since we know the data exists
-    const aiAgent = await prisma.aiagent.findFirst({
+    const aiAgent = await prisma.aiagents.findFirst({
       where: {
         organizationId: org.id,
       },
@@ -866,7 +865,6 @@ const getAllAgentForAdmin = async (
           select: {
             id: true,
             skills: true,
-            totalCalls: true,
             successCalls: true,
             droppedCalls: true,
             isAvailable: true,
@@ -950,7 +948,6 @@ const getAllAgentForAdmin = async (
       Agent: {
         id: agent?.id || null,
         skills: agent?.skills || [],
-        totalCalls: agent?.totalCalls || 0,
         successCalls: agent?.successCalls || 0,
         droppedCalls: agent?.droppedCalls || 0,
         isAvailable: agent?.isAvailable ?? false,
@@ -1628,7 +1625,6 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
       Agent: {
         id: request.agent.id,
         skills: request.agent.skills || [],
-        totalCalls: request.agent.totalCalls || 0,
         isAvailable: request.agent.isAvailable,
         status: request.agent.status,
         assignTo: request.agent.assignTo,
