@@ -26,7 +26,6 @@ router.get(
   ToolsController.getQuestionsByOrganization
 );
 
-
 router.get(
   "/organization/:orgId/export",
   // validateRequest(ToolsValidation.questionValidationSchema),
@@ -34,10 +33,10 @@ router.get(
 );
 
 router.post(
-  "/add-questions-to-sheets/:orgId",
+  "/add-qa-pairs-to-sheets/:orgId",
   // auth(UserRole.organization_admin, UserRole.super_admin),
   // validateRequest(ToolsValidation.questionValidationSchema),
-  ToolsController.addQuestionToGoogleSheets
+  ToolsController.addQaPairsToGoogleSheets
 );
 
 export const ToolsRoutes = router;

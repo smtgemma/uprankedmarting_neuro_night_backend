@@ -7,83 +7,7 @@ import path from "path";
 import ExcelJS from "exceljs";
 import fs from "fs";
 import { google } from "googleapis";
-import sheetsapi from "../../utils/googlesheetsapi.json"
-
-// interface CreateLeadPayload {
-//   organizationId: string;
-// }
-
-// const createHubSpotLead = async (payload: CreateLeadPayload) => {
-//   const { organizationId } = payload;
-
-//   // 1. Fetch organization and subscription data
-//   const organization = await prisma.organization.findUnique({
-//     where: { id: organizationId },
-//     select: {
-//       name: true,
-//     //   organizationEmail: true,
-//       subscriptions: {
-//         take: 1,
-//         orderBy: { createdAt: "desc" },
-//         select: { purchasedNumber: true },
-//       },
-//     },
-//   });
-
-//   if (!organization) {
-//     throw new AppError(status.NOT_FOUND, "Organization not found");
-//   }
-
-//   const subscription = organization.subscriptions[0];
-//   if (!subscription || !subscription.purchasedNumber) {
-//     throw new AppError(status.NOT_FOUND, "No active subscription with phone number found");
-//   }
-
-//   // 2. Prepare HubSpot payload
-//   const [firstName, ...lastNameParts] = organization.name.split(" ");
-//   const lastName = lastNameParts.join(" ") || "Unknown"; // Fallback if no last name
-//   const hubspotPayload = {
-//     properties: {
-//       firstname: firstName || "Unknown",
-//       lastname: lastName,
-//     //   email: organization.organizationEmail,
-//       phone: subscription.purchasedNumber,
-//     },
-//   };
-
-//   // 3. Send POST request to HubSpot
-//   const hubspotApiKey = config.hubspot_api_key;
-//   if (!hubspotApiKey) {
-//     throw new AppError(status.INTERNAL_SERVER_ERROR, "HubSpot API key not configured");
-//   }
-
-//   try {
-//     const response = await axios.post(
-//       "https://api.hubapi.com/crm/v3/objects/contacts",
-//       hubspotPayload,
-//       {
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${hubspotApiKey}`,
-//         },
-//       }
-//     );
-//     console.log("Successfully created HubSpot lead:", response.data);
-
-//     return {
-//       hubspotContactId: response.data.id,
-//       organizationId,
-//     //   email: organization.organizationEmail,
-//     };
-//   } catch (error) {
-//     console.error("Error creating HubSpot lead:", error);
-//     throw new AppError(status.INTERNAL_SERVER_ERROR, "Failed to create HubSpot lead");
-//   }
-// };
-
-// export const ToolsService = {
-//   createHubSpotLead,
-// };
+import sheetsapi from "../../utils/googlesheetsapi.json";
 
 const createHubSpotLead = async () => {
   // Dummy data
@@ -93,10 +17,6 @@ const createHubSpotLead = async () => {
     email: "john.doe@example.com",
     phone: "+1234567890",
   };
-
-  // // Split name into first and last names
-  // const [firstName, ...lastNameParts] = dummyData.name.split(" ");
-  // const lastName = lastNameParts.join(" ") || "Unknown";
 
   // Prepare HubSpot payload
   const hubspotPayload = {
@@ -189,7 +109,10 @@ const exportOrganizationData = async (organizationId: string, res: any) => {
   res.end();
 };
 
-const getQuestionsByOrganization = async (organizationId: string, res?: any) => {
+const getQuestionsByOrganization = async (
+  organizationId: string,
+  res?: any
+) => {
   const questions = await prisma.question.findMany({
     where: {
       org_id: organizationId,
@@ -197,7 +120,10 @@ const getQuestionsByOrganization = async (organizationId: string, res?: any) => 
   });
 
   if (!questions || questions.length === 0) {
-    throw new AppError(status.NOT_FOUND, "No questions found for this organization");
+    throw new AppError(
+      status.NOT_FOUND,
+      "No questions found for this organization"
+    );
   }
 
   // If response object is provided, export to Excel
@@ -218,7 +144,9 @@ const getQuestionsByOrganization = async (organizationId: string, res?: any) => 
 
     // Add all questions
     questions.forEach((question) => {
-      sheet.addRow(headers.map((key) => stringifyValue((question as any)[key])));
+      sheet.addRow(
+        headers.map((key) => stringifyValue((question as any)[key]))
+      );
     });
 
     // Set response headers for Excel download
@@ -241,67 +169,6 @@ const getQuestionsByOrganization = async (organizationId: string, res?: any) => 
   return questions;
 };
 
-
-
-// const addQuestionToGoogleSheets = async (orgId: string) => {
-//   try {
-//     // Fetch questions for the organization
-//     const questions = await prisma.question.findMany({
-//       where: { org_id: orgId },
-//     });
-
-//     if (!questions || questions.length === 0) {
-//       throw new AppError(status.NOT_FOUND, "No questions found for this organization");
-//     }
-
-//     // Authenticate with Google Sheets API using service account JSON
-//     const auth = new google.auth.GoogleAuth({
-//       credentials: sheetsapi,
-//       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-//     });
-
-//     const sheets = google.sheets({ version: "v4", auth });
-
-//     const spreadsheetId = config.google_sheets_spreadsheet_id;
-//     if (!spreadsheetId) {
-//       throw new AppError(
-//         status.INTERNAL_SERVER_ERROR,
-//         "Google Sheets spreadsheet ID not configured"
-//       );
-//     }
-
-//     // Prepare data to append
-//     const values = questions.map((question) => [
-//       question.id,
-//       question.org_id,
-//       question.question_text,
-//       question.question_keywords.join(", "), // Join array for readable format
-//       question.createdAt.toISOString(),
-//       question.updatedAt.toISOString(),
-//     ]);
-
-//     // Append data to Google Sheet
-//     const response = await sheets.spreadsheets.values.append({
-//       spreadsheetId,
-//       range: "Sheet1!A1:F", // Adjust range as needed
-//       valueInputOption: "RAW",
-//       requestBody: {
-//         values,
-//       },
-//     });
-
-//     console.log("Successfully added questions to Google Sheets:", response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error("Error adding questions to Google Sheets:", error);
-//     throw new AppError(
-//       status.INTERNAL_SERVER_ERROR,
-//       "Failed to add questions to Google Sheets"
-//     );
-//   }
-// };
-
-// Utility function to convert column number to letter (e.g., 1 -> A, 2 -> B, 6 -> F)
 const getColumnLetter = (colIndex: number): string => {
   let letter = "";
   while (colIndex > 0) {
@@ -312,19 +179,51 @@ const getColumnLetter = (colIndex: number): string => {
   return letter;
 };
 
-
-const addQuestionToGoogleSheets = async (orgId: string) => {
+const addQaPairsToGoogleSheets = async (orgId: string) => {
   try {
-    // Fetch questions for the organization
-    const questions = await prisma.question.findMany({
+    // Check if organization exists
+    const organization = await prisma.organization.findUnique({
+      where: { id: orgId },
+    });
+    if (!organization) {
+      throw new AppError(status.NOT_FOUND, "Organization not found");
+    }
+
+    // Fetch QaPairs for the organization
+    const qaPairs = await prisma.qaPair.findMany({
       where: { org_id: orgId },
     });
 
-    if (!questions || questions.length === 0) {
-      throw new AppError(status.NOT_FOUND, "No questions found for this organization");
+    if (!qaPairs || qaPairs.length === 0) {
+      throw new AppError(
+        status.NOT_FOUND,
+        "No Q&A pairs found for this organization"
+      );
     }
 
-    // Authenticate with Google Sheets API using service account JSON
+    // Validate QaPair data
+    qaPairs.forEach((qaPair, index) => {
+      if (!qaPair.question || qaPair.question.trim() === "") {
+        throw new AppError(
+          status.BAD_REQUEST,
+          `Invalid Q&A pair at index ${index}: question is empty`
+        );
+      }
+      if (!qaPair.answer || qaPair.answer.trim() === "") {
+        throw new AppError(
+          status.BAD_REQUEST,
+          `Invalid Q&A pair at index ${index}: answer is empty`
+        );
+      }
+      if (!qaPair.conv_id || qaPair.conv_id.trim() === "") {
+        throw new AppError(
+          status.BAD_REQUEST,
+          `Invalid Q&A pair at index ${index}: conv_id is empty`
+        );
+      }
+    });
+
+    // Authenticate with Google Sheets API
     const auth = new google.auth.GoogleAuth({
       credentials: sheetsapi,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
@@ -340,26 +239,41 @@ const addQuestionToGoogleSheets = async (orgId: string) => {
       );
     }
 
-    // Get headers dynamically from the first question object
-    const headers = Object.keys(questions[0]);
+    // Define headers explicitly (excluding updatedAt)
+    const headers = [
+      "id",
+      "org_id",
+      "conv_id",
+      "question",
+      "answer",
+      "createdAt",
+    ];
     const columnCount = headers.length;
-    const lastColumn = getColumnLetter(columnCount); // Convert column count to letter (e.g., 6 -> F)
+    const lastColumn = getColumnLetter(columnCount);
 
     // Prepare data to append
-    const values = questions.map((question) =>
+    const values = qaPairs.map((qaPair) =>
       headers.map((key) => {
-        const value = (question as any)[key];
-        if (Array.isArray(value)) return value.join(", "); // Handle arrays (e.g., question_keywords)
-        if (value instanceof Date) return value.toISOString(); // Handle dates
-        return value ?? ""; // Handle null/undefined
+        const value = (qaPair as any)[key];
+        if (value instanceof Date) return value.toISOString();
+        return value ?? "";
       })
     );
 
+    // Prepend headers to values
+    values.unshift(headers);
+
     // Dynamic range based on number of columns
-    const range = `Sheet1!A1:${lastColumn}`;
+    const range = `Sheet1!A1:${lastColumn}${values.length}`;
+
+    // Clear existing data in the range to avoid overlap
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range,
+    });
 
     // Append data to Google Sheet
-    const response = await sheets.spreadsheets.values.append({
+    const response = await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
       valueInputOption: "RAW",
@@ -368,13 +282,23 @@ const addQuestionToGoogleSheets = async (orgId: string) => {
       },
     });
 
-    console.log("Successfully added questions to Google Sheets:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Error adding questions to Google Sheets:", error);
+    console.log(
+      `Successfully added ${qaPairs.length} Q&A pairs to Google Sheets:`,
+      response.data
+    );
+    return {
+      message: `Successfully added ${qaPairs.length} Q&A pairs`,
+      data: response.data,
+    };
+  } catch (error: any) {
+    console.error("Error adding Q&A pairs to Google Sheets:", {
+      message: error.message,
+      stack: error.stack,
+      orgId,
+    });
     throw new AppError(
       status.INTERNAL_SERVER_ERROR,
-      "Failed to add questions to Google Sheets"
+      `Failed to add Q&A pairs to Google Sheets: ${error.message}`
     );
   }
 };
@@ -383,5 +307,5 @@ export const ToolsService = {
   createHubSpotLead,
   exportOrganizationData,
   getQuestionsByOrganization,
-  addQuestionToGoogleSheets,
+  addQaPairsToGoogleSheets,
 };
