@@ -15,6 +15,7 @@ import { OrganizationRoutes } from "../modules/organization/organization.routes"
 import { AssignmentRoutes } from "../modules/agentManagement/agent.routes";
 import { ToolsRoutes } from "../modules/tools/tools.route";
 import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
+import { DashboardStatsRoutes } from "../modules/dashboardStats/dashboardStats.route";
 
 const router = Router();
 
@@ -82,6 +83,10 @@ const moduleRoutes = [
   {
     path: "/organization-admins",
     route: ClientManagementRoutes,
+  },
+  {
+    path: "/dashboard",
+    route: DashboardStatsRoutes,
   }
 ];
 
