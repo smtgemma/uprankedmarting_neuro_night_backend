@@ -235,6 +235,7 @@ model Organization {
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
   questions             Question[] // ADD THIS LINE - Questions relation
+  qaPairs               QaPair[]
 
   @@map("organizations")
 }
@@ -457,4 +458,19 @@ model Question {
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("questions")
+}
+
+model QaPair {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  org_id   String @db.ObjectId
+  conv_id  String
+  question String
+  answer   String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@map("qa_pairs")
 }
