@@ -283,8 +283,31 @@ const getAllSubscription = async (query: Record<string, any>) => {
         select: {
           id: true,
           name: true,
-          organizationEmail: true,
           organizationNumber: true,
+          industry: true,
+          address: true,
+          websiteLink: true,
+          ownerId: true, // This is the actual field name
+          // Use the correct relation name
+          ownedOrganization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true
+            }
+          },
+          subscriptions: {
+            select: {
+              id: true,
+              startDate: true,
+              endDate: true,
+              amount: true,
+              paymentStatus: true,
+              status: true,
+              planLevel: true
+            }
+          }
         },
       },
       plan: true,
