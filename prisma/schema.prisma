@@ -161,7 +161,7 @@ model Agent {
   // Professional info 
   skills String[] @default([])
 
-  employeeId  String?
+  employeeId  String  @unique 
   isAvailable Boolean @default(true)
   assignTo    String? @db.ObjectId
 
@@ -182,7 +182,7 @@ model Agent {
 
   // Timestamps
   createdAt DateTime? @default(now())
-  updatedAt DateTime? @updatedAt  //later should be required
+  updatedAt DateTime? @updatedAt //later should be required
 
   // Relations
   user           User            @relation(fields: [userId], references: [id])
@@ -258,31 +258,31 @@ model Organization {
 }
 
 model aiagents {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId String @unique // ElevenLabs agent ID
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String @unique // ElevenLabs agent ID
   organizationId String @unique @db.ObjectId
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  callLogs aicalllogs[] // 1-to-many relation
+  callLogs     aicalllogs[] // 1-to-many relation
 
   @@map("aiagents")
 }
 
 model aicalllogs {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
   agent_id String // links to aiagent.agentId
 
-  agent_name String?
-  conversation_id String?
+  agent_name           String?
+  conversation_id      String?
   start_time_unix_secs Int?
-  call_duration_secs Int?
-  message_count Int?
-  status String?
-  call_successful String?
-  direction String?
+  call_duration_secs   Int?
+  message_count        Int?
+  status               String?
+  call_successful      String?
+  direction            String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -291,8 +291,6 @@ model aicalllogs {
 
   @@map("aicalllogs")
 }
-
-
 
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
@@ -304,7 +302,7 @@ model Call {
   to_number         String
   callTime          DateTime  @default(now())
   callType          String // direction
-  call_status  String
+  call_status       String
   call_duration     Int?
   call_started_at   DateTime  @default(now()) // Date formate 
   // "created_at": {
@@ -315,9 +313,8 @@ model Call {
   //     "$date": "2025-09-10T00:22:06.362Z"
   //   },
 
-  account_sid  String? 
-  call_sid     String?
-
+  // account_sid String?
+  call_sid    String?
 
   call_transcript    String?
   recording_duration Int?
@@ -351,7 +348,6 @@ model Call {
   @@map("call_records")
 }
 
-
 model UploadVoice {
   id                    String  @id @default(auto()) @map("_id") @db.ObjectId
   voiceId               String  @unique @db.ObjectId
@@ -365,6 +361,7 @@ model UploadVoice {
 
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
+
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   organizationId    String       @db.ObjectId
