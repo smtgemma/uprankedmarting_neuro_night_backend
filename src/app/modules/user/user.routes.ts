@@ -113,6 +113,7 @@ router.patch(
   auth(UserRole.agent),
   (req: Request, res: Response, next: NextFunction) => {
     const file = req.file;
+    // console.log(file, "file")
     if (file) {
       req.body.image = file?.path;
     }

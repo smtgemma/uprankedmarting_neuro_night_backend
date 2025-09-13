@@ -4,7 +4,6 @@ import config from "../../config";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
-import { User } from "@prisma/client";
 // Initialize Twilio client
 const twilioClient = new Twilio(
   config.twilio.account_sid || "AC3c7b7f9af62077ff16931a102df853ff",
@@ -43,11 +42,11 @@ const fetchAndStoreAvailableNumbers = async () => {
           },
           beta: number.beta || false,
           countryCode: "US",
-          isPurchased: false
+          isPurchased: false,
         },
       });
     }
-  } catch (error:any) {
+  } catch (error: any) {
     throw new AppError(
       status.INTERNAL_SERVER_ERROR,
       `Failed to fetch and store existing phone numbers: ${error.message}`
@@ -56,43 +55,56 @@ const fetchAndStoreAvailableNumbers = async () => {
 };
 
 // Optional: Add specific filters for common phone number queries
-const getAllTwilioPhoneNumbersFromDB = async (query: Record<string, unknown>) => {
+const getAllTwilioPhoneNumbersFromDB = async (
+  query: Record<string, unknown>
+) => {
   const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
-  
-  const searchableFields = ['phoneNumber', 'friendlyName', 'countryCode'];
-  
-  const customFilters: Record<string, any> = {
-    isPurchased: Boolean(query?.isPurchased)
-  };
-  
-  if (query.phoneNumberPattern) {
-    customFilters.phoneNumber = { contains: query.phoneNumberPattern as string };
+
+  const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
+
+  const customFilters: Record<string, any> = {};
+
+
+  if (query.isPurchased !== undefined) {
+    if (query.isPurchased === "true" || query.isPurchased === true) {
+      // console.log("here true")
+      customFilters.isPurchased = true;
+    } else if (query.isPurchased === "false" || query.isPurchased === false) {
+      // console.log("here false")
+      customFilters.isPurchased = false;
+    }
   }
-  
+
+  if (query.phoneNumberPattern) {
+    customFilters.phoneNumber = {
+      contains: query.phoneNumberPattern as string,
+    };
+  }
+
   if (query.capability) {
-    const capabilities = Array.isArray(query.capability) 
-      ? query.capability 
+    const capabilities = Array.isArray(query.capability)
+      ? query.capability
       : [query.capability];
     customFilters.capabilities = { hasSome: capabilities };
   }
-  
+
   const result = await queryBuilder
     .search(searchableFields)
     .filter()
     .rawFilter(customFilters)
     .include({
-      organization: true
+      organization: true,
     })
     .sort()
     .paginate()
     .fields()
     .execute();
-  
+
   const meta = await queryBuilder.countTotal();
-  
+
   return {
     meta,
-    data: result
+    data: result,
   };
 };
 
@@ -135,7 +147,7 @@ const updateTwilioPhoneNumberIntoDB = async (sid: string, payload: any) => {
       },
       origin: updatedNumber.origin,
     };
-  } catch (error:any) {
+  } catch (error: any) {
     throw new AppError(
       status.INTERNAL_SERVER_ERROR,
       `Failed to update phone number: ${error.message}`
@@ -146,7 +158,7 @@ const updateTwilioPhoneNumberIntoDB = async (sid: string, payload: any) => {
 const deleteTwilioPhoneNumberFromDB = async (sid: string): Promise<void> => {
   try {
     await twilioClient.incomingPhoneNumbers(sid).remove();
-  } catch (error:any) {
+  } catch (error: any) {
     throw new AppError(
       status.INTERNAL_SERVER_ERROR,
       `Failed to delete phone number: ${error.message}`

@@ -176,7 +176,7 @@ model Agent {
   endWorkDateTime   DateTime?
 
   // Call metrics
-  totalCalls   Int @default(0)
+  // totalCalls   Int @default(0)
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
@@ -252,12 +252,12 @@ model Organization {
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
 
-  aiagent aiagent?
+  aiagent aiagents?
 
   @@map("organizations")
 }
 
-model aiagent {
+model aiagents {
   id String @id @default(auto()) @map("_id") @db.ObjectId
   agentId String @unique // ElevenLabs agent ID
   organizationId String @unique @db.ObjectId
@@ -268,7 +268,7 @@ model aiagent {
   organization Organization @relation(fields: [organizationId], references: [id])
   callLogs aicalllogs[] // 1-to-many relation
 
-  @@map("aiagent")
+  @@map("aiagents")
 }
 
 model aicalllogs {
@@ -287,7 +287,7 @@ model aicalllogs {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  aiagent aiagent @relation(fields: [agent_id], references: [agentId])
+  aiagents aiagents @relation(fields: [agent_id], references: [agentId])
 
   @@map("aicalllogs")
 }
