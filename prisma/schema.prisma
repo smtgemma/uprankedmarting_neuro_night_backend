@@ -20,19 +20,6 @@ enum UserStatus {
   DELETED
 }
 
-// enum CallStatus {
-//   INITIATED
-//   ANSWERED
-//   MISSED
-//   DROPPED
-// }
-
-// enum PlanLevel {
-//   ESSENTIALS
-//   GROWTH
-//   ENTERPRISE
-//   CUSTOM
-// }
 enum PlanLevel {
   only_real_agent
   only_ai
@@ -251,6 +238,7 @@ model Organization {
   voice                 UploadVoice?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
+  questions             Question[] // ADD THIS LINE - Questions relation
 
   aiagent aiagents?
 
@@ -428,6 +416,7 @@ model UploadVoice {
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
+
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   organizationId    String       @db.ObjectId
@@ -455,6 +444,7 @@ model OrganizationDoc {
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  // REMOVE THIS LINE: questions             Question[]
 
   @@map("company_docs")
 }
@@ -617,4 +607,20 @@ model AvailableTwilioNumber {
   organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
 
   @@map("available_twilio_numbers")
+}
+
+model Question {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  org_id            String   @db.ObjectId
+  question_text     String
+  question_keywords String[] @default([])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@map("questions")
 }

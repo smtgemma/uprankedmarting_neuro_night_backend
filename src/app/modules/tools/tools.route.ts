@@ -5,7 +5,6 @@ import { ToolsValidation } from "./tools.validation";
 import { ToolsController } from "./tools.controller";
 import validateRequest from "../../middlewares/validateRequest";
 
-
 const router = Router();
 
 router.post(
@@ -13,6 +12,32 @@ router.post(
   // auth(UserRole.organization_admin, UserRole.super_admin),
   // validateRequest(ToolsValidation.CreateLeadSchema),
   ToolsController.createHubSpotLead
+);
+
+router.get(
+  "/export/:organizationId",
+  // auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.exportOrganizationData
+);
+
+router.get(
+  "/organization/:orgId",
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.getQuestionsByOrganization
+);
+
+
+router.get(
+  "/organization/:orgId/export",
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.getQuestionsByOrganization
+);
+
+router.post(
+  "/add-questions-to-sheets/:orgId",
+  // auth(UserRole.organization_admin, UserRole.super_admin),
+  // validateRequest(ToolsValidation.questionValidationSchema),
+  ToolsController.addQuestionToGoogleSheets
 );
 
 export const ToolsRoutes = router;
