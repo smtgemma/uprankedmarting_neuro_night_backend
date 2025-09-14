@@ -249,15 +249,20 @@ const getAgentsManagementInfo = async (
     role: UserRole.agent,
   };
 
-
-
   // Search functionality
   if (searchTerm) {
     whereClause.OR = [
       { name: { contains: searchTerm, mode: "insensitive" } },
       { email: { contains: searchTerm, mode: "insensitive" } },
       { phone: { contains: searchTerm, mode: "insensitive" } },
+       { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
     ];
+  }
+
+  if (searchTerm === "employeeId") {
+    whereClause.Agent = {
+      
+    };
   }
 
   // console.log(whereClause);
@@ -334,8 +339,6 @@ const getSingleAgentInfo = async (
     isDeleted: false,
     role: UserRole.agent,
   };
-
-
 
   // Search functionality
   if (searchTerm) {
@@ -575,7 +578,7 @@ const getAllAgentForAdmin = async (
                 organization: {
                   select: {
                     id: true,
-                    name: true
+                    name: true,
                   },
                 },
                 agentUserId: true,
@@ -1492,7 +1495,6 @@ const getOrganizationAssignments = async (organizationId: string) => {
 
   return assignments;
 };
-
 
 export const AssignmentService = {
   requestAgentAssignment,
