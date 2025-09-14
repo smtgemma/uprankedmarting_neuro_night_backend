@@ -87,17 +87,15 @@ model User {
   isResetPassword   Boolean   @default(false)
   canResetPassword  Boolean   @default(false)
   isResentOtp       Boolean   @default(false)
-  otp               Int? // New field for OTP
-  otpExpiresAt      DateTime? // New field for OTP expiration
+  otp               Int?
+  otpExpiresAt      DateTime?
 
   status UserStatus @default(ACTIVE)
   role   UserRole   @default(organization_admin)
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   Agent             Agent?
   ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
   ServiceFeedbacks  ServiceFeedback[]
@@ -138,21 +136,18 @@ model Agent {
   sip_username String?
   sip_password String?
 
-  // Personal info
   dateOfBirth    DateTime
   gender         String
   address        String
   emergencyPhone String
   ssn            String?
 
-  // Professional info 
   skills String[] @default([])
 
   employeeId  String?
   isAvailable Boolean @default(true)
   assignTo    String? @db.ObjectId
 
-  // employment information
   jobTitle       String
   employmentType employmentType
   department     String
@@ -162,12 +157,10 @@ model Agent {
   startWorkDateTime DateTime?
   endWorkDateTime   DateTime?
 
-  // Call metrics
   totalCalls   Int @default(0)
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
-  // Relations
   user           User            @relation(fields: [userId], references: [id])
   organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
@@ -190,17 +183,15 @@ model AgentAssignment {
   agentUserId    String           @db.ObjectId
   organizationId String           @db.ObjectId
   status         AssignmentStatus @default(PENDING)
-  assignedBy     String?          @db.ObjectId // User who made the assignment
+  assignedBy     String?          @db.ObjectId
   assignedAt     DateTime         @default(now())
   approvedAt     DateTime?
   rejectedAt     DateTime?
-  reason         String? // Reason for rejection if applicable
+  reason         String?
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
@@ -219,12 +210,14 @@ model Organization {
   agentVoiceUrl String?
   leadQuestions String[] @default([])
 
-  // Timestamps
+  googleSheetsSpreadsheetId String?
+  googleSheetsCredentials   Json?
+  lastSyncedAt              DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
-  agents                Agent[] // One Organization can have multiple Agents
+  agents                Agent[]
   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions         Subscription[]
   documents             OrganizationDoc[]
@@ -234,7 +227,7 @@ model Organization {
   voice                 UploadVoice?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
-  questions             Question[] // ADD THIS LINE - Questions relation
+  questions             Question[]
   qaPairs               QaPair[]
 
   @@map("organizations")
@@ -247,7 +240,6 @@ model UploadVoice {
   requires_verification Boolean
   organizationId        String  @unique @db.ObjectId
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -258,7 +250,6 @@ model aiagent {
   id             String   @id @default(auto()) @map("_id") @db.ObjectId
   agentId        String   @unique
   organizationId String   @unique
-  // Timestamps
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -272,7 +263,6 @@ model AiknowledgeBase {
   knowledgeBaseName String
   Organization      Organization @relation(fields: [organizationId], references: [id])
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -283,16 +273,13 @@ model OrganizationDoc {
   docFor         DocFor @default(AI)
   content        Json
 
-  // ai
   aiDocId   String?
   aiDocName String?
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  // REMOVE THIS LINE: questions             Question[]
 
   @@map("company_docs")
 }
@@ -344,8 +331,8 @@ model Subscription {
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  organizationId String @db.ObjectId // *
-  receiverId     String @db.ObjectId // *
+  organizationId String @db.ObjectId
+  receiverId     String @db.ObjectId
 
   from_number  String
   to_number    String
@@ -355,8 +342,8 @@ model Call {
   recordingUrl String?
   summary      String?
 
-  callTime          DateTime  @default(now()) // 
-  callType          String // direction
+  callTime          DateTime  @default(now())
+  callType          String
   call_duration     Int?
   call_started_at   DateTime  @default(now())
   call_completed_at DateTime?
@@ -366,11 +353,9 @@ model Call {
   recording_sid      String?
   recording_status   String?
   recording_url      String?
-  // Timestamps
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  // Relations
   receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
   organization Organization @relation(fields: [organizationId], references: [id])
 
@@ -384,7 +369,6 @@ model ServiceFeedback {
   rating       Int
   feedbackText String?
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -399,7 +383,6 @@ model AgentFeedback {
   rating       Int
   feedbackText String?
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -415,7 +398,6 @@ model ToolIntegration {
   toolType  String
   config    Json
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
@@ -430,7 +412,7 @@ model AvailableTwilioNumber {
   phoneNumber  String  @unique
   friendlyName String
 
-  capabilities Json // Stores { voice: boolean, sms: boolean, mms: boolean, fax: boolean }
+  capabilities Json
   beta         Boolean   @default(false)
   countryCode  String    @default("US")
   isPurchased  Boolean   @default(false)
@@ -450,11 +432,9 @@ model Question {
   question_text     String
   question_keywords String[] @default([])
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
-  // Relations
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("questions")
@@ -469,7 +449,6 @@ model QaPair {
 
   createdAt DateTime @default(now())
 
-  // Relations
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")

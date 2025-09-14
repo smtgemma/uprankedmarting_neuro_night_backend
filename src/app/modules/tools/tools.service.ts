@@ -1,16 +1,20 @@
 import status from "http-status";
 import axios from "axios";
-import prisma from "../../utils/prisma";
-import AppError from "../../errors/AppError";
-import config from "../../config";
-import path from "path";
+
 import ExcelJS from "exceljs";
-import fs from "fs";
 import { google } from "googleapis";
-import sheetsapi from "../../utils/googlesheetsapi.json";
+import config from "../../config";
+import AppError from "../../errors/AppError";
+import prisma from "../../utils/prisma";
+import { Prisma } from "@prisma/client";
+
+// Interface for Google Sheets credentials
+interface GoogleSheetsCredentials {
+  client_email: string;
+  private_key: string;
+}
 
 const createHubSpotLead = async () => {
-  // Dummy data
   const dummyData = {
     firstName: "S M HASAN",
     lastName: "JAMIL",
@@ -18,7 +22,6 @@ const createHubSpotLead = async () => {
     phone: "+1234567890",
   };
 
-  // Prepare HubSpot payload
   const hubspotPayload = {
     properties: {
       firstname: dummyData.firstName,
@@ -28,7 +31,6 @@ const createHubSpotLead = async () => {
     },
   };
 
-  // Get HubSpot API key from environment
   const hubspotApiKey = config.hubspot_api_key;
   if (!hubspotApiKey) {
     throw new AppError(
@@ -37,7 +39,6 @@ const createHubSpotLead = async () => {
     );
   }
 
-  // Send POST request to HubSpot
   try {
     const response = await axios.post(
       "https://api.hubapi.com/crm/v3/objects/contacts",
@@ -64,10 +65,7 @@ const createHubSpotLead = async () => {
   }
 };
 
-// =======================================
-
 const exportOrganizationData = async (organizationId: string, res: any) => {
-  // 1. Fetch all organizations matching this ID
   const organizations = await prisma.organization.findMany({
     where: { id: organizationId },
   });
@@ -79,23 +77,19 @@ const exportOrganizationData = async (organizationId: string, res: any) => {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Organizations");
 
-  // 2. Dynamically create headers
   const headers = Object.keys(organizations[0]);
   sheet.addRow(headers);
 
-  // helper function to stringify values
   const stringifyValue = (val: any): string => {
     if (val instanceof Date) return val.toISOString();
     if (typeof val === "object" && val !== null) return JSON.stringify(val);
     return val ?? "";
   };
 
-  // 3. Add all organizations
   organizations.forEach((org) => {
     sheet.addRow(headers.map((key) => stringifyValue((org as any)[key])));
   });
 
-  // 4. Stream file
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -126,30 +120,25 @@ const getQuestionsByOrganization = async (
     );
   }
 
-  // If response object is provided, export to Excel
   if (res) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Questions");
 
-    // Dynamically create headers from the first question object
     const headers = Object.keys(questions[0]);
     sheet.addRow(headers);
 
-    // Helper function to stringify values
     const stringifyValue = (val: any): string => {
       if (val instanceof Date) return val.toISOString();
       if (typeof val === "object" && val !== null) return JSON.stringify(val);
       return val ?? "";
     };
 
-    // Add all questions
     questions.forEach((question) => {
       sheet.addRow(
         headers.map((key) => stringifyValue((question as any)[key]))
       );
     });
 
-    // Set response headers for Excel download
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -159,13 +148,11 @@ const getQuestionsByOrganization = async (
       `attachment; filename=questions-org-${organizationId}.xlsx`
     );
 
-    // Stream the Excel file
     await workbook.xlsx.write(res);
     res.end();
-    return null; // Return null since the response is handled
+    return null;
   }
 
-  // If no response object, return the questions data
   return questions;
 };
 
@@ -179,33 +166,127 @@ const getColumnLetter = (colIndex: number): string => {
   return letter;
 };
 
-const addQaPairsToGoogleSheets = async (orgId: string) => {
+const configureGoogleSheets = async (
+  orgId: string,
+  spreadsheetId: string,
+  credentials: GoogleSheetsCredentials,
+  user: any // From auth middleware
+) => {
   try {
-    // Validate orgId format
-   
-
-    // Check if organization exists
+    // Check if organization exists and verify user authorization
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
+      select: { id: true, ownerId: true },
     });
     if (!organization) {
       throw new AppError(status.NOT_FOUND, "Organization not found");
     }
 
-    // Fetch QaPairs for the organization
-    const qaPairs = await prisma.qaPair.findMany({
-      where: { org_id: orgId },
-      orderBy: { conv_id: "asc" }, // Sort by conv_id for consistent grouping
-    });
-
-    if (!qaPairs || qaPairs.length === 0) {
+    // Authorization check: user must be organization_admin or super_admin
+    if (
+      !["organization_admin", "super_admin"].includes(user.role)
+    ) {
       throw new AppError(
-        status.NOT_FOUND,
-        "No Q&A pairs found for this organization"
+        status.FORBIDDEN,
+        "You are not authorized to configure Google Sheets for this organization"
       );
     }
 
-    // Validate QaPair data
+    // Validate credentials by making a test API call
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: credentials.client_email,
+        private_key: credentials.private_key,
+      },
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+
+    const sheets = google.sheets({ version: "v4", auth });
+
+    try {
+      await sheets.spreadsheets.get({
+        spreadsheetId,
+      });
+    } catch (error) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Invalid Google Sheets credentials or spreadsheet ID"
+      );
+    }
+
+    // Save credentials and spreadsheet ID to the organization
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: {
+        googleSheetsSpreadsheetId: spreadsheetId,
+        googleSheetsCredentials: credentials as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      message: "Google Sheets configuration saved successfully",
+    };
+  } catch (error: any) {
+    console.error("Error configuring Google Sheets:", {
+      message: error.message,
+      stack: error.stack,
+      orgId,
+    });
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      `Failed to configure Google Sheets: ${error.message}`
+    );
+  }
+};
+
+const addQaPairsToGoogleSheets = async (orgId: string) => {
+  try {
+    const organization = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: {
+        id: true,
+        googleSheetsSpreadsheetId: true,
+        googleSheetsCredentials: true,
+        lastSyncedAt: true,
+      },
+    });
+
+    if (
+      !organization ||
+      !organization.googleSheetsSpreadsheetId ||
+      !organization.googleSheetsCredentials
+    ) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Google Sheets not configured for this organization"
+      );
+    }
+
+    const credentials = organization.googleSheetsCredentials as unknown as GoogleSheetsCredentials;
+    if (!credentials.client_email || !credentials.private_key) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Invalid Google Sheets credentials: client_email and private_key are required"
+      );
+    }
+
+    const qaPairs = await prisma.qaPair.findMany({
+      where: {
+        org_id: orgId,
+        createdAt: {
+          gt: organization.lastSyncedAt || undefined,
+        },
+      },
+      orderBy: { conv_id: "asc" },
+    });
+
+    if (!qaPairs || qaPairs.length === 0) {
+      return {
+        message: "No new Q&A pairs to sync for this organization",
+        data: null,
+      };
+    }
+
     qaPairs.forEach((qaPair, index) => {
       if (!qaPair.question || qaPair.question.trim() === "") {
         throw new AppError(
@@ -227,7 +308,6 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       }
     });
 
-    // Group QaPairs by conv_id
     const groupedByConvId: { [key: string]: any[] } = {};
     qaPairs.forEach((qaPair) => {
       if (!groupedByConvId[qaPair.conv_id]) {
@@ -236,16 +316,14 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       groupedByConvId[qaPair.conv_id].push(qaPair);
     });
 
-    // Prepare data for Google Sheets
     const headers = ["conv_id", "question", "answer", "createdAt"];
     const values: any[][] = [];
     Object.keys(groupedByConvId).forEach((convId, index) => {
-      // Add a separator row with conv_id title (skip for first group)
       if (index > 0) {
-        values.push([""]); // Blank row for separation
+        values.push([""]);
       }
-      values.push([`Call ID: ${convId}`]); // Title row for conv_id
-      values.push(headers); // Headers for the group
+      values.push([`Call ID: ${convId}`]);
+      values.push(headers);
       groupedByConvId[convId].forEach((qaPair) => {
         values.push([
           qaPair.conv_id,
@@ -256,34 +334,27 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       });
     });
 
-    // Authenticate with Google Sheets API
     const auth = new google.auth.GoogleAuth({
-      credentials: sheetsapi,
+      credentials: {
+        client_email: credentials.client_email,
+        private_key: credentials.private_key,
+      },
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
     const sheets = google.sheets({ version: "v4", auth });
 
-    const spreadsheetId = config.google_sheets_spreadsheet_id;
-    if (!spreadsheetId) {
-      throw new AppError(
-        status.INTERNAL_SERVER_ERROR,
-        "Google Sheets spreadsheet ID not configured"
-      );
-    }
+    const spreadsheetId = organization.googleSheetsSpreadsheetId;
 
-    // Calculate range
     const columnCount = headers.length;
     const lastColumn = getColumnLetter(columnCount);
     const range = `Sheet1!A1:${lastColumn}${values.length}`;
 
-    // Clear existing data in the range
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
       range,
     });
 
-    // Write data to Google Sheet
     const response = await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
@@ -293,8 +364,13 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       },
     });
 
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { lastSyncedAt: new Date() },
+    });
+
     console.log(
-      `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls to Google Sheets:`,
+      `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls to Google Sheets for organization ${orgId}:`,
       response.data
     );
     return {
@@ -319,4 +395,5 @@ export const ToolsService = {
   exportOrganizationData,
   getQuestionsByOrganization,
   addQaPairsToGoogleSheets,
+  configureGoogleSheets,
 };

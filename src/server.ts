@@ -6,6 +6,10 @@ import cron from "node-cron";
 import prisma from "./app/utils/prisma";
 import { ToolsService } from "./app/modules/tools/tools.service";
 
+// Simple rate limiter to avoid Google Sheets API quota issues
+const rateLimit = async (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 let server: Server;
 
 const main = async () => {
@@ -25,32 +29,43 @@ const main = async () => {
       console.log("⏰ Running scheduled Q&A pairs sync to Google Sheets...");
 
       try {
-        // Fetch all organization IDs
+        // Fetch organizations with Google Sheets configured
         const organizations = await prisma.organization.findMany({
-          select: { id: true },
+          select: {
+            id: true,
+            googleSheetsSpreadsheetId: true,
+            googleSheetsCredentials: true,
+          },
+          where: {
+            googleSheetsSpreadsheetId: { not: null },
+            googleSheetsCredentials: { not: null },
+          },
         });
 
         if (organizations.length === 0) {
-          console.log("No organizations found for Q&A pairs sync.");
+          console.log("No organizations with Google Sheets configured found.");
           return;
         }
 
-        // Iterate over each organization and call addQaPairsToGoogleSheets
-        for (const org of organizations) {
-          try {
-            const result = await ToolsService.addQaPairsToGoogleSheets(org.id);
-            console.log(
-              `✅ Successfully synced Q&A pairs for organization ${org.id}:`,
-              result.message
-            );
-          } catch (error: any) {
-            console.error(
-              `❌ Failed to sync Q&A pairs for organization ${org.id}:`,
-              error.message
-            );
-            // Continue to the next organization instead of crashing
-          }
-        }
+        // Process organizations in parallel with rate limiting
+        await Promise.all(
+          organizations.map(async (org, index) => {
+            // Add a small delay to avoid hitting API rate limits (e.g., 60 requests/minute)
+            await rateLimit(index * 100); // 100ms delay between requests
+            try {
+              const result = await ToolsService.addQaPairsToGoogleSheets(org.id);
+              console.log(
+                `✅ Successfully synced Q&A pairs for organization ${org.id}:`,
+                result.message
+              );
+            } catch (error: any) {
+              console.error(
+                `❌ Failed to sync Q&A pairs for organization ${org.id}:`,
+                error.message
+              );
+            }
+          })
+        );
       } catch (error: any) {
         console.error("❌ Error during scheduled Q&A pairs sync:", error.message);
       }
@@ -60,7 +75,6 @@ const main = async () => {
   }
 };
 
-// Graceful shutdown handling
 const shutdown = () => {
   console.log("🛑 Shutting down servers...");
 

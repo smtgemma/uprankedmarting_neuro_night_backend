@@ -18,12 +18,10 @@ const exportOrganizationData = catchAsync(async (req, res) => {
   await ToolsService.exportOrganizationData(organizationId, res);
 });
 
-// Get all questions by organization ID
 const getQuestionsByOrganization = catchAsync(async (req, res) => {
   const { orgId } = req.params;
   const result = await ToolsService.getQuestionsByOrganization(orgId, res);
 
-  // If result is not null, send JSON response (for fetch-only case)
   if (result) {
     sendResponse(res, {
       statusCode: status.OK,
@@ -31,7 +29,6 @@ const getQuestionsByOrganization = catchAsync(async (req, res) => {
       data: result,
     });
   }
-  // If result is null, the response was handled by Excel export
 });
 
 const addQaPairsToGoogleSheets = catchAsync(async (req, res) => {
@@ -45,9 +42,28 @@ const addQaPairsToGoogleSheets = catchAsync(async (req, res) => {
   });
 });
 
+const configureGoogleSheets = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const { spreadsheetId, credentials } = req.body;
+  const user = req.user; // From auth middleware
+  const result = await ToolsService.configureGoogleSheets(
+    orgId,
+    spreadsheetId,
+    credentials,
+    user
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
 export const ToolsController = {
   createHubSpotLead,
   exportOrganizationData,
   getQuestionsByOrganization,
   addQaPairsToGoogleSheets,
+  configureGoogleSheets,
 };
