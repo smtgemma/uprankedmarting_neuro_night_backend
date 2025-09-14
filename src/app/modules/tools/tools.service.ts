@@ -181,6 +181,9 @@ const getColumnLetter = (colIndex: number): string => {
 
 const addQaPairsToGoogleSheets = async (orgId: string) => {
   try {
+    // Validate orgId format
+   
+
     // Check if organization exists
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -192,6 +195,7 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     // Fetch QaPairs for the organization
     const qaPairs = await prisma.qaPair.findMany({
       where: { org_id: orgId },
+      orderBy: { conv_id: "asc" }, // Sort by conv_id for consistent grouping
     });
 
     if (!qaPairs || qaPairs.length === 0) {
@@ -223,6 +227,35 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       }
     });
 
+    // Group QaPairs by conv_id
+    const groupedByConvId: { [key: string]: any[] } = {};
+    qaPairs.forEach((qaPair) => {
+      if (!groupedByConvId[qaPair.conv_id]) {
+        groupedByConvId[qaPair.conv_id] = [];
+      }
+      groupedByConvId[qaPair.conv_id].push(qaPair);
+    });
+
+    // Prepare data for Google Sheets
+    const headers = ["conv_id", "question", "answer", "createdAt"];
+    const values: any[][] = [];
+    Object.keys(groupedByConvId).forEach((convId, index) => {
+      // Add a separator row with conv_id title (skip for first group)
+      if (index > 0) {
+        values.push([""]); // Blank row for separation
+      }
+      values.push([`Call ID: ${convId}`]); // Title row for conv_id
+      values.push(headers); // Headers for the group
+      groupedByConvId[convId].forEach((qaPair) => {
+        values.push([
+          qaPair.conv_id,
+          qaPair.question,
+          qaPair.answer,
+          qaPair.createdAt.toISOString(),
+        ]);
+      });
+    });
+
     // Authenticate with Google Sheets API
     const auth = new google.auth.GoogleAuth({
       credentials: sheetsapi,
@@ -239,40 +272,18 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       );
     }
 
-    // Define headers explicitly (excluding updatedAt)
-    const headers = [
-      "id",
-      "org_id",
-      "conv_id",
-      "question",
-      "answer",
-      "createdAt",
-    ];
+    // Calculate range
     const columnCount = headers.length;
     const lastColumn = getColumnLetter(columnCount);
-
-    // Prepare data to append
-    const values = qaPairs.map((qaPair) =>
-      headers.map((key) => {
-        const value = (qaPair as any)[key];
-        if (value instanceof Date) return value.toISOString();
-        return value ?? "";
-      })
-    );
-
-    // Prepend headers to values
-    values.unshift(headers);
-
-    // Dynamic range based on number of columns
     const range = `Sheet1!A1:${lastColumn}${values.length}`;
 
-    // Clear existing data in the range to avoid overlap
+    // Clear existing data in the range
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
       range,
     });
 
-    // Append data to Google Sheet
+    // Write data to Google Sheet
     const response = await sheets.spreadsheets.values.update({
       spreadsheetId,
       range,
@@ -283,11 +294,11 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     });
 
     console.log(
-      `Successfully added ${qaPairs.length} Q&A pairs to Google Sheets:`,
+      `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls to Google Sheets:`,
       response.data
     );
     return {
-      message: `Successfully added ${qaPairs.length} Q&A pairs`,
+      message: `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls`,
       data: response.data,
     };
   } catch (error: any) {
