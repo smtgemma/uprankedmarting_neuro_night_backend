@@ -32,41 +32,34 @@ export interface MonthlyCallData {
   humanCalls: number;
 }
 
-// Status mapping
-const HUMAN_CALL_STATUSES = {
-  COMPLETED: "COMPLETED",
-  CANCELED: "CANCELED",
-  NO_ANSWER: "NO_ANSWER",
-  BUSY: "BUSY",
-  FAILED: "FAILED",
-  IN_PROGRESS: "IN_PROGRESS",
-  RINGING: "RINGING",
-  INITIATED: "INITIATED",
-};
+// Status constants
+const HUMAN_CALL_STATUS = {
+  COMPLETED: "completed",
+  CANCELED: "canceled",
+  NO_ANSWER: "no-answer",
+  BUSY: "busy",
+  FAILED: "failed",
+  IN_PROGRESS: "in-progress",
+  RINGING: "ringing",
+  INITIATED: "initiated",
+} as const;
 
-const AI_CALL_STATUSES = {
+const AI_CALL_STATUS = {
   COMPLETED: "completed",
   IN_PROGRESS: "in-progress",
   FAILED: "failed",
-};
+} as const;
 
-const getDashboardStats = async (user: User): Promise<any> => {
+const getDashboardStats = async (user: User): Promise<DashboardStats> => {
   try {
     // Get organization ID for the user
     const organization = await prisma.organization.findFirst({
-      where: {
-        ownerId: user.id,
-      },
-      select: {
-        id: true,
-      },
+      where: { ownerId: user.id },
+      select: { id: true },
     });
 
     if (!organization) {
-      throw new AppError(
-        status.NOT_FOUND,
-        "Organization not found for this user"
-      );
+      throw new AppError(status.NOT_FOUND, "Organization not found for this user");
     }
 
     const organizationId = organization.id;
@@ -76,6 +69,10 @@ const getDashboardStats = async (user: User): Promise<any> => {
     const startOfToday = new Date(today.setHours(0, 0, 0, 0));
     const endOfToday = new Date(today.setHours(23, 59, 59, 999));
 
+    // Convert to Unix timestamp for AI calls
+    const startOfTodayUnix = Math.floor(startOfToday.getTime() / 1000);
+    const endOfTodayUnix = Math.floor(endOfToday.getTime() / 1000);
+
     // Execute all queries in parallel for efficiency
     const [
       totalHumanCalls,
@@ -83,76 +80,77 @@ const getDashboardStats = async (user: User): Promise<any> => {
       todayHumanCalls,
       todayHumanSuccessCalls,
       todayAiSuccessCalls,
-      totalSuccessCalls,
+      totalHumanSuccessCalls,
+      totalAISuccessCalls,
       humanCallDurationStats,
       aiCallDurationStats,
     ] = await Promise.all([
-      // 1. Total Human Calls (all statuses)
-      prisma.call.count({
-        where: { organizationId },
+      // Total Human Calls (all statuses)
+      prisma.call.count({ where: { organizationId } }),
+
+      // Total AI Calls (all statuses)
+      prisma.aicalllogs.count({
+        where: { aiagents: { organizationId } },
       }),
 
-      // 2. Total AI Calls (all statuses)
+      // Today's Human Calls (all statuses)
+      prisma.call.count({
+        where: {
+          organizationId,
+          call_time: { gte: startOfToday, lte: endOfToday },
+        },
+      }),
+
+      // Today's human agent Success Calls (COMPLETED only)
+      prisma.call.count({
+        where: {
+          organizationId,
+          call_time: { gte: startOfToday, lte: endOfToday },
+          call_status: HUMAN_CALL_STATUS.COMPLETED,
+        },
+      }),
+
+      // Today's AI Success Calls (COMPLETED only)
       prisma.aicalllogs.count({
         where: {
           aiagents: { organizationId },
+          status: AI_CALL_STATUS.COMPLETED,
+          start_time_unix_secs: { gte: startOfTodayUnix, lte: endOfTodayUnix },
         },
       }),
 
-      // 3. Today's Human Calls (all statuses)
+      // Total Human agent Success Calls (COMPLETED only)
       prisma.call.count({
         where: {
           organizationId,
-          call_time: { gte: startOfToday, lte: endOfToday },
+          call_status: HUMAN_CALL_STATUS.COMPLETED,
         },
       }),
 
-      // 4. Today's human agent Success Calls (COMPLETED only)
-      prisma.call.count({
-        where: {
-          organizationId,
-          call_time: { gte: startOfToday, lte: endOfToday },
-          call_status: HUMAN_CALL_STATUSES.COMPLETED,
-        },
-      }),
-     // 5. Today's AI Success Calls (COMPLETED only)
+      // Total AI Success Calls (COMPLETED only)
       prisma.aicalllogs.count({
         where: {
-          aiagents: {
-            organizationId: organizationId, // filter by organization
-          },
-          status: AI_CALL_STATUSES.COMPLETED, // only completed calls
-          start_time_unix_secs: {
-            gte: Math.floor(startOfToday.getTime() / 1000), // convert to Unix seconds
-            lte: Math.floor(endOfToday.getTime() / 1000),
-          },
+          aiagents: { organizationId },
+          status: AI_CALL_STATUS.COMPLETED,
         },
       }),
 
-      // 6. Total Success Calls (COMPLETED only)
-      prisma.call.count({
-        where: {
-          organizationId,
-          call_status: HUMAN_CALL_STATUSES.COMPLETED,
-        },
-      }),
-
-      // 7. Human Call Duration Stats (for average)
+      // Human Call Duration Stats (for average)
       prisma.call.aggregate({
         where: {
           organizationId,
-          call_status: HUMAN_CALL_STATUSES.COMPLETED,
+          call_status: HUMAN_CALL_STATUS.COMPLETED,
           call_duration: { not: null },
         },
         _avg: { call_duration: true },
         _count: { call_duration: true },
       }),
 
-      // 8. AI Call Duration Stats (for average)
+      // AI Call Duration Stats (for average)
       prisma.aicalllogs.aggregate({
         where: {
           aiagents: { organizationId },
-          status: AI_CALL_STATUSES.COMPLETED,
+          status: AI_CALL_STATUS.COMPLETED,
           call_duration_secs: { not: null },
         },
         _avg: { call_duration_secs: true },
@@ -160,27 +158,25 @@ const getDashboardStats = async (user: User): Promise<any> => {
       }),
     ]);
 
-    // Calculate average call times
+    // Calculate metrics
+    const todayTotalSuccessCalls = todayHumanSuccessCalls + todayAiSuccessCalls;
+    const totalSuccessCalls = totalHumanSuccessCalls + totalAISuccessCalls;
+
     const avgHumanCallTime = humanCallDurationStats._avg.call_duration || 0;
     const avgAICallTime = aiCallDurationStats._avg.call_duration_secs || 0;
 
     // Calculate weighted average for total call time
-    const totalHumanDuration =
-      (humanCallDurationStats._avg.call_duration || 0) *
-      (humanCallDurationStats._count.call_duration || 0);
-    const totalAIDuration =
-      (aiCallDurationStats._avg.call_duration_secs || 0) *
-      (aiCallDurationStats._count.call_duration_secs || 0);
-    const totalCallsWithDuration =
-      (humanCallDurationStats._count.call_duration || 0) +
+    const totalHumanDuration = avgHumanCallTime * (humanCallDurationStats._count.call_duration || 0);
+    const totalAIDuration = avgAICallTime * (aiCallDurationStats._count.call_duration_secs || 0);
+    const totalCallsWithDuration = 
+      (humanCallDurationStats._count.call_duration || 0) + 
       (aiCallDurationStats._count.call_duration_secs || 0);
 
-    const avgTotalCallTime =
-      totalCallsWithDuration > 0
-        ? (totalHumanDuration + totalAIDuration) / totalCallsWithDuration
-        : 0;
+    const avgTotalCallTime = totalCallsWithDuration > 0
+      ? (totalHumanDuration + totalAIDuration) / totalCallsWithDuration
+      : 0;
 
-    // 8. Monthly Report
+    // Monthly Report
     const monthlyReport = await getMonthlyCallData(organizationId, 6);
 
     return {
@@ -188,10 +184,7 @@ const getDashboardStats = async (user: User): Promise<any> => {
       totalHumanCalls,
       totalAICalls,
       todayHumanCalls,
-      todaySuccessCalls:{
-        human: todayHumanSuccessCalls,
-        ai: todayAiSuccessCalls
-      },
+      todaySuccessCalls: todayTotalSuccessCalls,
       totalSuccessCalls,
       avgHumanCallTime: Math.round(avgHumanCallTime),
       avgAICallTime: Math.round(avgAICallTime),
@@ -207,48 +200,27 @@ const getDashboardStats = async (user: User): Promise<any> => {
   }
 };
 
-const getMonthlyCallData = async (
-  organizationId: string,
-  months: number = 6
-): Promise<MonthlyCallData[]> => {
+const getMonthlyCallData = async (organizationId: string, months: number = 6): Promise<MonthlyCallData[]> => {
   const monthlyData: MonthlyCallData[] = [];
-  const monthNames = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   for (let i = months - 1; i >= 0; i--) {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    const monthEnd = new Date(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
+    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    // Execute both queries in parallel
+    // Convert to Unix timestamp for AI calls
+    const monthStartUnix = Math.floor(monthStart.getTime() / 1000);
+    const monthEndUnix = Math.floor(monthEnd.getTime() / 1000);
+
     const [humanCalls, aiCalls] = await Promise.all([
       // Human calls for the month (COMPLETED only)
       prisma.call.count({
         where: {
           organizationId,
           call_time: { gte: monthStart, lte: monthEnd },
-          call_status: HUMAN_CALL_STATUSES.COMPLETED,
+          call_status: HUMAN_CALL_STATUS.COMPLETED,
         },
       }),
 
@@ -256,19 +228,18 @@ const getMonthlyCallData = async (
       prisma.aicalllogs.count({
         where: {
           aiagents: { organizationId },
-          status: AI_CALL_STATUSES.COMPLETED,
-          createdAt: { gte: monthStart, lte: monthEnd },
+          status: AI_CALL_STATUS.COMPLETED,
+          start_time_unix_secs: { gte: monthStartUnix, lte: monthEndUnix },
         },
-      }),
+      })
     ]);
 
     const successCalls = humanCalls + aiCalls;
-    const totalCalls = humanCalls + aiCalls;
 
     monthlyData.push({
       month: monthNames[date.getMonth()],
       successCalls,
-      totalCalls,
+      totalCalls: successCalls, // Since we're only counting completed calls
       aiCalls,
       humanCalls,
     });
@@ -277,31 +248,7 @@ const getMonthlyCallData = async (
   return monthlyData;
 };
 
-// Additional function to get call status breakdown
-const getCallStatusBreakdown = async (organizationId: string) => {
-  const [humanStatuses, aiStatuses] = await Promise.all([
-    prisma.call.groupBy({
-      by: ["call_status"],
-      where: { organizationId },
-      _count: { id: true },
-    }),
-    prisma.aicalllogs.groupBy({
-      by: ["status"],
-      where: {
-        aiagents: { organizationId },
-      },
-      _count: { id: true },
-    }),
-  ]);
-
-  return {
-    human: humanStatuses,
-    ai: aiStatuses,
-  };
-};
-
 export const DashboardServices = {
   getDashboardStats,
   getMonthlyCallData,
-  getCallStatusBreakdown,
 };
