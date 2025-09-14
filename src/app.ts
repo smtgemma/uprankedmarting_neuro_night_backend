@@ -59,7 +59,7 @@ app.use("/api/v1", router);
 // Test route
 app.get("/", (req: Request, res: Response) => {
   res.send({
-    Message: "The server is running...",
+    Message: "Uprank server is running...",
   });
 });
 
