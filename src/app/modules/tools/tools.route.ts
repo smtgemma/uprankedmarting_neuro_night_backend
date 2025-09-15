@@ -1,43 +1,33 @@
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
-import auth from "../../middlewares/auth";
-import { ToolsValidation } from "./tools.validation";
 import { ToolsController } from "./tools.controller";
 import validateRequest from "../../middlewares/validateRequest";
+import { ToolsValidation } from "./tools.validation";
+import auth from "../../middlewares/auth";
+import { UserRole } from "@prisma/client";
 
 const router = Router();
 
-router.post(
-  "/create-lead",
-  // auth(UserRole.organization_admin, UserRole.super_admin),
-  // validateRequest(ToolsValidation.CreateLeadSchema),
-  ToolsController.createHubSpotLead
-);
+router.post("/create-lead", ToolsController.createHubSpotLead);
 
-router.get(
-  "/export/:organizationId",
-  // auth(UserRole.super_admin, UserRole.organization_admin),
-  ToolsController.exportOrganizationData
-);
+router.get("/export/:organizationId", ToolsController.exportOrganizationData);
 
-router.get(
-  "/organization/:orgId",
-  // validateRequest(ToolsValidation.questionValidationSchema),
-  ToolsController.getQuestionsByOrganization
-);
-
+router.get("/organization/:orgId", ToolsController.getQuestionsByOrganization);
 
 router.get(
   "/organization/:orgId/export",
-  // validateRequest(ToolsValidation.questionValidationSchema),
   ToolsController.getQuestionsByOrganization
 );
 
 router.post(
-  "/add-questions-to-sheets/:orgId",
-  // auth(UserRole.organization_admin, UserRole.super_admin),
-  // validateRequest(ToolsValidation.questionValidationSchema),
-  ToolsController.addQuestionToGoogleSheets
+  "/add-qa-pairs-to-sheets/:orgId",
+  ToolsController.addQaPairsToGoogleSheets
+);
+
+router.post(
+  "/configure-google-sheets/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  validateRequest(ToolsValidation.configureGoogleSheetsSchema),
+  ToolsController.configureGoogleSheets
 );
 
 export const ToolsRoutes = router;

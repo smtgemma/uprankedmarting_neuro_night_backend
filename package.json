@@ -9,12 +9,12 @@
   },
   "scripts": {
     "postinstall": "npx prisma generate",
-    "start": "node ./dist/server.js",
+    "start": "node init && node ./dist/server.js",
     "pm": "npx prisma migrate dev ",
     "pg": "npx prisma generate",
     "generate-module": "ts-node generate-module.ts",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc"
+    "dev": "node init && ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "node init && tsc"
   },
   "devDependencies": {
     "@types/body-parser": "^1.19.6",
@@ -54,6 +54,7 @@
     "multer": "^2.0.0",
     "multer-storage-cloudinary": "^4.0.0",
     "ngrok": "^5.0.0-beta.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.3",
     "pdf-parse": "^1.1.1",
     "pg": "^8.16.3",
