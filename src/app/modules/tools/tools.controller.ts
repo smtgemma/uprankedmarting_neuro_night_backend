@@ -42,16 +42,52 @@ const addQaPairsToGoogleSheets = catchAsync(async (req, res) => {
   });
 });
 
-const configureGoogleSheets = catchAsync(async (req, res) => {
+// NEW: Get Google Sheets connect URL
+const getGoogleSheetsConnectUrl = catchAsync(async (req, res) => {
   const { orgId } = req.params;
-  const { spreadsheetId, credentials } = req.body;
-  const user = req.user; // From auth middleware
-  const result = await ToolsService.configureGoogleSheets(
-    orgId,
-    spreadsheetId,
-    credentials,
-    user
-  );
+  const user = req.user;
+  const result = await ToolsService.getGoogleSheetsConnectUrl(orgId, user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: {
+      authUrl: result.authUrl
+    },
+  });
+});
+
+// NEW: Handle Google OAuth callback
+const handleGoogleSheetsCallback = catchAsync(async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!code || !state) {
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing_parameters`);
+  }
+
+  try {
+    const result = await ToolsService.handleGoogleSheetsCallback(
+      code as string,
+      state as string
+    );
+
+    // Redirect to frontend with success message
+    res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(result.spreadsheetUrl)}`
+    );
+  } catch (error: any) {
+    console.error("Google Sheets callback error:", error);
+    res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard/integrations?error=connection_failed&message=${encodeURIComponent(error.message)}`
+    );
+  }
+});
+
+// NEW: Disconnect Google Sheets
+const disconnectGoogleSheets = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const user = req.user;
+  const result = await ToolsService.disconnectGoogleSheets(orgId, user);
 
   sendResponse(res, {
     statusCode: status.OK,
@@ -60,10 +96,26 @@ const configureGoogleSheets = catchAsync(async (req, res) => {
   });
 });
 
+// NEW: Get Google Sheets status
+const getGoogleSheetsStatus = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const user = req.user;
+  const result = await ToolsService.getGoogleSheetsStatus(orgId, user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Google Sheets status retrieved successfully",
+    data: result,
+  });
+});
+
 export const ToolsController = {
   createHubSpotLead,
   exportOrganizationData,
   getQuestionsByOrganization,
   addQaPairsToGoogleSheets,
-  configureGoogleSheets,
+  getGoogleSheetsConnectUrl,
+  handleGoogleSheetsCallback,
+  disconnectGoogleSheets,
+  getGoogleSheetsStatus,
 };

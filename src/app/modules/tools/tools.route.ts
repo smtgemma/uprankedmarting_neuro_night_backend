@@ -23,11 +23,27 @@ router.post(
   ToolsController.addQaPairsToGoogleSheets
 );
 
-router.post(
-  "/configure-google-sheets/:orgId",
+// NEW Google Sheets OAuth routes
+router.get(
+  "/google-sheets/connect/:orgId",
   auth(UserRole.super_admin, UserRole.organization_admin),
-  validateRequest(ToolsValidation.configureGoogleSheetsSchema),
-  ToolsController.configureGoogleSheets
+  ToolsController.getGoogleSheetsConnectUrl
 );
 
+router.get(
+  "/google-sheets/callback",
+  ToolsController.handleGoogleSheetsCallback
+);
+
+router.get(
+  "/google-sheets/status/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.getGoogleSheetsStatus
+);
+
+router.delete(
+  "/google-sheets/disconnect/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.disconnectGoogleSheets
+);
 export const ToolsRoutes = router;
