@@ -142,6 +142,18 @@ const getSingleUser = catchAsync(async (req, res) => {
   });
 })
 
+const getSingleAgentInfo = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await AuthService.getSingleAgentInfo(id, req.user as User);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agent fetched successfully!",
+    data: result,
+  });
+})
+
 // const getSingleUserForAdmin = catchAsync(async (req, res) => {
 //   const { id } = req.params;
 
@@ -157,6 +169,7 @@ const getSingleUser = catchAsync(async (req, res) => {
 export const AuthController = {
   login,
   getSingleUser,
+  getSingleAgentInfo,
   verifyOTP,
   changePassword,
   forgotPassword,

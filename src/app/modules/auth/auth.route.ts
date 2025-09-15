@@ -21,6 +21,12 @@ router.get(
   AuthController.getSingleUser
 );
 
+router.get(
+  "/get-agent-info/:id",
+  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
+  AuthController.getSingleAgentInfo
+);
+
 router.post(
   "/login",
   validateRequest(AuthValidation.loginValidationSchema),
