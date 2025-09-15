@@ -425,8 +425,10 @@ const AI_CALL_STATUS = {
   FAILED: "failed",
 } as const;
 
-const getDashboardStats = async (user: User): Promise<any> => {
+const getDashboardStats = async (user: User, query: Record<string, unknown>): Promise<any> => {
   try {
+    const queryMonth = Number(query?.month) || 12;  
+    const queryYear = Number(query?.year) || new Date().getFullYear();
     // Get organization ID for the user
     const organization = await prisma.organization.findFirst({
       where: { ownerId: user.id },
@@ -608,7 +610,7 @@ const getDashboardStats = async (user: User): Promise<any> => {
         : 0;
 
     // Monthly Report
-    const monthlyReport = await getMonthlyCallData(organizationId, 6);
+    const monthlyReport = await getMonthlyCallData(organizationId, queryMonth, queryYear);
     
     // Get call duration statistics
     const callDurationStats = getCallDurationStats(monthlyReport);

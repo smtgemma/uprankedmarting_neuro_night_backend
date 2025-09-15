@@ -7,7 +7,7 @@ import status from 'http-status';
 import prisma from '../../utils/prisma';
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
-  const result = await DashboardServices.getDashboardStats(req.user as User);
+  const result = await DashboardServices.getDashboardStats(req.user as User, req?.query);
 
   sendResponse(res, {
     statusCode: status.OK,
