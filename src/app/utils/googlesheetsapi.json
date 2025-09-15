@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "uprank-marketing",
+  "private_key_id": "f1d8e02cc8032f41a9d711ce39695f6670e6353e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCk0Wwvm+zOEiWy\nC1ymckXLwP7GtsuVJCtPV72IZ8vhO5Etvv+Kxy5/9UrvVCS0lahX4gXFn/6PPNfF\n7rpWklWUKAXraVpP3vdGpQzLok1uHRyp+owLST2a5vOGRAweUZigYFtd8k6vVAH+\np7cMjV9kY9E66oDyPEzwtAjSWvjeOCTa+6snDxdFyJShQSR4Mor1ssqn0b1CULJb\nqyiwLot19WEipAaQeRnJAuG3dQ8XlkMRoPf9OgIpmqi/JAlfHjuaDyXVNZTWRhNE\nmh2atOdmmRSOg/WWTYFo0mZu4xNdUSMKFxZM5uoR6RWXs+7L2HTDWJax4pUN+FJn\nWf6CBkXDAgMBAAECggEACN1uyTzExuy49FOiHx3EXUo7KesJFjOE1NauThjvIWU3\n0NMWIZvHB4DlD+xhsQjfriJtFw0c/w1Ruca2ZROn4LkqYFghUGx4tmcIQievrH2K\nXiYoxC6jTqKfdJhSYosW/4FPSMVQsCN/m/ffY6BzAg5QYa/dUaompUe5tb7I5gLe\n4YMDvnlqGa1eiSQWjJWGYggLupyZxr8MeLZ5eDQWRKIee1xb9Yyd+982drqjgcFI\nDz1iC4m2yjAoIy/jx9tx/XfIXtYtMSN0nT8Y/+LfXZdDdkH6hISsLEynB3YGrzHT\neUNmMv3JzkySkLADzpYN5SWXd7CoDhC3nnAhbTQLKQKBgQDgeQfbHTHlAE+RN+T8\ntsAVTcUYl/EdjpYvl1ZfH2yRgD5JWZhbm4Q9ZIXW8JtSg04zf++6JnM5e9D2BAsh\nI+ZuufOzP8bFTZaTbaWXDy+iqm8lDgijiQBMMLqfTcGAFn3j5N23NIA0T5HAtU2D\nRim4vpPW7gzusb7MO+ULSGh2vwKBgQC79343M68cZ6UCETi8u0TICz9FE/457jQj\n7+jazP7NGTNFk4h8RCXFVc3ZLcBfqhWHJKbDU+zjRDJA1M3jh3T1/Ko9A8gi4i8e\nLo+PaARFEIHhKDYgRLMxzszzfpgo8F2MDEAqH7y2MEQ9xWGErdqQgI6sEDnjv3If\nCECZEwTV/QKBgQC8E8yIQ5Ltm/AO7bU4JOsWLn4o2A4XRMQDhhrBQrQVyUzm6mHk\nx43qXpJhgGGzpf7c2aID53l9vYdcyhCFKO5G8hkFpDcoU5UJW8J1qiywb3sGohaM\n5xpPvDhxh5XMe4vpaXZ3rU6KBe1KeN5EUoJcn5mBaR1+1YDW4IxNgtK8QwKBgQCG\nvZQheBAn2XgkcjnsuIVGrSFOoFVWK5X+yORvrBFe7pidYHOvOJ6mxapI644CRYcn\nGDPewxOFmoY3iRSJ7Lj/+H4EPOjDcMX76b6JOzQMWhfwUgXyvayCoM60IWRrvFoi\noUmBqLx7EUBp00rjdEi/2xfq6brFsp/Y9O5xjHuj9QKBgB9HcTbfe9yTPOwupJSX\nJDEZgM+aUwq5+aPVpCcKtb8XhkrNh0I3J795Tr2BEWxKTgw3T/uyx81UbWhnyXDz\nnM0al/aG9bOhANTJecPiwoyW0P+pfjALBGEEIgRykkxOzyx7ZS574W0kmjfigizv\nxNkz/lCzzT9a43i1Yo7UdRQe\n-----END PRIVATE KEY-----\n",
+  "client_email": "google-sheets-reader@uprank-marketing.iam.gserviceaccount.com",
+  "client_id": "109341514971108754064",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/google-sheets-reader%40uprank-marketing.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

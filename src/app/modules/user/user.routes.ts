@@ -61,7 +61,7 @@ router.get(
 
 router.post("/register-user", UserController.createUser);
 router.post("/register-agent", UserController.createAgent);
-
+ 
 router.post(
   "/verify-otp",
   // validateRequest(UserValidation.verifyOTPSchema),

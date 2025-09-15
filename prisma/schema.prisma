@@ -20,19 +20,6 @@ enum UserStatus {
   DELETED
 }
 
-// enum CallStatus {
-//   INITIATED
-//   ANSWERED
-//   MISSED
-//   DROPPED
-// }
-
-// enum PlanLevel {
-//   ESSENTIALS
-//   GROWTH
-//   ENTERPRISE
-//   CUSTOM
-// }
 enum PlanLevel {
   only_real_agent
   only_ai
@@ -228,8 +215,8 @@ model Organization {
 
   name               String
   industry           String?
-  address            String
-  websiteLink        String
+  address            String?
+  websiteLink        String?
   organizationNumber String?
   ownerId            String? @unique @db.ObjectId
 
@@ -251,6 +238,8 @@ model Organization {
   voice                 UploadVoice?
   AiknowledgeBase       AiknowledgeBase[]
   AgentAssignment       AgentAssignment[]
+  questions             Question[] // ADD THIS LINE - Questions relation
+  qaPairs               QaPair[]
 
   aiagent aiagents?
 
@@ -270,6 +259,30 @@ model aiagents {
 
   @@map("aiagents")
 }
+
+// {
+//   "_id": { "$oid": "650000000000000000000001" },
+//   "agentId": "elevenlabs_12345",
+//   "organizationId": { "$oid": "650000000000000000000010" },
+//   "createdAt": { "$date": "2025-09-14T00:00:00Z" },
+//   "updatedAt": { "$date": "2025-09-14T00:00:00Z" }
+// }
+
+// {
+//   "_id": { "$oid": "650000000000000000000101" },
+//   "agent_id": "elevenlabs_12345",
+//   "agent_name": "John Doe",
+//   "conversation_id": "conv_abc123",
+//   "start_time_unix_secs": 1694649600,
+//   "call_duration_secs": 300,
+//   "message_count": 15,
+//   "status": "completed",
+//   "call_successful": "yes",
+//   "direction": "outbound",
+//   "createdAt": { "$date": "2025-09-14T00:05:00Z" },
+//   "updatedAt": { "$date": "2025-09-14T00:05:00Z" }
+// }
+
 
 model aicalllogs {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
@@ -300,7 +313,7 @@ model Call {
 
   from_number       String
   to_number         String
-  callTime          DateTime  @default(now())
+  call_time          DateTime  @default(now())
   callType          String // direction
   call_status       String
   call_duration     Int?
@@ -322,8 +335,8 @@ model Call {
   recording_status   String?
   recording_url      String?
 
-  processed               Boolean @default(false)
-  transcription_requested Boolean @default(false)
+  processed               Boolean? @default(false)
+  transcription_requested Boolean? @default(false)
 
   // from_country   String?
   // to_city        String?
@@ -345,8 +358,50 @@ model Call {
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([call_sid])
-  @@map("call_records")
+  @@map("Call")
 }
+
+// model Calls {
+//   id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+//   // Make these optional to match Python
+//   organizationId String?  @db.ObjectId  // Changed to optional
+//   agentId        String?  @db.ObjectId  // Changed to optional
+  
+//   // Call information - match Python field names
+//   from_number    String
+//   to_number      String
+//   call_time      DateTime @default(now())  // Changed to match Python
+//   callType       String   // Keep as String for flexibility
+//   call_status    String   // Keep as String for flexibility
+  
+//   call_duration     Int?
+//   call_started_at   DateTime @default(now())
+//   call_completed_at DateTime?
+  
+//   // Twilio fields
+//   call_sid           String?
+//   call_transcript    String?
+//   recording_duration Int?
+//   recording_sid      String?
+//   recording_status   String?  // Added missing field
+//   recording_url      String?
+  
+//   // Processing flags - added missing fields
+//   processed               Boolean @default(false)
+//   transcription_requested Boolean @default(false)
+
+//   // Timestamps - ✅ Correct (matches Python)
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   // Relations - updated to reference correct field
+//   receivedBy   Agent?       @relation(fields: [agentId], references: [id])  // Changed to id
+//   organization Organization? @relation(fields: [organizationId], references: [id]) // Made optional
+
+//   @@index([call_sid])
+//   @@map("call_recordss")
+// }
 
 model UploadVoice {
   id                    String  @id @default(auto()) @map("_id") @db.ObjectId
@@ -361,6 +416,7 @@ model UploadVoice {
 
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
+
 
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
@@ -389,6 +445,7 @@ model OrganizationDoc {
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  // REMOVE THIS LINE: questions             Question[]
 
   @@map("company_docs")
 }
@@ -551,4 +608,35 @@ model AvailableTwilioNumber {
   organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
 
   @@map("available_twilio_numbers")
+}
+
+model Question {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  org_id            String   @db.ObjectId
+  question_text     String
+  question_keywords String[] @default([])
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@map("questions")
+}
+
+model QaPair {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  org_id   String @db.ObjectId
+  conv_id  String
+  question String
+  answer   String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  @@map("qa_pairs")
 }

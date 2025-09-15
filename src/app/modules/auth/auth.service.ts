@@ -368,7 +368,29 @@ const getMe = async (email: string) => {
     },
     include: {
       Agent: true,
-      ownedOrganization: true,
+      ownedOrganization: {
+        // "id": "68c220255294a7faf37c168d",
+        //     "name": "test org for call",
+        //     "industry": "information-technology",
+        //     "address": "House 23, Road 7, Banani Dhaka",
+        //     "websiteLink": "https://techinnovatorsbd.com",
+        //     "organizationNumber": "+18633445510",
+        //     "ownerId": "68c220235294a7faf37c168c",
+        //     "agentVoiceUrl": null,
+        //     "leadQuestions": [],
+        //     "createdAt": "2025-09-11T01:04:37.276Z",
+        //     "updatedAt": "2025-09-14T19:27:02.564Z"
+        select: {
+          id: true,
+          name: true,
+          industry: true,
+          address: true,
+          websiteLink: true,
+          organizationNumber: true,
+          ownerId: true,
+          subscriptions: true,
+        },
+      },
     },
   });
 

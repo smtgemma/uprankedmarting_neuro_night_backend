@@ -65,4 +65,5 @@ export default {
     secret_key: process.env.STRIPE_SECRET_KEY,
     webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
   },
+  google_sheets_spreadsheet_id: process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
 };
