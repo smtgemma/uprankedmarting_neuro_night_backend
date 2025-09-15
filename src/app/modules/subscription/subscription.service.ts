@@ -155,7 +155,7 @@ const createSubscription = async (
 
     // 3. Normalize phone number format
     let normalizedPurchasedNumber = purchasedNumber;
-    if (!normalizedPurchasedNumber.startsWith('+')) {
+    if (!normalizedPurchasedNumber.startsWith("+")) {
       normalizedPurchasedNumber = `+${normalizedPurchasedNumber}`;
     }
 
@@ -164,17 +164,23 @@ const createSubscription = async (
       where: {
         OR: [
           { phoneNumber: normalizedPurchasedNumber },
-          { phoneNumber: normalizedPurchasedNumber.replace('+', '') }
-        ]
-      }
+          { phoneNumber: normalizedPurchasedNumber.replace("+", "") },
+        ],
+      },
     });
 
     if (!availableNumber) {
-      throw new AppError(status.NOT_FOUND, `Phone number ${purchasedNumber} is not available`);
+      throw new AppError(
+        status.NOT_FOUND,
+        `Phone number ${purchasedNumber} is not available`
+      );
     }
 
     if (availableNumber.isPurchased) {
-      throw new AppError(status.BAD_REQUEST, `Phone number ${purchasedNumber} is already purchased`);
+      throw new AppError(
+        status.BAD_REQUEST,
+        `Phone number ${purchasedNumber} is already purchased`
+      );
     }
 
     // Use the exact format from the database
@@ -242,7 +248,6 @@ const createSubscription = async (
           planLevel,
         },
       });
-      
     } else {
       // 9. Create new subscription
       subscription = await tx.subscription.create({
@@ -262,7 +267,10 @@ const createSubscription = async (
       });
     }
 
-    console.log("Created subscription with phone number:", normalizedPurchasedNumber);
+    console.log(
+      "Created subscription with phone number:",
+      normalizedPurchasedNumber
+    );
 
     return {
       subscription,
@@ -287,15 +295,14 @@ const getAllSubscription = async (query: Record<string, any>) => {
           industry: true,
           address: true,
           websiteLink: true,
-          ownerId: true, // This is the actual field name
-          // Use the correct relation name
+          ownerId: true,
           ownedOrganization: {
             select: {
               id: true,
               name: true,
               email: true,
-              phone: true
-            }
+              phone: true,
+            },
           },
           subscriptions: {
             select: {
@@ -305,9 +312,10 @@ const getAllSubscription = async (query: Record<string, any>) => {
               amount: true,
               paymentStatus: true,
               status: true,
-              planLevel: true
-            }
-          }
+              planLevel: true,
+               purchasedNumber: true,
+            },
+          },
         },
       },
       plan: true,
@@ -368,6 +376,30 @@ const getMySubscription = async (userId: string) => {
           id: true,
           name: true,
           organizationNumber: true,
+          industry: true,
+          address: true,
+          websiteLink: true,
+          ownerId: true,
+          ownedOrganization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          subscriptions: {
+            select: {
+              id: true,
+              startDate: true,
+              endDate: true,
+              amount: true,
+              paymentStatus: true,
+              status: true,
+              planLevel: true,
+              purchasedNumber: true,
+            },
+          },
         },
       },
       plan: true,
