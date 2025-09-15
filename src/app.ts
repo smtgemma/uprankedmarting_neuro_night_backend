@@ -26,13 +26,20 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 //   })
 // );
 
-app.use(cors());
 
-// const allowedOrigins = [
-//   "http://localhost:3000",
-//   "http://10.0.30.84:3000",
-//   "https://your-production-frontend-url.com",
-// ];
+const allowedOrigins = [
+  "http://localhost:3000", // React local
+  "http://10.0.30.84:3000", // অন্য client
+  "https://your-production-frontend-url.com", // deployed client
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true, // cookie/session allow করবে
+  })
+);
+
 
 // app.use(
 //   cors({

@@ -88,39 +88,39 @@ const getFallbackMonthlyData = (
 
 
 // Function to get call duration statistics for the chart
-const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
-  let totalHumanDuration = 0;
-  let totalAIDuration = 0;
-  let maxHumanDuration = 0;
-  let maxAIDuration = 0;
+// const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
+//   let totalHumanDuration = 0;
+//   let totalAIDuration = 0;
+//   let maxHumanDuration = 0;
+//   let maxAIDuration = 0;
 
-  monthlyReport.forEach(month => {
-    totalHumanDuration += month.humanTotalCallDuration;
-    totalAIDuration += month.aiTotalCallDuration;
+//   monthlyReport.forEach(month => {
+//     totalHumanDuration += month.humanTotalCallDuration;
+//     totalAIDuration += month.aiTotalCallDuration;
 
-    if (month.humanTotalCallDuration > maxHumanDuration) {
-      maxHumanDuration = month.humanTotalCallDuration;
-    }
-    if (month.aiTotalCallDuration > maxAIDuration) {
-      maxAIDuration = month.aiTotalCallDuration;
-    }
-  });
-
-
-  const largestValue = Math.max(maxHumanDuration, maxAIDuration);
+//     if (month.humanTotalCallDuration > maxHumanDuration) {
+//       maxHumanDuration = month.humanTotalCallDuration;
+//     }
+//     if (month.aiTotalCallDuration > maxAIDuration) {
+//       maxAIDuration = month.aiTotalCallDuration;
+//     }
+//   });
 
 
-  const ticks = generateTicks(largestValue);
+//   const largestValue = Math.max(maxHumanDuration, maxAIDuration);
 
-  return {
-    totalHumanDuration,
-    totalAIDuration,
-    maxHumanDuration,
-    maxAIDuration,
-    largestValue,
-    ticks,
-  };
-};
+
+//   const ticks = generateTicks(largestValue);
+
+//   return {
+//     totalHumanDuration,
+//     totalAIDuration,
+//     maxHumanDuration,
+//     maxAIDuration,
+//     largestValue,
+//     ticks,
+//   };
+// };
 
 // utils/ticks.ts
 export const generateTicks = (maxValue: number): number[] => {
