@@ -132,5 +132,13 @@ router.get(
 );
 
 
+// Agent dashboard
+router.get(
+  "/agent-calls-management-info",
+  auth(UserRole.agent),
+  AssignmentController.getAgentCallsManagementInfo
+);
+
+
 
 export const AssignmentRoutes = router;

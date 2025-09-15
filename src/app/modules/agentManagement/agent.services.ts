@@ -255,14 +255,12 @@ const getAgentsManagementInfo = async (
       { name: { contains: searchTerm, mode: "insensitive" } },
       { email: { contains: searchTerm, mode: "insensitive" } },
       { phone: { contains: searchTerm, mode: "insensitive" } },
-       { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
+      { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
     ];
   }
 
   if (searchTerm === "employeeId") {
-    whereClause.Agent = {
-      
-    };
+    whereClause.Agent = {};
   }
 
   // console.log(whereClause);
@@ -667,6 +665,86 @@ const getAllAgentForAdmin = async (
       totalPages: Math.ceil(total / Number(limit)),
     },
     data: usersWithAvgRating,
+  };
+};
+
+const getAgentCallsManagementInfo = async (
+  options: IPaginationOptions,
+  filters: any = {},
+  user: User
+) => {
+  let searchTerm = filters?.searchTerm as string;
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  // Build where clause for Call model
+  let whereClause: any = {
+    agentId: user?.id,
+  };
+
+  // If search term exists, ADD search conditions to the existing whereClause
+  if (searchTerm) {
+
+    whereClause.AND = [
+      {
+        OR: [
+          { from_number: { contains: searchTerm, mode: "insensitive" } },
+          { to_number: { contains: searchTerm, mode: "insensitive" } },
+          { call_status: { contains: searchTerm, mode: "insensitive" } },
+          { callType: { contains: searchTerm, mode: "insensitive" } },
+        ],
+      },
+    ];
+  }
+  console.log(whereClause);
+
+  const [calls, total] = await Promise.all([
+    prisma.call.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        organizationId: true,
+        agentId: true,
+        from_number: true,
+        to_number: true,
+        call_time: true,
+        callType: true,
+        call_status: true,
+        call_duration: true,
+        call_started_at: true,
+        call_completed_at: true,
+        call_transcript: true,
+        recording_duration: true,
+        recording_status: true,
+        recording_url: true,
+
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.call.count({
+      where: whereClause,
+    }),
+  ]);
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: calls,
   };
 };
 // Request assignment (Organization Admin)
@@ -1496,11 +1574,10 @@ const getOrganizationAssignments = async (organizationId: string) => {
   return assignments;
 };
 
-
-
 export const AssignmentService = {
   requestAgentAssignment,
   getAgentsManagementInfo,
+  getAgentCallsManagementInfo,
   approveAgentRemoval,
   getAIAgentIdsByOrganizationAdmin,
   rejectAgentRemoval,
