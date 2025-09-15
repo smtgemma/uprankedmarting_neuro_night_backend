@@ -1496,6 +1496,8 @@ const getOrganizationAssignments = async (organizationId: string) => {
   return assignments;
 };
 
+
+
 export const AssignmentService = {
   requestAgentAssignment,
   getAgentsManagementInfo,
