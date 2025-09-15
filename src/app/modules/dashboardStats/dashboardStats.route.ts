@@ -8,8 +8,14 @@ const router = express.Router();
 
 router.get(
   '/stats',
-  auth(UserRole.organization_admin, UserRole.super_admin),
+  auth(UserRole.organization_admin),
   DashboardController.getDashboardStats
+);
+
+router.get(
+  '/admin-dashboard-stats',
+  auth(UserRole.super_admin),
+  DashboardController.getAdminDashboardStats
 );
 
 router.get(

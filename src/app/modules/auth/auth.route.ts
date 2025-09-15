@@ -4,7 +4,6 @@ import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
 import { AuthController } from "./auth.controller";
 import { AuthValidation } from "./auth.validation";
-import  twilio  from "twilio";
 
 const router = Router();
 
@@ -19,6 +18,12 @@ router.get(
   "/get-user/:id",
   auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
   AuthController.getSingleUser
+);
+
+router.get(
+  "/get-agent-info/:id",
+  auth(UserRole.agent, UserRole.organization_admin, UserRole.super_admin),
+  AuthController.getSingleAgentInfo
 );
 
 router.post(

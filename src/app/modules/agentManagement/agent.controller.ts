@@ -323,6 +323,29 @@ const getAgentAssignmentStatus = catchAsync(
     });
   }
 );
+const getAgentCallsManagementInfo = catchAsync(async (req, res) => {
+  const options = pickOptions(req.query, [
+      "limit",
+      "page",
+      "sortBy",
+      "sortOrder",
+    ]);
+    const filters = pickOptions(req.query, [
+      "searchTerm",
+    ]);
+    const result =
+      await AssignmentService.getAgentCallsManagementInfo(
+        options,
+        filters,
+        req.user as User
+      );
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Agents calls are retrieved successfully!",
+      data: result,
+    });
+})
 
 // Get assignments for an organization
 const getOrganizationAssignments = catchAsync(
@@ -343,6 +366,7 @@ const getOrganizationAssignments = catchAsync(
 export const AssignmentController = {
   requestAssignment,
   getAIAgents,
+  getAgentCallsManagementInfo,
   getAgentsManagementInfo,
   requestAgentRemoval,
   approveAgentRemoval,
