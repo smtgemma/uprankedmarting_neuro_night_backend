@@ -409,9 +409,59 @@ const getMe = async (email: string) => {
     throw new ApiError(status.NOT_FOUND, "User not found");
   }
 
+  const id = user?.id;
+  // Get call statistics for the user (only if they're an agent)
+  let callStatistics = null;
+  if (user?.Agent) {
+    const [totalStats, todayStats] = await Promise.all([
+      // Total call statistics
+      prisma.call.aggregate({
+        where: {
+          agentId: id,
+          call_status: "completed",
+        },
+        _count: { id: true },
+        _avg: { recording_duration: true },
+        _sum: { recording_duration: true },
+      }),
+
+      // Today's call statistics
+      prisma.call.aggregate({
+        where: {
+          agentId: id,
+          call_status: "completed",
+          call_time: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            lte: new Date(new Date().setHours(23, 59, 59, 999)),
+          },
+        },
+        _count: { id: true },
+        _avg: { recording_duration: true },
+      }),
+    ]);
+
+    callStatistics = {
+      totalSuccessCalls: totalStats._count.id || 0,
+      totalCallDuration: totalStats._sum.recording_duration || 0,
+      avgCallDuration: Math.round(totalStats._avg.recording_duration || 0),
+      todaySuccessCalls: todayStats._count.id || 0,
+      todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
+    };
+  }
+
   const { password, ...rest } = user;
 
-  return rest;
+  return {
+    ...rest,
+    callStatistics: callStatistics || {
+      totalSuccessCalls: 0,
+      totalCallDuration: 0,
+      avgCallDuration: 0,
+      todaySuccessCalls: 0,
+      todayAvgCallDuration: 0,
+      callStatusDistribution: {},
+    },
+  };
 };
 
 // const getSingleUser = async (id: string) => {
@@ -447,7 +497,6 @@ const getMe = async (email: string) => {
 //   };
 // };
 const getSingleUser = async (id: string, AuthUser: User) => {
-  
   let org_admin_Info = null;
   if (AuthUser.role === UserRole.organization_admin) {
     org_admin_Info = await prisma.user.findFirst({
@@ -504,7 +553,6 @@ const getSingleUser = async (id: string, AuthUser: User) => {
 };
 
 const getSingleAgentInfo = async (id: string, AuthUser: User) => {
-  
   let org_admin_Info = null;
   if (AuthUser.role === UserRole.organization_admin) {
     org_admin_Info = await prisma.user.findFirst({
@@ -521,7 +569,7 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
       },
     });
   }
-  
+
   const user = await prisma.user.findFirst({
     where: {
       id,
@@ -566,7 +614,7 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
         _avg: { recording_duration: true },
         _sum: { recording_duration: true },
       }),
-      
+
       // Today's call statistics
       prisma.call.aggregate({
         where: {
@@ -579,9 +627,8 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
         },
         _count: { id: true },
         _avg: { recording_duration: true },
-      })
+      }),
     ]);
-
 
     callStatistics = {
       totalSuccessCalls: totalStats._count.id || 0,

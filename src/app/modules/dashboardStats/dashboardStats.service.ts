@@ -106,10 +106,10 @@ const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
     }
   });
 
-  // max value বের করো
+
   const largestValue = Math.max(maxHumanDuration, maxAIDuration);
 
-  // ticks generate করো
+
   const ticks = generateTicks(largestValue);
 
   return {
@@ -118,7 +118,7 @@ const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
     maxHumanDuration,
     maxAIDuration,
     largestValue,
-    ticks, // ✅ Chart এ এইটা use করতে পারবে
+    ticks,
   };
 };
 
@@ -189,8 +189,8 @@ const getOrganizationAdminDashboardStats = async (user: User, query: Record<stri
 
       humanCallDurationStats,
       aiCallDurationStats,
-      humanCallMinMax,
-      aiCallMinMax,
+      // humanCallMinMax,
+      // aiCallMinMax,
     ] = await Promise.all([
       // Human calls
       prisma.call.count({ where: { organizationId } }),
@@ -281,29 +281,29 @@ const getOrganizationAdminDashboardStats = async (user: User, query: Record<stri
         select: { call_duration_secs: true }
       }).then(results => results[0]?.call_duration_secs || 0),
       
-      // Human call max duration
-      prisma.call.findMany({
-        where: {
-          organizationId,
-          call_status: HUMAN_CALL_STATUS.COMPLETED,
-          recording_duration: { not: null },
-        },
-        orderBy: { recording_duration: 'desc' },
-        take: 1,
-        select: { recording_duration: true }
-      }).then(results => results[0]?.recording_duration || 0),
+      // // Human call max duration
+      // prisma.call.findMany({
+      //   where: {
+      //     organizationId,
+      //     call_status: HUMAN_CALL_STATUS.COMPLETED,
+      //     recording_duration: { not: null },
+      //   },
+      //   orderBy: { recording_duration: 'desc' },
+      //   take: 1,
+      //   select: { recording_duration: true }
+      // }).then(results => results[0]?.recording_duration || 0),
       
-      // AI call max duration
-      prisma.aicalllogs.findMany({
-        where: {
-          aiagents: { organizationId },
-          status: AI_CALL_STATUS.COMPLETED,
-          call_duration_secs: { not: null },
-        },
-        orderBy: { call_duration_secs: 'desc' },
-        take: 1,
-        select: { call_duration_secs: true }
-      }).then(results => results[0]?.call_duration_secs || 0),
+      // // AI call max duration
+      // prisma.aicalllogs.findMany({
+      //   where: {
+      //     aiagents: { organizationId },
+      //     status: AI_CALL_STATUS.COMPLETED,
+      //     call_duration_secs: { not: null },
+      //   },
+      //   orderBy: { call_duration_secs: 'desc' },
+      //   take: 1,
+      //   select: { call_duration_secs: true }
+      // }).then(results => results[0]?.call_duration_secs || 0),
     ]);
 
     // Calculate metrics
@@ -333,7 +333,7 @@ const getOrganizationAdminDashboardStats = async (user: User, query: Record<stri
     const monthlyReport = await getOrganizationAdminMonthlyCallData(organizationId, queryMonth, queryYear);
     
     // Get call duration statistics
-    const callDurationStats = getCallDurationStats(monthlyReport);
+    // const callDurationStats = getCallDurationStats(monthlyReport);
 
     return {
       totalCalls: totalHumanAgentCalls + totalAIAgentCalls,
@@ -344,22 +344,12 @@ const getOrganizationAdminDashboardStats = async (user: User, query: Record<stri
       todayAICalls: todayAIAgentCalls,
       todaySuccessCalls: todayTotalSuccessCalls,
        monthlyReport,
-       callDurationStats,
+      //  callDurationStats,
        callTiming:{
         avgTotalCallTime,
         avgAICallTime,
         avgHumanCallTime,
        }
-      // callDurationStats: {
-      //   totalHumanDuration: callDurationStats.totalHumanDuration,
-      //   totalAIDuration: callDurationStats.totalAIDuration,
-      //   maxHumanDuration: callDurationStats.maxHumanDuration,
-      //   maxAIDuration: callDurationStats.maxAIDuration,
-      //   minHumanDuration: callDurationStats.minHumanDuration,
-      //   minAIDuration: callDurationStats.minAIDuration,
-      //   avgHumanDuration: Math.round(callDurationStats.avgHumanDuration),
-      //   avgAIDuration: Math.round(callDurationStats.avgAIDuration),
-      // },
     };
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
@@ -386,10 +376,9 @@ const getOrganizationAdminMonthlyCallData = async (
 
   for (let i = months - 1; i >= 0; i--) {
     try {
-      // target month বের করা
       const date = new Date(targetYear, currentDate.getMonth() - i, 1);
 
-      // future মাস skip করো
+     
       if (date > currentDate) continue;
 
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -403,10 +392,8 @@ const getOrganizationAdminMonthlyCallData = async (
         999
       );
 
-      // যদি monthEnd future হয় → currentDate পর্যন্ত নাও
       const effectiveMonthEnd = monthEnd > currentDate ? currentDate : monthEnd;
 
-      // Unix timestamps AI calls এর জন্য
       const monthStartUnix = Math.floor(monthStart.getTime() / 1000);
       const monthEndUnix = Math.floor(effectiveMonthEnd.getTime() / 1000);
 
@@ -454,13 +441,13 @@ const getOrganizationAdminMonthlyCallData = async (
           }),
         ]);
 
-        console.log("Human Calls:", humanCalls, "AI Calls:", aiCalls)
+        // console.log("Human Calls:", humanCalls, "AI Calls:", aiCalls)
       const successCalls = humanCalls + aiCalls;
 
       monthlyData.push({
         month: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
         successCalls,
-        totalCalls: successCalls, // এখানে তুমি চাইলে আলাদা total logic বসাতে পারো
+        totalCalls: successCalls,
         aiCalls,
         humanCalls,
         humanTotalCallDuration: humanCallDuration._sum.recording_duration || 0,
@@ -468,11 +455,10 @@ const getOrganizationAdminMonthlyCallData = async (
       });
     } catch (error) {
       console.error(`Error processing month ${i}:`, error);
-      // Skip করে পরের মাসে যাও
+    
     }
   }
 
-  // fallback → কোনো data না পেলে
   if (monthlyData.length === 0) {
     return getFallbackMonthlyData(months, targetYear);
   }
@@ -502,7 +488,7 @@ export interface AdminDashboardStats {
 }
 
 
-const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<AdminDashboardStats> => {
+const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<any> => {
   try {
     const queryMonth = Number(query?.month) || 12;  
     const queryYear = Number(query?.year) || new Date().getFullYear();
@@ -563,7 +549,7 @@ const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<A
         },
       }),
 
-      // Human call duration aggregations
+      // Human call duration aggregations - all organizations
       prisma.call.aggregate({
         where: {
           call_status: HUMAN_CALL_STATUS.COMPLETED,
@@ -573,7 +559,7 @@ const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<A
         _count: { recording_duration: true },
       }),
       
-      // AI call duration aggregations
+      // AI call duration aggregations - all organizations
       prisma.aicalllogs.aggregate({
         where: {
           status: AI_CALL_STATUS.COMPLETED,
@@ -590,11 +576,25 @@ const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<A
     const totalSuccessCalls =
       totalHumanAgentSuccessCalls + totalAIAgentSuccessCalls;
 
-    // Monthly Report - for admin, get all data
+    const avgHumanCallTime = humanCallDurationStats._avg.recording_duration || 0;
+    const avgAICallTime = aiCallDurationStats._avg.call_duration_secs || 0;
+
+    // Calculate overall average call time
+    const totalHumanDuration =
+      avgHumanCallTime * (humanCallDurationStats._count.recording_duration || 0);
+    const totalAIDuration =
+      avgAICallTime * (aiCallDurationStats._count.call_duration_secs || 0);
+    const totalCallsWithDuration =
+      (humanCallDurationStats._count.recording_duration || 0) +
+      (aiCallDurationStats._count.call_duration_secs || 0);
+
+    const avgTotalCallTime =
+      totalCallsWithDuration > 0
+        ? (totalHumanDuration + totalAIDuration) / totalCallsWithDuration
+        : 0;
+
+    // Monthly Report - for all organizations
     const monthlyReport = await getAdminMonthlyCallData(queryMonth, queryYear);
-    
-    // Get call duration statistics
-    const callDurationStats = getCallDurationStats(monthlyReport);
 
     return {
       totalCalls: totalHumanAgentCalls + totalAIAgentCalls,
@@ -602,9 +602,14 @@ const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<A
       totalAICalls: totalAIAgentCalls,
       totalSuccessCalls,
       todayHumanCalls: todayHumanAgentCalls,
+      todayAICalls: todayAIAgentCalls,
       todaySuccessCalls: todayTotalSuccessCalls,
       monthlyReport,
-      callDurationStats
+      callTiming: {
+        avgTotalCallTime,
+        avgAICallTime,
+        avgHumanCallTime,
+      }
     };
   } catch (error) {
     console.error("Error fetching admin dashboard stats:", error);
@@ -616,7 +621,7 @@ const getAdminDashboardStats = async (query: Record<string, unknown>): Promise<A
 };
 
 const getAdminMonthlyCallData = async (
-  months: number = 6,
+  months: number = 12,
   year?: number
 ): Promise<MonthlyCallData[]> => {
   const monthlyData: MonthlyCallData[] = [];
@@ -710,6 +715,7 @@ const getAdminMonthlyCallData = async (
 
   return monthlyData;
 };
+
 
 export const DashboardServices = {
   getOrganizationAdminDashboardStats,

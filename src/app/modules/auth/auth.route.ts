@@ -4,7 +4,6 @@ import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
 import { AuthController } from "./auth.controller";
 import { AuthValidation } from "./auth.validation";
-import  twilio  from "twilio";
 
 const router = Router();
 
