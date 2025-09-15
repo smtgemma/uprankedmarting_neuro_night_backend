@@ -296,14 +296,7 @@ const getAllSubscription = async (query: Record<string, any>) => {
           address: true,
           websiteLink: true,
           ownerId: true,
-          ownedOrganization: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
+          ownedOrganization: true,
           subscriptions: {
             select: {
               id: true,
@@ -380,14 +373,15 @@ const getMySubscription = async (userId: string) => {
           address: true,
           websiteLink: true,
           ownerId: true,
-          ownedOrganization: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
+          // ownedOrganization: {
+          //   select: {
+          //     id: true,
+          //     name: true,
+          //     email: true,
+          //     phone: true,
+          //   },
+          // },
+          ownedOrganization: true,
           subscriptions: {
             select: {
               id: true,
