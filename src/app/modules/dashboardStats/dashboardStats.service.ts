@@ -622,16 +622,17 @@ const getDashboardStats = async (user: User): Promise<any> => {
       todayAICalls: todayAIAgentCalls,
       todaySuccessCalls: todayTotalSuccessCalls,
        monthlyReport,
-      callDurationStats: {
-        totalHumanDuration: callDurationStats.totalHumanDuration,
-        totalAIDuration: callDurationStats.totalAIDuration,
-        maxHumanDuration: callDurationStats.maxHumanDuration,
-        maxAIDuration: callDurationStats.maxAIDuration,
-        minHumanDuration: callDurationStats.minHumanDuration,
-        minAIDuration: callDurationStats.minAIDuration,
-        avgHumanDuration: Math.round(callDurationStats.avgHumanDuration),
-        avgAIDuration: Math.round(callDurationStats.avgAIDuration),
-      },
+       callDurationStats
+      // callDurationStats: {
+      //   totalHumanDuration: callDurationStats.totalHumanDuration,
+      //   totalAIDuration: callDurationStats.totalAIDuration,
+      //   maxHumanDuration: callDurationStats.maxHumanDuration,
+      //   maxAIDuration: callDurationStats.maxAIDuration,
+      //   minHumanDuration: callDurationStats.minHumanDuration,
+      //   minAIDuration: callDurationStats.minAIDuration,
+      //   avgHumanDuration: Math.round(callDurationStats.avgHumanDuration),
+      //   avgAIDuration: Math.round(callDurationStats.avgAIDuration),
+      // },
     };
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
@@ -648,7 +649,7 @@ const getMonthlyCallData = async (
   organizationId: string,
   months: number = 6,
   year?: number
-): Promise<any> => {
+): Promise<MonthlyCallData[]> => {
   const monthlyData: MonthlyCallData[] = [];
   const monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -661,12 +662,11 @@ const getMonthlyCallData = async (
 
   for (let i = months - 1; i >= 0; i--) {
     try {
+      // target month বের করা
       const date = new Date(targetYear, currentDate.getMonth() - i, 1);
-      
-      // If we're looking at future months, skip them
-      if (date > currentDate) {
-        continue;
-      }
+
+      // future মাস skip করো
+      if (date > currentDate) continue;
 
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(
@@ -679,66 +679,64 @@ const getMonthlyCallData = async (
         999
       );
 
-      // Don't process future months
-      if (monthStart > currentDate) {
-        continue;
-      }
-
-      // Adjust end date if it's in the future
+      // যদি monthEnd future হয় → currentDate পর্যন্ত নাও
       const effectiveMonthEnd = monthEnd > currentDate ? currentDate : monthEnd;
 
-      // Convert to Unix timestamp for AI calls
+      // Unix timestamps AI calls এর জন্য
       const monthStartUnix = Math.floor(monthStart.getTime() / 1000);
       const monthEndUnix = Math.floor(effectiveMonthEnd.getTime() / 1000);
 
-      const [humanCalls, aiCalls, humanCallDuration, aiCallDuration] = await Promise.all([
-        // Human calls for the month (COMPLETED only)
-        prisma.call.count({
-          where: {
-            organizationId,
-            call_time: { gte: monthStart, lte: effectiveMonthEnd },
-            call_status: HUMAN_CALL_STATUS.COMPLETED,
-          },
-        }),
+      // parallel query run
+      const [humanCalls, aiCalls, humanCallDuration, aiCallDuration] =
+        await Promise.all([
+          // Human completed calls
+          prisma.call.count({
+            where: {
+              organizationId,
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
+              call_status: HUMAN_CALL_STATUS.COMPLETED,
+            },
+          }),
 
-        // AI calls for the month (COMPLETED only)
-        prisma.aicalllogs.count({
-          where: {
-            aiagents: { organizationId },
-            status: AI_CALL_STATUS.COMPLETED,
-            start_time_unix_secs: { gte: monthStartUnix, lte: monthEndUnix },
-          },
-        }),
+          // AI completed calls
+          prisma.aicalllogs.count({
+            where: {
+              aiagents: { organizationId },
+              status: AI_CALL_STATUS.COMPLETED,
+              start_time_unix_secs: { gte: monthStartUnix, lte: monthEndUnix },
+            },
+          }),
 
-        // Total human call duration for the month
-        prisma.call.aggregate({
-          where: {
-            organizationId,
-            call_time: { gte: monthStart, lte: effectiveMonthEnd },
-            call_status: "completed",
-            recording_duration: { not: null },
-          },
-          _sum: { recording_duration: true },
-        }),
+          // Human call total duration
+          prisma.call.aggregate({
+            where: {
+              organizationId,
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
+              call_status: HUMAN_CALL_STATUS.COMPLETED,
+              recording_duration: { not: null },
+            },
+            _sum: { recording_duration: true },
+          }),
 
-        // Total AI call duration for the month
-        prisma.aicalllogs.aggregate({
-          where: {
-            aiagents: { organizationId },
-            status: AI_CALL_STATUS.COMPLETED,
-            start_time_unix_secs: { gte: monthStartUnix, lte: monthEndUnix },
-            call_duration_secs: { not: null },
-          },
-          _sum: { call_duration_secs: true },
-        }),
-      ]);
+          // AI call total duration
+          prisma.aicalllogs.aggregate({
+            where: {
+              aiagents: { organizationId },
+              status: AI_CALL_STATUS.COMPLETED,
+              start_time_unix_secs: { gte: monthStartUnix, lte: monthEndUnix },
+              call_duration_secs: { not: null },
+            },
+            _sum: { call_duration_secs: true },
+          }),
+        ]);
 
+        console.log("Human Calls:", humanCalls, "AI Calls:", aiCalls)
       const successCalls = humanCalls + aiCalls;
 
       monthlyData.push({
         month: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
         successCalls,
-        totalCalls: successCalls,
+        totalCalls: successCalls, // এখানে তুমি চাইলে আলাদা total logic বসাতে পারো
         aiCalls,
         humanCalls,
         humanTotalCallDuration: humanCallDuration._sum.recording_duration || 0,
@@ -746,11 +744,11 @@ const getMonthlyCallData = async (
       });
     } catch (error) {
       console.error(`Error processing month ${i}:`, error);
-      // Continue with other months even if one fails
+      // Skip করে পরের মাসে যাও
     }
   }
 
-  // If no data was found, return fallback data
+  // fallback → কোনো data না পেলে
   if (monthlyData.length === 0) {
     return getFallbackMonthlyData(months, targetYear);
   }
@@ -758,25 +756,20 @@ const getMonthlyCallData = async (
   return monthlyData;
 };
 
-// Fallback function when no data is available
-const getFallbackMonthlyData = (months: number, year: number): MonthlyCallData[] => {
-  const monthlyData: MonthlyCallData[] = [];
+
+const getFallbackMonthlyData = (
+  months: number,
+  year: number
+): MonthlyCallData[] => {
   const monthNames = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
-
   const currentDate = new Date();
-  
-  for (let i = months - 1; i >= 0; i--) {
-    const date = new Date(year, currentDate.getMonth() - i, 1);
-    
-    // Skip future months
-    if (date > currentDate) {
-      continue;
-    }
 
-    monthlyData.push({
+  return Array.from({ length: months }, (_, i) => {
+    const date = new Date(year, currentDate.getMonth() - i, 1);
+    return {
       month: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
       successCalls: 0,
       totalCalls: 0,
@@ -784,11 +777,10 @@ const getFallbackMonthlyData = (months: number, year: number): MonthlyCallData[]
       humanCalls: 0,
       humanTotalCallDuration: 0,
       aiTotalCallDuration: 0,
-    });
-  }
-
-  return monthlyData;
+    };
+  }).reverse();
 };
+
 
 // Function to get call duration statistics for the chart
 const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
@@ -796,51 +788,57 @@ const getCallDurationStats = (monthlyReport: MonthlyCallData[]) => {
   let totalAIDuration = 0;
   let maxHumanDuration = 0;
   let maxAIDuration = 0;
-  let minHumanDuration = Infinity;
-  let minAIDuration = Infinity;
-  
-  // Calculate totals and find min/max
+
   monthlyReport.forEach(month => {
     totalHumanDuration += month.humanTotalCallDuration;
     totalAIDuration += month.aiTotalCallDuration;
-    
+
     if (month.humanTotalCallDuration > maxHumanDuration) {
       maxHumanDuration = month.humanTotalCallDuration;
     }
     if (month.aiTotalCallDuration > maxAIDuration) {
       maxAIDuration = month.aiTotalCallDuration;
     }
-    
-    if (month.humanTotalCallDuration > 0 && month.humanTotalCallDuration < minHumanDuration) {
-      minHumanDuration = month.humanTotalCallDuration;
-    }
-    if (month.aiTotalCallDuration > 0 && month.aiTotalCallDuration < minAIDuration) {
-      minAIDuration = month.aiTotalCallDuration;
-    }
   });
-  
-  // Handle case where all durations are 0
-  if (minHumanDuration === Infinity) minHumanDuration = 0;
-  if (minAIDuration === Infinity) minAIDuration = 0;
-  
-  // Calculate averages
-  const monthsWithHumanCalls = monthlyReport.filter(m => m.humanCalls > 0).length || 1;
-  const monthsWithAICalls = monthlyReport.filter(m => m.aiCalls > 0).length || 1;
-  
-  const avgHumanDuration = totalHumanDuration / monthsWithHumanCalls;
-  const avgAIDuration = totalAIDuration / monthsWithAICalls;
-  
+
+  // max value বের করো
+  const largestValue = Math.max(maxHumanDuration, maxAIDuration);
+
+  // ticks generate করো
+  const ticks = generateTicks(largestValue);
+
   return {
     totalHumanDuration,
     totalAIDuration,
     maxHumanDuration,
     maxAIDuration,
-    minHumanDuration,
-    minAIDuration,
-    avgHumanDuration,
-    avgAIDuration,
+    largestValue,
+    ticks, // ✅ Chart এ এইটা use করতে পারবে
   };
 };
+
+// utils/ticks.ts
+export const generateTicks = (maxValue: number): number[] => {
+  if (maxValue <= 0) return [0];
+
+  // Step নির্ধারণ করা হবে maxValue এর scale অনুযায়ী
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
+  let step = magnitude;
+
+  if (maxValue / step < 2) {
+    step = step / 5;
+  } else if (maxValue / step < 5) {
+    step = step / 2;
+  }
+
+  const ticks = [];
+  for (let i = 0; i <= maxValue + step; i += step) {
+    ticks.push(i);
+  }
+
+  return ticks;
+};
+
 
 export const DashboardServices = {
   getDashboardStats,
