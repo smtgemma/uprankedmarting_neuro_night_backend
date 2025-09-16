@@ -192,7 +192,7 @@ const getGoogleSheetsConnectUrl = async (orgId: string, user: any) => {
       where: { id: orgId },
       select: { id: true, ownerId: true },
     });
-    
+
     if (!organization) {
       throw new AppError(status.NOT_FOUND, "Organization not found");
     }
@@ -206,20 +206,20 @@ const getGoogleSheetsConnectUrl = async (orgId: string, user: any) => {
 
     const oauth2Client = createOAuth2Client();
     const scopes = [
-      'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.file'
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive.file",
     ];
 
     const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
+      access_type: "offline",
       scope: scopes,
       state: orgId,
-      prompt: 'consent'
+      prompt: "consent",
     });
 
     return {
       authUrl,
-      message: "Redirect user to this URL to connect Google Sheets"
+      message: "Redirect user to this URL to connect Google Sheets",
     };
   } catch (error: any) {
     console.error("Error generating Google Sheets connect URL:", error);
@@ -234,9 +234,12 @@ const getGoogleSheetsConnectUrl = async (orgId: string, user: any) => {
 const handleGoogleSheetsCallback = async (code: string, state: string) => {
   try {
     const orgId = state;
-    
+
     if (!orgId) {
-      throw new AppError(status.BAD_REQUEST, "Missing organization ID in callback");
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Missing organization ID in callback"
+      );
     }
 
     const oauth2Client = createOAuth2Client();
@@ -245,81 +248,92 @@ const handleGoogleSheetsCallback = async (code: string, state: string) => {
     const tokenData = await new Promise<TokenResponse>((resolve, reject) => {
       oauth2Client.getToken(code, (error: any, tokens: any) => {
         if (error) {
-          console.error('Error getting tokens:', error);
+          console.error("Error getting tokens:", error);
           reject(error);
         } else {
           resolve(tokens);
         }
       });
     });
-    
+
     if (!tokenData || !tokenData.access_token || !tokenData.refresh_token) {
-      throw new AppError(status.BAD_REQUEST, "Failed to get valid tokens from Google");
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Failed to get valid tokens from Google"
+      );
     }
 
     // Set credentials for this session
     oauth2Client.setCredentials(tokenData);
 
     // Create a new spreadsheet for this organization
-    const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
-    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+    const sheets = google.sheets({ version: "v4", auth: oauth2Client });
+    const drive = google.drive({ version: "v3", auth: oauth2Client });
 
     // Get organization name for spreadsheet title
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: { name: true }
+      select: { name: true },
     });
 
-    const spreadsheetTitle = `${organization?.name || 'Organization'} - Q&A Pairs`;
+    const spreadsheetTitle = `${
+      organization?.name || "Organization"
+    } - Q&A Pairs`;
 
     // Create new spreadsheet
     const createResponse = await sheets.spreadsheets.create({
       requestBody: {
         properties: {
-          title: spreadsheetTitle
+          title: spreadsheetTitle,
         },
-        sheets: [{
-          properties: {
-            title: 'Q&A Pairs'
-          }
-        }]
-      }
+        sheets: [
+          {
+            properties: {
+              title: "Q&A Pairs",
+            },
+          },
+        ],
+      },
     });
 
     const spreadsheetId = createResponse.data.spreadsheetId;
     if (!spreadsheetId) {
-      throw new AppError(status.INTERNAL_SERVER_ERROR, "Failed to create spreadsheet");
+      throw new AppError(
+        status.INTERNAL_SERVER_ERROR,
+        "Failed to create spreadsheet"
+      );
     }
 
     // Add headers to the spreadsheet
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: 'Q&A Pairs!A1:D1',
-      valueInputOption: 'RAW',
+      range: "Q&A Pairs!A1:D1",
+      valueInputOption: "RAW",
       requestBody: {
-        values: [['Conversation ID', 'Question', 'Answer', 'Created At']]
-      }
+        values: [["Conversation ID", "Question", "Answer", "Created At"]],
+      },
     });
 
     // Store OAuth credentials and spreadsheet info in database
     const credentials: GoogleSheetsOAuthCredentials = {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
-      expires_at: tokenData.expiry_date || Date.now() + 3600 * 1000
+      expires_at: tokenData.expiry_date || Date.now() + 3600 * 1000,
     };
 
     await prisma.organization.update({
       where: { id: orgId },
       data: {
         googleSheetsSpreadsheetId: spreadsheetId,
-        googleSheetsCredentials: credentials as unknown as Prisma.InputJsonValue,
+        googleSheetsCredentials:
+          credentials as unknown as Prisma.InputJsonValue,
       },
     });
 
     return {
       message: "Google Sheets connected successfully!",
       spreadsheetId,
-      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
     };
   } catch (error: any) {
     console.error("Error handling Google Sheets callback:", error);
@@ -331,36 +345,41 @@ const handleGoogleSheetsCallback = async (code: string, state: string) => {
 };
 
 // Refresh access token when needed
-const refreshAccessToken = async (refreshToken: string): Promise<{ access_token: string; expires_at: number }> => {
+const refreshAccessToken = async (
+  refreshToken: string
+): Promise<{ access_token: string; expires_at: number }> => {
   try {
     const oauth2Client = createOAuth2Client();
     oauth2Client.setCredentials({
-      refresh_token: refreshToken
+      refresh_token: refreshToken,
     });
 
     // Use Promise-based approach for refresh
     const tokenData = await new Promise<TokenResponse>((resolve, reject) => {
       oauth2Client.refreshAccessToken((error: any, tokens: any) => {
         if (error) {
-          console.error('Error refreshing tokens:', error);
+          console.error("Error refreshing tokens:", error);
           reject(error);
         } else {
           resolve(tokens);
         }
       });
     });
-    
+
     if (!tokenData.access_token) {
       throw new Error("Failed to refresh access token");
     }
-    
+
     return {
       access_token: tokenData.access_token,
-      expires_at: tokenData.expiry_date || Date.now() + 3600 * 1000
+      expires_at: tokenData.expiry_date || Date.now() + 3600 * 1000,
     };
   } catch (error) {
     console.error("Error refreshing access token:", error);
-    throw new AppError(status.UNAUTHORIZED, "Failed to refresh Google Sheets access token");
+    throw new AppError(
+      status.UNAUTHORIZED,
+      "Failed to refresh Google Sheets access token"
+    );
   }
 };
 
@@ -388,12 +407,13 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       );
     }
 
-    const credentials = organization.googleSheetsCredentials as unknown as GoogleSheetsOAuthCredentials;
-    
+    const credentials =
+      organization.googleSheetsCredentials as unknown as GoogleSheetsOAuthCredentials;
+
     // Check if access token is expired and refresh if needed
     let accessToken = credentials.access_token;
     let refreshToken = credentials.refresh_token;
-    
+
     if (credentials.expires_at < Date.now()) {
       if (!refreshToken) {
         throw new AppError(
@@ -401,22 +421,23 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
           "Google Sheets connection expired. Please reconnect Google Sheets."
         );
       }
-      
+
       const refreshed = await refreshAccessToken(refreshToken);
       accessToken = refreshed.access_token;
-      
+
       // Update credentials in database
       const updatedCredentials: GoogleSheetsOAuthCredentials = {
         access_token: accessToken,
         refresh_token: refreshToken,
-        expires_at: refreshed.expires_at
+        expires_at: refreshed.expires_at,
       };
-      
+
       await prisma.organization.update({
         where: { id: orgId },
         data: {
-          googleSheetsCredentials: updatedCredentials as unknown as Prisma.InputJsonValue
-        }
+          googleSheetsCredentials:
+            updatedCredentials as unknown as Prisma.InputJsonValue,
+        },
       });
     }
 
@@ -431,7 +452,7 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     const oauth2Client = createOAuth2Client();
     oauth2Client.setCredentials({
       access_token: accessToken,
-      refresh_token: refreshToken
+      refresh_token: refreshToken,
     });
 
     const qaPairs = await prisma.qaPair.findMany({
@@ -488,7 +509,7 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     // Get current data to append new data instead of clearing
     const existingDataResponse = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Q&A Pairs!A:D'
+      range: "Q&A Pairs!A:D",
     });
 
     const existingRows = existingDataResponse.data.values || [];
@@ -499,9 +520,9 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
       if (existingRows.length > 1 || index > 0) {
         newValues.push([""]);
       }
-      
+
       newValues.push([`Call ID: ${convId}`]);
-      
+
       groupedByConvId[convId].forEach((qaPair) => {
         newValues.push([
           qaPair.conv_id,
@@ -515,8 +536,8 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     // Append new data
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Q&A Pairs!A:D',
-      valueInputOption: 'RAW',
+      range: "Q&A Pairs!A:D",
+      valueInputOption: "RAW",
       requestBody: {
         values: newValues,
       },
@@ -529,13 +550,17 @@ const addQaPairsToGoogleSheets = async (orgId: string) => {
     });
 
     console.log(
-      `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls to Google Sheets for organization ${orgId}`
+      `Successfully added ${qaPairs.length} Q&A pairs for ${
+        Object.keys(groupedByConvId).length
+      } calls to Google Sheets for organization ${orgId}`
     );
-    
+
     return {
-      message: `Successfully added ${qaPairs.length} Q&A pairs for ${Object.keys(groupedByConvId).length} calls`,
+      message: `Successfully added ${qaPairs.length} Q&A pairs for ${
+        Object.keys(groupedByConvId).length
+      } calls`,
       data: response.data,
-      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
     };
   } catch (error: any) {
     console.error("Error adding Q&A pairs to Google Sheets:", {
@@ -557,7 +582,7 @@ const disconnectGoogleSheets = async (orgId: string, user: any) => {
       where: { id: orgId },
       select: { id: true, ownerId: true },
     });
-    
+
     if (!organization) {
       throw new AppError(status.NOT_FOUND, "Organization not found");
     }
@@ -574,12 +599,12 @@ const disconnectGoogleSheets = async (orgId: string, user: any) => {
       data: {
         googleSheetsSpreadsheetId: null,
         googleSheetsCredentials: null,
-        lastSyncedAt: null
+        lastSyncedAt: null,
       },
     });
 
     return {
-      message: "Google Sheets disconnected successfully"
+      message: "Google Sheets disconnected successfully",
     };
   } catch (error: any) {
     console.error("Error disconnecting Google Sheets:", error);
@@ -600,10 +625,10 @@ const getGoogleSheetsStatus = async (orgId: string, user: any) => {
         ownerId: true,
         googleSheetsSpreadsheetId: true,
         googleSheetsCredentials: true,
-        lastSyncedAt: true
+        lastSyncedAt: true,
       },
     });
-    
+
     if (!organization) {
       throw new AppError(status.NOT_FOUND, "Organization not found");
     }
@@ -615,15 +640,18 @@ const getGoogleSheetsStatus = async (orgId: string, user: any) => {
       );
     }
 
-    const isConnected = !!(organization.googleSheetsSpreadsheetId && organization.googleSheetsCredentials);
-    
+    const isConnected = !!(
+      organization.googleSheetsSpreadsheetId &&
+      organization.googleSheetsCredentials
+    );
+
     return {
       isConnected,
       spreadsheetId: organization.googleSheetsSpreadsheetId,
-      spreadsheetUrl: organization.googleSheetsSpreadsheetId 
+      spreadsheetUrl: organization.googleSheetsSpreadsheetId
         ? `https://docs.google.com/spreadsheets/d/${organization.googleSheetsSpreadsheetId}/edit`
         : null,
-      lastSyncedAt: organization.lastSyncedAt
+      lastSyncedAt: organization.lastSyncedAt,
     };
   } catch (error: any) {
     console.error("Error getting Google Sheets status:", error);
