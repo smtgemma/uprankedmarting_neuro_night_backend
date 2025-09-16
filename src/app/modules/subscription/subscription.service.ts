@@ -1,15 +1,3 @@
-// import {
-//   handlePaymentIntentFailed,
-//   handlePaymentIntentSucceeded,
-// } from "../../utils/webhook";
-// import Stripe from "stripe";
-// import status from "http-status";
-// import prisma from "../../utils/prisma";
-// import { stripe } from "../../utils/stripe";
-// import AppError from "../../errors/AppError";
-// import { Subscription } from "@prisma/client";
-// import QueryBuilder from "../../builder/QueryBuilder";
-
 import status from "http-status";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
@@ -20,112 +8,7 @@ import {
   handlePaymentIntentFailed,
   handlePaymentIntentSucceeded,
 } from "../../utils/webhook";
-import { PlanLevel, Subscription } from "@prisma/client";
-
-// const createSubscription = async (
-//   organizationId: string,
-//   planId: string,
-//   planLevel: PlanLevel,
-//   purchasedNumber: string,
-//   sid: string,
-//   numberOfAgents: number
-// ) => {
-//   return await prisma.$transaction(async (tx) => {
-//     // 1. Verify organization exists
-//     const organization = await tx.organization.findUnique({
-//       where: { id: organizationId },
-//     });
-
-//     if (!organization) {
-//       throw new AppError(status.NOT_FOUND, "Organization not found");
-//     }
-
-//     // 2. Verify plan exists with all needed fields
-//     const plan = await tx.plan.findUnique({
-//       where: { id: planId },
-//     });
-//     if (!plan) {
-//       throw new AppError(status.NOT_FOUND, "Plan not found");
-//     }
-
-//     // 3. Calculate end date based on plan interval
-//     const startDate = new Date();
-//     let endDate: Date | null = null;
-
-//     if (plan.interval === "month") {
-//       endDate = new Date(startDate);
-//       endDate.setMonth(endDate.getMonth() + (plan.intervalCount || 1));
-//       // Handle month overflow (e.g., Jan 31 + 1 month)
-//       if (endDate.getDate() !== startDate.getDate()) {
-//         endDate.setDate(0); // Set to last day of previous month
-//       }
-//     } else if (plan.interval === "year") {
-//       endDate = new Date(startDate);
-//       endDate.setFullYear(endDate.getFullYear() + (plan.intervalCount || 1));
-//     } else if (plan.interval === "week") {
-//       endDate = new Date(startDate);
-//       endDate.setDate(endDate.getDate() + (plan.intervalCount || 1) * 7);
-//     } else if (plan.interval === "day") {
-//       endDate = new Date(startDate);
-//       endDate.setDate(endDate.getDate() + (plan.intervalCount || 1));
-//     }
-
-//     // 4. Create payment intent in Stripe
-//     const paymentIntent = await stripe.paymentIntents.create({
-//       amount: Math.round(plan.amount * 100),
-//       currency: "usd",
-//       metadata: {
-//         organizationId: organization.id,
-//         planId,
-//       },
-//       automatic_payment_methods: {
-//         enabled: true,
-//       },
-//     });
-
-//     // 5. Handle existing subscription
-//     const existingSubscription = await tx.subscription.findFirst({
-//       where: { organizationId: organization.id, paymentStatus: "PENDING" },
-//     });
-
-//     let subscription;
-//     if (existingSubscription) {
-//       subscription = await tx.subscription.update({
-//         where: { id: existingSubscription.id },
-//         data: {
-//           planId,
-//           stripePaymentId: paymentIntent.id,
-//           startDate,
-//           amount: plan.amount,
-//           endDate: existingSubscription.endDate || endDate,
-//           paymentStatus: "PENDING",
-//         },
-//       });
-//     } else {
-//       // 6. Create new subscription with calculated endDate
-//       subscription = await tx.subscription.create({
-//         data: {
-//           organizationId: organization.id,
-//           planId,
-//           startDate,
-//           amount: plan.amount,
-//           stripePaymentId: paymentIntent.id,
-//           paymentStatus: "PENDING",
-//           endDate,
-//           planLevel,
-//           purchasedNumber,
-//           sid, // Now includes the calculated endDate
-//         },
-//       });
-//     }
-
-//     return {
-//       subscription,
-//       clientSecret: paymentIntent.client_secret,
-//       paymentIntentId: paymentIntent.id,
-//     };
-//   });
-// };
+import { PlanLevel, Subscription, SubscriptionStatus } from "@prisma/client";
 
 const createSubscription = async (
   organizationId: string,
@@ -153,13 +36,41 @@ const createSubscription = async (
       throw new AppError(status.NOT_FOUND, "Plan not found");
     }
 
-    // 3. Normalize phone number format
+    // 3. Check for existing active subscription for the same plan
+    const existingActiveSubscription = await tx.subscription.findFirst({
+      where: {
+        organizationId: organizationId,
+        planId: planId,
+        status: {
+          in: [
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.TRIALING,
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.INCOMPLETE,
+            SubscriptionStatus.UNPAID,
+          ],
+        },
+        OR: [
+          { endDate: { gte: new Date() } }, // Subscription hasn't expired
+          { endDate: null }, // No end date (e.g., still active or trialing)
+        ],
+      },
+    });
+
+    if (existingActiveSubscription) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        `Organization already has an active subscription for this plan (ID: ${planId}). Please wait until the current subscription expires or choose a different plan.`
+      );
+    }
+
+    // 4. Normalize phone number format
     let normalizedPurchasedNumber = purchasedNumber;
     if (!normalizedPurchasedNumber.startsWith("+")) {
       normalizedPurchasedNumber = `+${normalizedPurchasedNumber}`;
     }
 
-    // 4. Verify the phone number exists in AvailableTwilioNumber
+    // 5. Verify the phone number exists in AvailableTwilioNumber
     const availableNumber = await tx.availableTwilioNumber.findFirst({
       where: {
         OR: [
@@ -186,7 +97,7 @@ const createSubscription = async (
     // Use the exact format from the database
     const dbPhoneNumber = availableNumber.phoneNumber;
 
-    // 5. Calculate end date based on plan interval
+    // 6. Calculate end date based on plan interval
     const startDate = new Date();
     let endDate: Date | null = null;
 
@@ -207,11 +118,11 @@ const createSubscription = async (
       endDate.setDate(endDate.getDate() + (plan.intervalCount || 1));
     }
 
-    // 6. Calculate final amount (base + $20 per agent)
+    // 7. Calculate final amount (base + $20 per agent)
     const finalAmount =
       plan.amount + (numberOfAgents > 0 ? numberOfAgents * 20 : 0);
 
-    // 7. Create payment intent in Stripe
+    // 8. Create payment intent in Stripe
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(finalAmount * 100), // convert to cents
       currency: "usd",
@@ -226,7 +137,7 @@ const createSubscription = async (
       },
     });
 
-    // 8. Handle existing subscription
+    // 9. Handle existing subscription
     const existingSubscription = await tx.subscription.findFirst({
       where: { organizationId: organization.id, paymentStatus: "PENDING" },
     });
@@ -249,7 +160,7 @@ const createSubscription = async (
         },
       });
     } else {
-      // 9. Create new subscription
+      // 10. Create new subscription
       subscription = await tx.subscription.create({
         data: {
           organizationId: organization.id,
@@ -295,8 +206,16 @@ const getAllSubscription = async (query: Record<string, any>) => {
           industry: true,
           address: true,
           websiteLink: true,
-          ownerId: true,
-          ownedOrganization: true,
+          ownerId: true, // This is the actual field name
+          // Use the correct relation name
+          ownedOrganization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
           subscriptions: {
             select: {
               id: true,
