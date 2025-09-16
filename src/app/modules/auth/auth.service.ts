@@ -413,8 +413,18 @@ const getMe = async (email: string) => {
   // Get call statistics for the user (only if they're an agent)
   let callStatistics = null;
   if (user?.Agent) {
-    const [totalStats, todayStats] = await Promise.all([
-      // Total call statistics
+    const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
+      // Total  call statistics
+      prisma.call.aggregate({
+        where: {
+          agentId: id,
+        },
+        _count: { id: true },
+        _avg: { recording_duration: true },
+        _sum: { recording_duration: true },
+      }),
+
+      // Total success call statistics
       prisma.call.aggregate({
         where: {
           agentId: id,
@@ -440,12 +450,22 @@ const getMe = async (email: string) => {
       }),
     ]);
 
+    // totalCalls: agent.callStatistics.totalCalls ?? 0,
+    // avgCallDuration: agent.callStatistics.avgCallDuration,
+    // todaySuccessCalls: agent.callStatistics.todaySuccessCalls,
+    // totalCallDuration: agent.callStatistics.totalCallDuration,
+    // totalSuccessCalls: agent.callStatistics.totalSuccessCalls,
+    // totalDropCalls: agent.callStatistics.droppedCalls ?? 0,
+
     callStatistics = {
-      totalSuccessCalls: totalStats._count.id || 0,
-      totalCallDuration: totalStats._sum.recording_duration || 0,
-      avgCallDuration: Math.round(totalStats._avg.recording_duration || 0),
+      totalCalls: totalCallStats._count.id || 0,
+      avgCallDuration: Math.round(
+        totalSuccessStats._avg.recording_duration || 0
+      ),
       todaySuccessCalls: todayStats._count.id || 0,
-      todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
+      totalSuccessCalls: totalSuccessStats._count.id || 0,
+      totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
+      // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
     };
   }
 
@@ -458,8 +478,6 @@ const getMe = async (email: string) => {
       totalCallDuration: 0,
       avgCallDuration: 0,
       todaySuccessCalls: 0,
-      todayAvgCallDuration: 0,
-      callStatusDistribution: {},
     },
   };
 };
@@ -602,9 +620,19 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
 
   // Get call statistics for the user (only if they're an agent)
   let callStatistics = null;
-  if (user.Agent) {
-    const [totalStats, todayStats] = await Promise.all([
-      // Total call statistics
+  if (user?.Agent) {
+    const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
+      // Total  call statistics
+      prisma.call.aggregate({
+        where: {
+          agentId: id,
+        },
+        _count: { id: true },
+        _avg: { recording_duration: true },
+        _sum: { recording_duration: true },
+      }),
+
+      // Total success call statistics
       prisma.call.aggregate({
         where: {
           agentId: id,
@@ -630,12 +658,22 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
       }),
     ]);
 
+    // totalCalls: agent.callStatistics.totalCalls ?? 0,
+    // avgCallDuration: agent.callStatistics.avgCallDuration,
+    // todaySuccessCalls: agent.callStatistics.todaySuccessCalls,
+    // totalCallDuration: agent.callStatistics.totalCallDuration,
+    // totalSuccessCalls: agent.callStatistics.totalSuccessCalls,
+    // totalDropCalls: agent.callStatistics.droppedCalls ?? 0,
+
     callStatistics = {
-      totalSuccessCalls: totalStats._count.id || 0,
-      totalCallDuration: totalStats._sum.recording_duration || 0,
-      avgCallDuration: Math.round(totalStats._avg.recording_duration || 0),
+      totalCalls: totalCallStats._count.id || 0,
+      avgCallDuration: Math.round(
+        totalSuccessStats._avg.recording_duration || 0
+      ),
       todaySuccessCalls: todayStats._count.id || 0,
-      todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
+      totalSuccessCalls: totalSuccessStats._count.id || 0,
+      totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
+      // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
     };
   }
 
@@ -650,8 +688,6 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
       totalCallDuration: 0,
       avgCallDuration: 0,
       todaySuccessCalls: 0,
-      todayAvgCallDuration: 0,
-      callStatusDistribution: {},
     },
   };
 };

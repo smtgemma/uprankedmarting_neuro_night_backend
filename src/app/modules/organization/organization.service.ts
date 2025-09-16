@@ -2,6 +2,11 @@ import status from "http-status";
 // import QueryBuilder from "../../builder/QueryBuilder";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
+import {
+  IPaginationOptions,
+  paginationHelper,
+} from "../../utils/paginationHelpers";
+import { User } from "@prisma/client";
 
 const getAllOrganizations = async () => {
   const organizations = await prisma.organization.findMany({
@@ -38,11 +43,10 @@ const getAllOrganizations = async () => {
 };
 
 const getSingleOrganization = async (organizationId: string) => {
-
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
     // include: {
-      
+
     // }
   });
 
@@ -53,135 +57,113 @@ const getSingleOrganization = async (organizationId: string) => {
   return organization;
 };
 
-// const createOrganization = async (payload: any) => {
-//   const { name, address, websiteLink, organizationNumber, ownerId, sipDomain, agentVoiceUrl, leadQuestions } = payload;
+const getOrganizationCallLogsManagement = async (
+  options: IPaginationOptions,
+  filters: any = {},
+  user: User
+) => {
+  let searchTerm = filters?.searchTerm as string;
 
-//   // Verify owner exists and is organization_admin
-//   const owner = await prisma.user.findUnique({
-//     where: { id: ownerId },
-//   });
-//   if (!owner || owner.role !== "organization_admin") {
-//     throw new AppError(status.BAD_REQUEST, "Invalid or non-admin owner");
-//   }
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
 
-//   // Check for unique organizationNumber
-//   if (organizationNumber) {
-//     const existingOrg = await prisma.organization.findUnique({
-//       where: { organizationNumber },
-//     });
-//     if (existingOrg) {
-//       throw new AppError(status.BAD_REQUEST, "Organization number already exists");
-//     }
-//   }
+  const getOrganizationAdmin = await prisma.organization.findUnique({
+    where: {
+      ownerId: user?.id,
+    },
+  });
 
-//   const organization = await prisma.organization.create({
-//     data: {
-//       name,
-//       address,
-//       websiteLink,
-//       organizationNumber,
-//       ownerId,
-//       sipDomain,
-//       agentVoiceUrl,
-//       leadQuestions,
-//     },
-//     include: {
-//       ownedOrganization: {
-//         select: { id: true, name: true, email: true },
-//       },
-//     },
-//   });
+  if (!getOrganizationAdmin) {
+    throw new AppError(status.NOT_FOUND, "Organization not found");
+  }
+  // console.log(getOrganizationAdmin);
+  // Build where clause for Call model
+  let whereClause: any = {
+    organizationId: getOrganizationAdmin?.id,
+  };
 
-//   return organization;
-// };
+  // console.log(whereClause, 450);
 
-// const updateOrganization = async (organizationId: string, userId: string, userRole: string, payload: any) => {
-//   const organization = await prisma.organization.findUnique({
-//     where: { id: organizationId },
-//   });
+  // If search term exists, ADD search conditions to the existing whereClause
+  if (searchTerm) {
+    whereClause.AND = [
+      {
+        OR: [
+          { from_number: { contains: searchTerm, mode: "insensitive" } },
+          { to_number: { contains: searchTerm, mode: "insensitive" } },
+          { call_status: { contains: searchTerm, mode: "insensitive" } },
+          { callType: { contains: searchTerm, mode: "insensitive" } },
+          {
+            receivedBy: {
+              user: {
+                name: { contains: searchTerm, mode: "insensitive" },
+              },
+            },
+          },
+        ],
+      },
+    ];
+  }
+  // console.log(whereClause);
 
-//   if (!organization) {
-//     throw new AppError(status.NOT_FOUND, "Organization not found");
-//   }
+  const [calls, total] = await Promise.all([
+    prisma.call.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        organizationId: true,
+        agentId: true,
+        from_number: true,
+        to_number: true,
+        call_time: true,
+        callType: true,
+        call_status: true,
+        call_duration: true,
+        call_started_at: true,
+        call_completed_at: true,
+        call_transcript: true,
+        recording_duration: true,
+        recording_status: true,
+        recording_url: true,
+        receivedBy: {
+          select: {
+            id: true,
+            droppedCalls: true,
+            successCalls: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.call.count({
+      where: whereClause,
+    }),
+  ]);
 
-//   if (userRole === "organization_admin" && organization.ownerId !== userId) {
-//     throw new AppError(status.FORBIDDEN, "You can only update your own organization");
-//   }
-
-//   if (payload.organizationNumber) {
-//     const existingOrg = await prisma.organization.findUnique({
-//       where: { organizationNumber: payload.organizationNumber },
-//     });
-//     if (existingOrg && existingOrg.id !== organizationId) {
-//       throw new AppError(status.BAD_REQUEST, "Organization number already exists");
-//     }
-//   }
-
-//   const updatedOrganization = await prisma.organization.update({
-//     where: { id: organizationId },
-//     data: payload,
-//     include: {
-//       ownedOrganization: {
-//         select: { id: true, name: true, email: true },
-//       },
-//       subscriptions: {
-//         include: { plan: true },
-//       },
-//     },
-//   });
-
-//   return updatedOrganization;
-// };
-
-// const deleteOrganization = async (organizationId: string, userId: string, userRole: string) => {
-//   const organization = await prisma.organization.findUnique({
-//     where: { id: organizationId },
-//     include: { subscriptions: true },
-//   });
-
-//   if (!organization) {
-//     throw new AppError(status.NOT_FOUND, "Organization not found");
-//   }
-
-//   if (userRole === "organization_admin" && organization.ownerId !== userId) {
-//     throw new AppError(status.FORBIDDEN, "You can only delete your own organization");
-//   }
-
-//   // Check for active subscriptions
-//   const activeSubscriptions = organization.subscriptions.filter(
-//     (sub) => sub.status === "ACTIVE"
-//   );
-//   if (activeSubscriptions.length > 0) {
-//     throw new AppError(status.BAD_REQUEST, "Cannot delete organization with active subscriptions");
-//   }
-
-//   // Cancel Stripe subscriptions
-//   for (const sub of organization.subscriptions) {
-//     if (sub.sid) {
-//       try {
-//         await prisma.stripe.subscriptions.cancel(sub.sid);
-//       } catch (error) {
-//         console.error(`Error canceling Stripe subscription ${sub.sid}:`, error);
-//       }
-//     }
-//   }
-
-//   // Delete related subscriptions
-//   await prisma.subscription.deleteMany({
-//     where: { organizationId },
-//   });
-
-//   const result = await prisma.organization.delete({
-//     where: { id: organizationId },
-//   });
-
-//   return result;
-// };
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: calls,
+  };
+};
 
 export const OrganizationServices = {
   getAllOrganizations,
+  getOrganizationCallLogsManagement,
   getSingleOrganization,
-  //   createOrganization,
-  //   updateOrganization,
-  //   deleteOrganization,
 };
