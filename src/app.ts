@@ -7,6 +7,7 @@ import notFound from "./app/middlewares/notFound";
 import express, { Application, Request, Response } from "express";
 import globalErrorHandler from "./app/middlewares/globalErrorHandler";
 import { requestLogger } from "./app/middlewares/requestLogger";
+import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
 
 const app: Application = express();
 
@@ -63,6 +64,12 @@ app.use(
 
 // Request Logger Middleware (Add this)
 app.use(requestLogger);
+
+// Apply to all routes
+app.use("/api/v1", apiLimiter);
+
+app.use("/api/v1/auth/login", authLimiter);
+app.use("/api/v1/users/register-user", authLimiter);
 
 // app routes
 app.use("/api/v1", router);
