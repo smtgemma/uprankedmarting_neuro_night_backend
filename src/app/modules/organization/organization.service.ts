@@ -162,24 +162,20 @@ const getSingleOrganization = async (organizationId: string) => {
 //   };
 // };
 
-
 const getPlatformOverviewStats = async (): Promise<any> => {
   try {
     // Execute all queries in parallel for efficiency
-    const [
-      totalOrganizations,
-      totalHumanCalls,
-      totalAICalls
-    ] = await Promise.all([
-      // Total organizations count
-      prisma.organization.count(),
+    const [totalOrganizations, totalHumanCalls, totalAICalls] =
+      await Promise.all([
+        // Total organizations count
+        prisma.organization.count(),
 
-      // Total human calls (all statuses)
-      prisma.call.count(),
+        // Total human calls (all statuses)
+        prisma.call.count(),
 
-      // Total AI calls (all statuses)
-      prisma.aicalllogs.count()
-    ]);
+        // Total AI calls (all statuses)
+        prisma.aicalllogs.count(),
+      ]);
 
     const totalCalls = totalHumanCalls + totalAICalls;
 
@@ -187,7 +183,7 @@ const getPlatformOverviewStats = async (): Promise<any> => {
       totalOrganizations,
       totalCalls,
       totalHumanCalls,
-      totalAICalls
+      totalAICalls,
     };
   } catch (error) {
     console.error("Error fetching platform overview stats:", error);
@@ -197,7 +193,6 @@ const getPlatformOverviewStats = async (): Promise<any> => {
     );
   }
 };
-
 
 const getOrganizationCallLogsManagement = async (
   options: IPaginationOptions,
@@ -220,52 +215,69 @@ const getOrganizationCallLogsManagement = async (
   }
 
   // Get both human calls and AI call logs in parallel
-  const [humanCalls, aiCallLogs, totalHumanCalls, totalAICallLogs] = await Promise.all([
-    // Human agent calls
-    getHumanAgentCalls(getOrganizationAdmin.id, searchTerm, skip, limit, sortBy, sortOrder),
-    
-    // AI agent call logs
-    getAIAgentCallLogs(getOrganizationAdmin.id, searchTerm, skip, limit, sortBy, sortOrder),
-    
-    // Total counts for pagination
-    prisma.call.count({
-      where: {
-        organizationId: getOrganizationAdmin.id,
-        ...(searchTerm && {
-          OR: [
-            { from_number: { contains: searchTerm, mode: "insensitive" } },
-            { to_number: { contains: searchTerm, mode: "insensitive" } },
-            { call_status: { contains: searchTerm, mode: "insensitive" } },
-            { callType: { contains: searchTerm, mode: "insensitive" } },
-          ]
-        })
-      }
-    }),
-    
-    prisma.aicalllogs.count({
-      where: {
-        aiagents: {
-          organizationId: getOrganizationAdmin.id
+  const [humanCalls, aiCallLogs, totalHumanCalls, totalAICallLogs] =
+    await Promise.all([
+      // Human agent calls
+      getHumanAgentCalls(
+        getOrganizationAdmin.id,
+        searchTerm,
+        skip,
+        limit,
+        sortBy,
+        sortOrder
+      ),
+
+      // AI agent call logs
+      getAIAgentCallLogs(
+        getOrganizationAdmin.id,
+        searchTerm,
+        skip,
+        limit,
+        sortBy,
+        sortOrder
+      ),
+
+      // Total counts for pagination
+      prisma.call.count({
+        where: {
+          organizationId: getOrganizationAdmin.id,
+          ...(searchTerm && {
+            OR: [
+              { from_number: { contains: searchTerm, mode: "insensitive" } },
+              { to_number: { contains: searchTerm, mode: "insensitive" } },
+              { call_status: { contains: searchTerm, mode: "insensitive" } },
+              { callType: { contains: searchTerm, mode: "insensitive" } },
+            ],
+          }),
         },
-        ...(searchTerm && {
-          OR: [
-            { agent_name: { contains: searchTerm, mode: "insensitive" } },
-            { conversation_id: { contains: searchTerm, mode: "insensitive" } },
-            { status: { contains: searchTerm, mode: "insensitive" } },
-            { direction: { contains: searchTerm, mode: "insensitive" } },
-          ]
-        })
-      }
-    })
-  ]);
+      }),
+
+      prisma.aicalllogs.count({
+        where: {
+          aiagents: {
+            organizationId: getOrganizationAdmin.id,
+          },
+          ...(searchTerm && {
+            OR: [
+              { agent_name: { contains: searchTerm, mode: "insensitive" } },
+              {
+                conversation_id: { contains: searchTerm, mode: "insensitive" },
+              },
+              { status: { contains: searchTerm, mode: "insensitive" } },
+              { direction: { contains: searchTerm, mode: "insensitive" } },
+            ],
+          }),
+        },
+      }),
+    ]);
 
   // Combine and format the data
   const combinedData = [
-    ...humanCalls.map(call => ({
-      type: 'human' as const,
+    ...humanCalls.map((call) => ({
+      type: "human" as const,
       id: call.id,
       agent_id: call.agentId,
-      agent_name: call.receivedBy?.user?.name || 'Unknown Agent',
+      agent_name: call.receivedBy?.user?.name || "Unknown Agent",
       from_number: call.from_number,
       to_number: call.to_number,
       call_time: call.call_time,
@@ -273,29 +285,31 @@ const getOrganizationCallLogsManagement = async (
       call_status: call.call_status,
       callType: call.callType,
       recording_url: call.recording_url,
-      createdAt: call.createdAt
+      createdAt: call.createdAt,
     })),
-    ...aiCallLogs.map(log => ({
-      type: 'ai' as const,
+    ...aiCallLogs.map((log) => ({
+      type: "ai" as const,
       id: log.id,
       agent_id: log.agent_id,
-      agent_name: log.agent_name || 'AI Agent',
-      conversation_id: log.conversation_id,
+      agent_name: log.agent_name || "AI Agent",
+      from_number: null,
+      to_number: null,
+      // conversation_id: log.conversation_id,
+      // message_count: log.message_count,
       call_time: log.start_time_unix_secs,
       call_duration: log.call_duration_secs,
-      message_count: log.message_count,
       call_status: log.status,
       call_successful: log.call_successful,
       callType: log.direction,
-      createdAt: log.createdAt
-    }))
+      createdAt: log.createdAt,
+    })),
   ];
 
   // Sort combined data (optional)
   combinedData.sort((a, b) => {
     const dateA = new Date(a.createdAt).getTime();
     const dateB = new Date(b.createdAt).getTime();
-    return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+    return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
   });
 
   const total = totalHumanCalls + totalAICallLogs;
@@ -307,7 +321,7 @@ const getOrganizationCallLogsManagement = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
       humanCalls: totalHumanCalls,
-      aiCallLogs: totalAICallLogs
+      aiCallLogs: totalAICallLogs,
     },
     data: combinedData,
   };
@@ -393,8 +407,8 @@ const getAIAgentCallLogs = async (
 ) => {
   let whereClause: any = {
     aiagents: {
-      organizationId: organizationId
-    }
+      organizationId: organizationId,
+    },
   };
 
   if (searchTerm) {
