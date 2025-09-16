@@ -268,7 +268,7 @@ const handleGoogleSheetsCallback = async (code: string, state: string) => {
 
     // Create a new spreadsheet for this organization
     const sheets = google.sheets({ version: "v4", auth: oauth2Client });
-    const drive = google.drive({ version: "v3", auth: oauth2Client });
+    // const drive = google.drive({ version: "v3", auth: oauth2Client });  // Unused, can remove if not needed
 
     // Get organization name for spreadsheet title
     const organization = await prisma.organization.findUnique({
@@ -327,11 +327,16 @@ const handleGoogleSheetsCallback = async (code: string, state: string) => {
         googleSheetsSpreadsheetId: spreadsheetId,
         googleSheetsCredentials:
           credentials as unknown as Prisma.InputJsonValue,
+        lastSyncedAt: null,  // Explicitly set to null to ensure initial sync fetches all data
       },
     });
 
+    // NEW: Immediately sync existing Q&A pairs after creation (dynamic fetch by orgId)
+    const syncResult = await addQaPairsToGoogleSheets(orgId);
+    console.log(`Initial sync after sheet creation: ${syncResult.message}`);
+
     return {
-      message: "Google Sheets connected successfully!",
+      message: "Google Sheets connected and initial data synced successfully!",
       spreadsheetId,
       spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`,
     };
