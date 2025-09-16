@@ -1,10 +1,5 @@
-import { User, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import prisma from "../../utils/prisma";
-import {
-  IPaginationOptions,
-  paginationHelper,
-} from "../../utils/paginationHelpers";
-
 const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
   const {
     page = 1,
