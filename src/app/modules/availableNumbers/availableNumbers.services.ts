@@ -6,8 +6,8 @@ import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
 // Initialize Twilio client
 const twilioClient = new Twilio(
-  config.twilio.account_sid || "AC3c7b7f9af62077ff16931a102df853ff",
-  config.twilio.auth_token || "a41bc468563b887df58bd3ecc4851c94"
+  config.twilio.account_sid,
+  config.twilio.auth_token 
 );
 // Fetch available numbers from Twilio and store in DB
 const fetchAndStoreAvailableNumbers = async () => {
