@@ -148,7 +148,7 @@ model Agent {
   // Professional info 
   skills String[] @default([])
 
-  employeeId  String  @unique 
+  employeeId  String  @unique
   isAvailable Boolean @default(true)
   assignTo    String? @db.ObjectId
 
@@ -283,7 +283,6 @@ model aiagents {
 //   "updatedAt": { "$date": "2025-09-14T00:05:00Z" }
 // }
 
-
 model aicalllogs {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   agent_id String // links to aiagent.agentId
@@ -311,23 +310,16 @@ model Call {
   organizationId String @db.ObjectId
   agentId        String @db.ObjectId
 
-  from_number       String
-  to_number         String
-  call_time          DateTime  @default(now())
-  callType          String // direction
-  call_status       String
+  from_number       String?
+  to_number         String?
+  call_time         DateTime? @default(now())
+  callType          String? // direction
+  call_status       String?
   call_duration     Int?
-  call_started_at   DateTime  @default(now()) // Date formate 
-  // "created_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
+  call_started_at   DateTime?
   call_completed_at DateTime?
-  // "call_completed_at": {
-  //     "$date": "2025-09-10T00:22:06.362Z"
-  //   },
 
-  // account_sid String?
-  call_sid    String?
+  call_sid String?
 
   call_transcript    String?
   recording_duration Int?
@@ -337,17 +329,6 @@ model Call {
 
   processed               Boolean? @default(false)
   transcription_requested Boolean? @default(false)
-
-  // from_country   String?
-  // to_city        String?
-  // to_state       String?
-  // to_zip         String?
-  // to_country     String?
-  // caller_country String?
-  // called_city    String?
-  // called_state   String?
-  // called_zip     String?
-  // called_country String?
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -363,22 +344,22 @@ model Call {
 
 // model Calls {
 //   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  
+
 //   // Make these optional to match Python
 //   organizationId String?  @db.ObjectId  // Changed to optional
 //   agentId        String?  @db.ObjectId  // Changed to optional
-  
+
 //   // Call information - match Python field names
 //   from_number    String
 //   to_number      String
 //   call_time      DateTime @default(now())  // Changed to match Python
 //   callType       String   // Keep as String for flexibility
 //   call_status    String   // Keep as String for flexibility
-  
+
 //   call_duration     Int?
 //   call_started_at   DateTime @default(now())
 //   call_completed_at DateTime?
-  
+
 //   // Twilio fields
 //   call_sid           String?
 //   call_transcript    String?
@@ -386,7 +367,7 @@ model Call {
 //   recording_sid      String?
 //   recording_status   String?  // Added missing field
 //   recording_url      String?
-  
+
 //   // Processing flags - added missing fields
 //   processed               Boolean @default(false)
 //   transcription_requested Boolean @default(false)
@@ -416,7 +397,6 @@ model UploadVoice {
 
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
-
 
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
