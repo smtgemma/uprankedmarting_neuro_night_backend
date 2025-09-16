@@ -52,7 +52,7 @@ const getGoogleSheetsConnectUrl = catchAsync(async (req, res) => {
     statusCode: status.OK,
     message: result.message,
     data: {
-      authUrl: result.authUrl
+      authUrl: result.authUrl,
     },
   });
 });
@@ -62,7 +62,9 @@ const handleGoogleSheetsCallback = catchAsync(async (req, res) => {
   const { code, state } = req.query;
 
   if (!code || !state) {
-    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing_parameters`);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?error=missing_parameters`
+    );
   }
 
   try {
@@ -73,12 +75,20 @@ const handleGoogleSheetsCallback = catchAsync(async (req, res) => {
 
     // Redirect to frontend with success message
     res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(result.spreadsheetUrl)}`
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(
+        result.spreadsheetUrl
+      )}`
     );
   } catch (error: any) {
     console.error("Google Sheets callback error:", error);
     res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard/integrations?error=connection_failed&message=${encodeURIComponent(error.message)}`
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/integrations?error=connection_failed&message=${encodeURIComponent(
+        error.message
+      )}`
     );
   }
 });

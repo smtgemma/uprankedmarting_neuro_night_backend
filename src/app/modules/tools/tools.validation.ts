@@ -8,11 +8,9 @@ const CreateLeadSchema = z.object({
 
 const questionValidationSchema = z.object({
   params: z.object({
-    orgId: z
-      .string()
-      .refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
-        message: "Invalid MongoDB ObjectId for orgId",
-      }),
+    orgId: z.string().refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
+      message: "Invalid MongoDB ObjectId for orgId",
+    }),
   }),
 });
 
@@ -23,9 +21,11 @@ const configureGoogleSheetsSchema = z.object({
     }),
     credentials: z.object(
       {
-        client_email: z.string({
-          required_error: "Client email is required",
-        }).email("Invalid client email format"),
+        client_email: z
+          .string({
+            required_error: "Client email is required",
+          })
+          .email("Invalid client email format"),
         private_key: z.string({
           required_error: "Private key is required",
         }),
