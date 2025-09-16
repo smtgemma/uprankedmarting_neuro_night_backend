@@ -19,7 +19,6 @@ const createCompanyDoc = async (req: Request) => {
   const { docFor } = req?.body;
   const file = req?.file;
 
-  console.log("File:", file)
 
   const user = req?.user;
 
@@ -63,6 +62,7 @@ const createCompanyDoc = async (req: Request) => {
         organizationId: Organization?.id,
         docFor: docFor as DocFor,
         content,
+        fileName: cleanedDocName,
         aiDocId: docFor === "AI" ? file.filename : null,
         aiDocName: docFor === "AI" ? cleanedDocName : null,
       },
