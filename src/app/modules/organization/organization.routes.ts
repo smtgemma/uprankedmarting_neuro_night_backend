@@ -18,6 +18,11 @@ router.get(
 );
 
 router.get(
+  '/platform-overview-stats',
+  OrganizationController.getPlatformOverview
+);
+
+router.get(
   "/:organizationId",
   //   auth(UserRole.organization_admin, UserRole.super_admin),
   OrganizationController.getSingleOrganization

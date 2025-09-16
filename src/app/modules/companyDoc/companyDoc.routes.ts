@@ -35,7 +35,7 @@ router.post(
   uploadDocument.single("document"), 
   auth(UserRole.organization_admin),
   (req: Request, res: Response, next: NextFunction) => {
-    console.log("File uploaded:", req.file);
+    // console.log("File uploaded:", req.file);
 
     // Parse the JSON data from the 'data' field
     if (req.body?.data) {
@@ -58,7 +58,7 @@ router.post(
 
 router.get(
   "/",
-  auth(UserRole.organization_admin),
+  auth(UserRole.super_admin),
   CompanyDocController.getAllCompanyDocs
 );
 router.get("/organization",auth(UserRole.organization_admin), CompanyDocController.getCompanyDocsByOrgAdmin);

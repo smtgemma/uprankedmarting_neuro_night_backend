@@ -675,104 +675,7 @@ const updateUserIntoDB = async (user: User, payload: any) => {
   return restData;
 };
 
-// const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
-//   // console.log("update agent info", user, agentId, payload);
-//   const currentUserRole = user?.role;
-
-//   // Only super_admin can access this function
-//   if (currentUserRole !== UserRole.super_admin) {
-//     throw new ApiError(
-//       status.FORBIDDEN,
-//       "Only super admin can update agent information"
-//     );
-//   }
-
-//   const { userData, agentData } = payload;
-
-//   if (!agentId) {
-//     throw new ApiError(
-//       status.BAD_REQUEST,
-//       "targetUserId is required to update agent information"
-//     );
-//   }
-
-//   // Check if target user exists and is an agent
-//   const targetUser = await prisma.user.findUnique({
-//     where: { id: agentId, isDeleted: false },
-//     include: {
-//       Agent: true,
-//     },
-//   });
-
-//   if (!targetUser) {
-//     throw new ApiError(status.NOT_FOUND, "User not found!");
-//   }
-
-//   if (!targetUser.Agent) {
-//     throw new ApiError(status.BAD_REQUEST, "Target user is not an agent");
-//   }
-
-//   const result = await prisma.$transaction(async (transactionClient) => {
-//     let updatedUser = targetUser;
-//     let updatedAgent = targetUser?.Agent;
-
-//     // Update user data if provided
-//     if (userData) {
-//       // ===== Check for existing user =====
-//       const existingUser = await prisma.user.findFirst({
-//         where: {
-//           OR: [{ email: userData.email }, { phone: userData.phone }],
-//         },
-//         include: {
-//           Agent: true,
-//         },
-//       });
-//       if (existingUser) {
-//         throw new ApiError(
-//           status.BAD_REQUEST,
-//           "User with this email or phone already exists!"
-//         );
-//       }
-
-//       updatedUser = await transactionClient.user.update({
-//         where: { id: agentId },
-//         data: {
-//           name: userData.name,
-//           bio: userData.bio,
-//           phone: userData.phone,
-//           image: payload?.image,
-//           role: userData.role, // Super admin can change role
-//         },
-//         include: {
-//           Agent: true,
-//         },
-//       });
-//     }
-
-//     // Update agent data if provided
-//     if (agentData) {
-//       updatedAgent = await transactionClient.agent.update({
-//         where: { userId: agentId },
-//         data: {
-//           ...agentData,
-//           emergencyPhone: agentData.emergencyPhone,
-//           ssn: agentData.ssn,
-//           skills: agentData.skills,
-//           dateOfBirth: new Date(agentData.dateOfBirth),
-//         },
-//       });
-//     }
-
-//     return { ...updatedUser, password: null };
-//   });
-
-//   return result;
-// };
-
 const updateAgentSpecificInfo = async (user: User, payload: any) => {
-  if (!payload?.image) {
-    throw new ApiError(status.BAD_REQUEST, "Image is required");
-  }
   // Check if user exists and is an agent
   const targetUser = await prisma.user.findUnique({
     where: {
@@ -801,6 +704,7 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
     where: { id: user.id },
     data: {
       image: payload?.image,
+      bio: payload?.bio,
     },
     select: {
       id: true,
@@ -835,8 +739,34 @@ const getSingleUserByIdFromDB = async (userId: string) => {
       isDeleted: false,
     },
     include: {
-      Agent: true, // If user is an agent, get agent details
-      ownedOrganization: true, // If user owns an organization
+      Agent: {
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          sip_address: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          emergencyPhone: true,
+          ssn: true,
+          skills: true,
+          employeeId: true,
+          isAvailable: true,
+          assignTo: true,
+          jobTitle: true,
+          employmentType: true,
+          department: true,
+          workEndTime: true,
+          workStartTime: true,
+          startWorkDateTime: true,
+          successCalls: true,
+          droppedCalls: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      ownedOrganization: true,
     },
   });
 
