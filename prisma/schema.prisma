@@ -415,6 +415,7 @@ model OrganizationDoc {
   organizationId String @db.ObjectId
   docFor         DocFor @default(AI)
   content        Json
+  fileName       String?
 
   // ai
   aiDocId   String?
