@@ -10,6 +10,7 @@ import { requestLogger } from "./app/middlewares/requestLogger";
 import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
 
 const app: Application = express();
+app.set("trust proxy", 1); 
 
 // parsers
 app.use(express.json());

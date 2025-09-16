@@ -78,7 +78,21 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
                 createdAt: "desc",
               },
             },
-            agents: true,
+            agents: {
+              select:{
+                id: true,
+                user:{
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    phone: true,
+                  }
+                },
+                employeeId: true,
+                emergencyPhone: true,
+              }
+            }
           },
         },
       },
