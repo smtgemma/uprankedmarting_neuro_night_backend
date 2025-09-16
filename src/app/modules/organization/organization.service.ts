@@ -294,6 +294,7 @@ const getOrganizationCallLogsManagement = async (
       agent_name: log?.agent_name || "AI Agent",
       from_number: null,
       to_number: null,
+      recording_url: null,
       // conversation_id: log.conversation_id,
       // message_count: log.message_count,
       call_time: log.start_time_unix_secs,
