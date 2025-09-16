@@ -119,6 +119,20 @@ const getAllAgentFromDB = async (
                 assignedBy: true,
               },
             },
+            // assignments: {
+            //   where: {
+            //     status: {
+            //       not: "REJECTED",
+            //     },
+            //   },
+            //   select: {
+            //     id: true,
+            //     status: true,
+            //     agentUserId: true,
+            //     organizationId: true,
+            //     assignedBy: true,
+            //   },
+            // },
             organization: {
               select: {
                 id: true,
@@ -685,7 +699,6 @@ const getAgentCallsManagementInfo = async (
 
   // If search term exists, ADD search conditions to the existing whereClause
   if (searchTerm) {
-
     whereClause.AND = [
       {
         OR: [

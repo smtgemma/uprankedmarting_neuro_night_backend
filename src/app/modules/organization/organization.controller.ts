@@ -39,6 +39,17 @@ const getOrganizationCallLogsManagement = catchAsync(
   }
 );
 
+// In your controller
+const getPlatformOverview = catchAsync(async (req: Request, res: Response) => {
+  const stats = await OrganizationServices.getPlatformOverviewStats();
+  
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: 'Platform overview statistics fetched successfully!',
+    data: stats,
+  });
+});
+
 const getSingleOrganization = catchAsync(async (req, res) => {
   const { organizationId } = req.params;
 
@@ -54,6 +65,7 @@ const getSingleOrganization = catchAsync(async (req, res) => {
 
 export const OrganizationController = {
   getAllOrganizations,
+  getPlatformOverview,
   getSingleOrganization,
   getOrganizationCallLogsManagement
 };

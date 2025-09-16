@@ -104,7 +104,7 @@ const getAllCompanyDocs = async (query: Record<string, unknown>) => {
 };
 
 const getSingleCompanyDoc = async (id: string) => {
-  console.log(id)
+
   return await prisma.organizationDoc.findUnique({
     where: { id },
     include: { organization: true },
@@ -115,6 +115,7 @@ const getCompanyDocsByOrgAdmin = async (
   query: Record<string, unknown>,
   user: User
 ) => {
+  // console.log(user?.id)
   const Organization = await prisma.organization.findUnique({
     where: { ownerId: user?.id },
   });
@@ -254,7 +255,7 @@ const updateCompanyDoc = async (id: string, req: Request) => {
 };
 
 const deleteCompanyDoc = async (id: string, user: User) => {
-  console.log(user);
+  // console.log(user);
   const doc = await prisma.organizationDoc.findUnique({
     where: { id },
     include: {

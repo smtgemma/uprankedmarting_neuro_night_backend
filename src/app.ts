@@ -29,6 +29,10 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 const allowedOrigins = [
   "http://localhost:3000", // React local
+  "http://localhost:3001", // React local
+  "http://localhost:3002", // React local
+  "http://localhost:3003", // React local
+  "http://localhost:3004", // React local
   "http://10.0.30.84:3000", // অন্য client
   "https://your-production-frontend-url.com", // deployed client
 ];

@@ -162,8 +162,45 @@ const getOrganizationCallLogsManagement = async (
   };
 };
 
+
+const getPlatformOverviewStats = async (): Promise<any> => {
+  try {
+    // Execute all queries in parallel for efficiency
+    const [
+      totalOrganizations,
+      totalHumanCalls,
+      totalAICalls
+    ] = await Promise.all([
+      // Total organizations count
+      prisma.organization.count(),
+
+      // Total human calls (all statuses)
+      prisma.call.count(),
+
+      // Total AI calls (all statuses)
+      prisma.aicalllogs.count()
+    ]);
+
+    const totalCalls = totalHumanCalls + totalAICalls;
+
+    return {
+      totalOrganizations,
+      totalCalls,
+      totalHumanCalls,
+      totalAICalls
+    };
+  } catch (error) {
+    console.error("Error fetching platform overview stats:", error);
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      "Failed to fetch platform overview statistics"
+    );
+  }
+};
+
 export const OrganizationServices = {
   getAllOrganizations,
+  getPlatformOverviewStats,
   getOrganizationCallLogsManagement,
   getSingleOrganization,
 };
