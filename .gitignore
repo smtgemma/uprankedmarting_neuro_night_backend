@@ -1,7 +1,9 @@
 .env
 dist
-.vscode
 generated
+temp_auto_push.bat
 node_modules
 .vercel
 demoSchema
+.gitignore
+branch_structure.json
