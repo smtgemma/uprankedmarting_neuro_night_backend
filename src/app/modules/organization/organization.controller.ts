@@ -11,7 +11,7 @@ const getAllOrganizations = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: status.OK,
     message: "Organizations retrieved successfully",
-    data: results.data,
+    data: results?.data,
   });
 });
 
