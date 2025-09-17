@@ -250,7 +250,7 @@ model aiagents {
   updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  callLogs     aicalllogs[] // 1-to-many relation
+  callLogs     AICallLog[] // 1-to-many relation
 
   @@map("aiagents")
 }
@@ -278,26 +278,53 @@ model aiagents {
 //   "updatedAt": { "$date": "2025-09-14T00:05:00Z" }
 // }
 
-model aicalllogs {
-  id       String @id @default(auto()) @map("_id") @db.ObjectId
-  agent_id String // links to aiagent.agentId
+// model aicalllogs {
+//   id       String @id @default(auto()) @map("_id") @db.ObjectId
+//   agent_id String // links to aiagent.agentId
 
-  agent_name           String?
-  conversation_id      String?
-  start_time_unix_secs Int?
-  call_duration_secs   Int?
-  message_count        Int?
-  status               String?
-  call_successful      String?
-  direction            String?
+//   agent_name           String?
+//   conversation_id      String?
+//   start_time_unix_secs Int?
+//   call_duration_secs   Int?
+//   message_count        Int?
+//   status               String?
+//   call_successful      String?
+//   direction            String?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   aiagents aiagents @relation(fields: [agent_id], references: [agentId])
+
+//   @@map("aicalllogs")
+// }
+
+model AICallLog {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  call_sid           String?
+  organizationId     String   @db.ObjectId
+  agent_id           String   // links to aiagents.agentId
+  conversation_id    String?
+  from_number        String?
+  to_number          String?
+  callType           String?
+  call_status        String?
+  call_time          DateTime?
+  call_started_at    DateTime?
+  call_completed_at  DateTime?
+  call_duration      Int?
+  recording_duration Int?
+  call_transcript    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   aiagents aiagents @relation(fields: [agent_id], references: [agentId])
 
-  @@map("aicalllogs")
+  @@map("AICallLog")
 }
+
+
 
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
