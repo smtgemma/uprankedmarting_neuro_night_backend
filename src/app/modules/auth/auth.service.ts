@@ -361,13 +361,44 @@ const refreshToken = async (token: string) => {
 };
 
 const getMe = async (email: string) => {
+
   const user = await prisma.user.findFirst({
     where: {
       email: email,
       isDeleted: false,
     },
     include: {
-      Agent: true,
+      Agent: {
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          sip_address: true,
+          sip_username: true,
+          sip_password: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          emergencyPhone: true,
+          ssn: true,
+          skills: true,
+          employeeId: true,
+          isAvailable: true,
+          assignTo: true,
+          organization: true,
+          jobTitle: true,
+          employmentType: true,
+          department: true,
+          workEndTime: true,
+          workStartTime: true,
+          startWorkDateTime: true,
+          endWorkDateTime: true,
+          successCalls: true,
+          droppedCalls: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       ownedOrganization: {
         // "id": "68c220255294a7faf37c168d",
         //     "name": "test org for call",
@@ -404,6 +435,7 @@ const getMe = async (email: string) => {
       },
     },
   });
+
 
   if (!user) {
     throw new ApiError(status.NOT_FOUND, "User not found");
@@ -537,7 +569,37 @@ const getSingleUser = async (id: string, AuthUser: User) => {
       isDeleted: false,
     },
     include: {
-      Agent: true,
+      Agent: {
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          sip_address: true,
+          sip_username: true,
+          sip_password: true,
+          dateOfBirth: true,
+          gender: true,
+          address: true,
+          emergencyPhone: true,
+          ssn: true,
+          skills: true,
+          employeeId: true,
+          isAvailable: true,
+          assignTo: true,
+          organization: true,
+          jobTitle: true,
+          employmentType: true,
+          department: true,
+          workEndTime: true,
+          workStartTime: true,
+          startWorkDateTime: true,
+          endWorkDateTime: true,
+          successCalls: true,
+          droppedCalls: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       ownedOrganization: true,
     },
   });
