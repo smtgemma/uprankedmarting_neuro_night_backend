@@ -449,6 +449,7 @@ const getOrganizationCallLogsManagement = async (
   user: User
 ) => {
   let searchTerm = filters?.searchTerm as string;
+  let agentType = filters?.agentType as string; // 'ai', 'human', or undefined for both
 
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
@@ -463,62 +464,84 @@ const getOrganizationCallLogsManagement = async (
     throw new AppError(status.NOT_FOUND, "Organization not found");
   }
 
-  // Get both human calls and AI call logs in parallel
-  const [humanCalls, aiCallLogs, totalHumanCalls, totalAICallLogs] =
-    await Promise.all([
-      // Human agent calls
-      getHumanAgentCalls(
-        getOrganizationAdmin.id,
-        searchTerm,
-        skip,
-        limit,
-        sortBy,
-        sortOrder
-      ),
+  // Determine which data to fetch based on agentType filter
+  const shouldFetchHuman = agentType !== 'ai';
+  const shouldFetchAI = agentType !== 'human';
 
-      // AI agent call logs
-      getAIAgentCallLogs(
-        getOrganizationAdmin.id,
-        searchTerm,
-        skip,
-        limit,
-        sortBy,
-        sortOrder
-      ),
+  // Prepare promises for data fetching
+  const humanCallsPromise = shouldFetchHuman ? 
+    getHumanAgentCalls(
+      getOrganizationAdmin.id,
+      searchTerm,
+      skip,
+      limit,
+      sortBy,
+      sortOrder
+    ) : Promise.resolve([]);
 
-      // Total counts for pagination
-      prisma.call.count({
-        where: {
-          organizationId: getOrganizationAdmin.id,
-          ...(searchTerm && {
-            OR: [
-              { from_number: { contains: searchTerm, mode: "insensitive" } },
-              { to_number: { contains: searchTerm, mode: "insensitive" } },
-              { call_status: { contains: searchTerm, mode: "insensitive" } },
-              { callType: { contains: searchTerm, mode: "insensitive" } },
-            ],
-          }),
-        },
-      }),
+  const totalHumanCallsPromise = shouldFetchHuman ? 
+    prisma.call.count({
+      where: {
+        organizationId: getOrganizationAdmin.id,
+        ...(searchTerm && {
+          OR: [
+            { from_number: { contains: searchTerm, mode: "insensitive" } },
+            { to_number: { contains: searchTerm, mode: "insensitive" } },
+            { call_status: { contains: searchTerm, mode: "insensitive" } },
+            { callType: { contains: searchTerm, mode: "insensitive" } },
+            {
+              receivedBy: {
+                user: {
+                  name: { contains: searchTerm, mode: "insensitive" },
+                },
+              },
+            },
+          ],
+        }),
+      },
+    }) : Promise.resolve(0);
 
-      prisma.aICallLog.count({
-        where: {
-          organizationId: getOrganizationAdmin.id,
-          ...(searchTerm && {
-            OR: [
-              { from_number: { contains: searchTerm, mode: "insensitive" } },
-              { to_number: { contains: searchTerm, mode: "insensitive" } },
-              { call_status: { contains: searchTerm, mode: "insensitive" } },
-              { callType: { contains: searchTerm, mode: "insensitive" } },
-            ],
-          }),
-        },
-      }),
-    ]);
+  const aiCallLogsPromise = shouldFetchAI ? 
+    getAIAgentCallLogs(
+      getOrganizationAdmin.id,
+      searchTerm,
+      skip,
+      limit,
+      sortBy,
+      sortOrder
+    ) : Promise.resolve([]);
+
+  const totalAICallLogsPromise = shouldFetchAI ? 
+    prisma.aICallLog.count({
+      where: {
+        organizationId: getOrganizationAdmin.id,
+        ...(searchTerm && {
+          OR: [
+            { from_number: { contains: searchTerm, mode: "insensitive" } },
+            { to_number: { contains: searchTerm, mode: "insensitive" } },
+            { call_status: { contains: searchTerm, mode: "insensitive" } },
+            { callType: { contains: searchTerm, mode: "insensitive" } },
+            {
+              aiagents: {
+                agentId: { contains: searchTerm, mode: "insensitive" },
+              },
+            },
+          ],
+        }),
+      },
+    }) : Promise.resolve(0);
+
+  // Execute only the necessary queries
+  const [humanCalls, totalHumanCalls, aiCallLogs, totalAICallLogs] = await Promise.all([
+    humanCallsPromise,
+    totalHumanCallsPromise,
+    aiCallLogsPromise,
+    totalAICallLogsPromise
+  ]);
 
   // Combine and format the data
   const combinedData = [
-    ...humanCalls.map((call) => ({
+    ...(humanCalls.map((call) => ({
       type: "human" as const,
       id: call.id,
       organizationId: call.organizationId,
@@ -533,27 +556,26 @@ const getOrganizationCallLogsManagement = async (
       callType: call.callType,
       recording_url: call.recording_url,
       createdAt: call.createdAt,
-    })),
+    }))),
 
-    ...aiCallLogs.map((log) => ({
+    ...(aiCallLogs.map((log) => ({
       type: "ai" as const,
       id: log.id,
       conversation_id: log.conversation_id,
       organizationId: log.organizationId,
       call_sid: log.call_sid,
       agent_id: log.agent_id,
-      agent_name: "AI Agent", // You might want to fetch the actual AI agent name
+      agent_name: null,
       from_number: log.from_number,
       to_number: log.to_number,
       call_time: log.call_time,
       call_duration: log.call_duration,
       call_status: log.call_status,
       callType: log.callType,
-      recording_url: null, // AI calls don't have recording_url in current schema
+      recording_url: null,
       recording_duration: log.recording_duration,
-      // call_transcript: log.call_transcript,
       createdAt: log.createdAt,
-    })),
+    }))),
   ];
 
   // Sort combined data by createdAt
@@ -669,7 +691,6 @@ const getAIAgentCallLogs = async (
       { callType: { contains: searchTerm, mode: "insensitive" } },
       {
         aiagents: {
-          // If you want to search by AI agent name, you'd need to join the aiagents table
           agentId: { contains: searchTerm, mode: "insensitive" },
         },
       },
@@ -699,7 +720,6 @@ const getAIAgentCallLogs = async (
       aiagents: {
         select: {
           agentId: true,
-          // agentName: true, // Add this if you have agentName in aiagents model
         },
       },
     },
