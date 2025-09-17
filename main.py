@@ -22,6 +22,7 @@ from app.api.endpoints import ai_document
 from app.api.endpoints import ai_voice
 from app.api.endpoints import connect_ai_agent_with_twilio
 from app.api.endpoints import ai_agent
+from app.api.endpoints import ai_call_log_webhook
 
 
 # Logging setup
@@ -75,7 +76,8 @@ async def lifespan(app: FastAPI):
         # Initialize Beanie with all document models
         await init_beanie(
             database=client.get_database(settings.MONGO_DB_NAME),
-            document_models=[Call, Agent, Organization, AIAgent, AICallLog]
+            document_models=[Call, Agent, Organization, AIAgent, AICallLog],
+            allow_index_dropping=True
         )
         logger.info("Beanie initialized with Call, Agent, Organization, AIAgent, and AICallLog models")
         
@@ -183,6 +185,7 @@ app.include_router(ai_voice.router)
 app.include_router(call_routing.router)
 app.include_router(connect_ai_agent_with_twilio.router)
 app.include_router(ai_agent.router)
+app.include_router(ai_call_log_webhook.router)
 
 if __name__ == "__main__":
     import uvicorn

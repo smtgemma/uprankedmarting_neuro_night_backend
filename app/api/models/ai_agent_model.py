@@ -3,6 +3,7 @@ from beanie import Document, Link, PydanticObjectId
 from typing import List, Optional
 from datetime import datetime, timezone
 from enum import Enum
+from bson import ObjectId
 
 # Enum for Call Status
 class CallStatus(Enum):
@@ -31,6 +32,17 @@ class TimestampedModel(BaseModel):
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+
+class AICallWebhookPayload(BaseModel):
+    agent_id: str
+    agent_name: Optional[str] = None
+    conversation_id: Optional[str] = None
+    start_time_unix_secs: Optional[int] = None
+    call_duration_secs: Optional[int] = None
+    message_count: Optional[int] = None
+    status: Optional[CallStatus] = None
+    call_successful: Optional[bool] = None
+    direction: Optional[Direction] = None
 
 # Organization Model
 class Organization(TimestampedModel, Document):
@@ -78,33 +90,55 @@ class Agent(TimestampedModel, Document):
 
 
 # AICallLog Model for Eleven Labs
-class AICallLog(TimestampedModel, Document):  # Changed to Document
-    agent_id: str  
-    agent_name: Optional[str] = None  
-    conversation_id: Optional[str] = None  
-    start_time_unix_secs: Optional[int] = None  
-    call_duration_secs: Optional[int] = None  
-    message_count: Optional[int] = None  
-    status: Optional[CallStatus] = None  
-    call_successful: Optional[bool] = None  
-    direction: Optional[Direction] = None  
+# class AICallLog(TimestampedModel, Document):  # Changed to Document
+#     agent_id: str  
+#     agent_name: Optional[str] = None  
+#     conversation_id: Optional[str] = None  
+#     start_time_unix_secs: Optional[int] = None  
+#     call_duration_secs: Optional[int] = None  
+#     message_count: Optional[int] = None  
+#     status: Optional[CallStatus] = None  
+#     call_successful: Optional[bool] = None  
+#     direction: Optional[Direction] = None  
 
-    class Settings:
-        collection = "aicalllogs"  
+#     class Settings:
+#         collection = "aicalllogs"  
 
 
 # AIAgent Model
-class AIAgent(TimestampedModel, Document):
-    id: PydanticObjectId = Field(default=None, alias="_id")
-    agentId: str  
-    organizationId: PydanticObjectId  
-    callLogs: List[AICallLog] = []  # List of AICallLogs related to this agent
+class AIAgent(Document,TimestampedModel):
+    agentId: str
+    organizationId: ObjectId 
+    
+    class Settings:
+        collection = "aiagents"
 
-    # Relationship with Organization (Link to the Organization document)
-    organization: Link[Organization]  # Correct usage of Link
+    class Config:
+        arbitrary_types_allowed = True  # Allow arbitrary types like ObjectId
+
+
+# AICallLog Model for Eleven Labs
+class AICallLog(TimestampedModel, Document):  # Changed to Document
+    id: PydanticObjectId = Field(default=None, alias="_id")
+    call_sid: str = Field(..., description="Twilio CallSid")
+    organizationId: Optional[PydanticObjectId] = None
+    agent_id: str  
+    conversation_id: Optional[str] = None
+    from_number: str
+    to_number: str
+    callType: CallType
+    call_status: CallStatus
+    call_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    call_started_at: Optional[datetime] = None
+    call_completed_at: Optional[datetime] = None
+    call_duration: Optional[int] = None
+    # recording_url: Optional[str] = None
+    recording_duration: Optional[int] = None
+    call_transcript: Optional[str] = None
+    # recording_sid: Optional[str] = None  
 
     class Settings:
-        collection = "aiagents"  
+        collection = "aicalllogs"  
 
 
 # Call Model
@@ -124,8 +158,7 @@ class Call(TimestampedModel, Document):
     recording_url: Optional[str] = None
     recording_duration: Optional[int] = None
     call_transcript: Optional[str] = None
-    error_reason: Optional[str] = None
-    agent: Optional[Link[Agent]] = None
+    recording_sid: Optional[str] = None
 
     class Settings:
         collection = "call_records"

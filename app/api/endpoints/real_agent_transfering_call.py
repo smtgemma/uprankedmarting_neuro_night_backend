@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, field_validator, Field
@@ -14,6 +14,10 @@ from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.rest import Client
 import httpx
 import jwt
+import httpx
+from openai import OpenAI
+import re
+import uuid
 
 from app.core.config import settings
 from app.core.metrics import (
@@ -23,6 +27,8 @@ from app.core.metrics import (
 from app.services.shared_state import get_shared_state
 from app.db.database_connection import get_database
 from app.api.models.ai_agent_model import Call, CallStatus, CallType
+
+openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +48,26 @@ class AgentStatusUpdate(BaseModel):
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
 
+# class OutboundCallRequest(BaseModel):
+#     to_number: str = Field(
+#         ..., 
+#         example="+15551234567", 
+#         description="The recipient's phone number in E.164 format."
+#     )
+
 class OutboundCallRequest(BaseModel):
-    to_number: str = Field(
-        ..., 
-        example="+15551234567", 
-        description="The recipient's phone number in E.164 format."
-    )
+    to_number: str
+    from_number: str = None  # Optional, will use organization's number if not provided
+
+class CallStatusUpdate(BaseModel):
+    call_sid: str
+    status: str
+    duration: int = None
 
 # Authentication
 security = HTTPBearer()
+
+twilio_client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
 async def get_current_agent(credentials=Depends(security)):
     token = credentials.credentials
@@ -261,7 +278,7 @@ async def handle_websocket_message(shared_state, session_id: str, message: dict)
                 "data": {"message": "Agent not found"}
             })
             return
-
+        
         # Prepare agent session data
         organization_id = str(agent.get("assignTo")) if agent.get("assignTo") else None
         agent_session_data = {
@@ -275,6 +292,13 @@ async def handle_websocket_message(shared_state, session_id: str, message: dict)
             "instance_id": settings.INSTANCE_ID,
             "session_id": session_id
         }
+
+        # Prevent duplicate registration
+        if shared_state.websocket_manager.is_agent_registered(agent_id):
+            old_session_id = shared_state.websocket_manager.agent_sessions[agent_id]
+            if old_session_id != session_id:  # Only disconnect if it's a different session
+                await shared_state.websocket_manager.disconnect(old_session_id)
+                logger.warning(f"Agent {agent_id} reconnected, old session {old_session_id} disconnected")
 
         # Register agent
         await shared_state.websocket_manager.register_agent(session_id, agent_id, agent_session_data)
@@ -360,6 +384,7 @@ async def handle_websocket_message(shared_state, session_id: str, message: dict)
             "type": "error",
             "data": {"message": f"Unknown message type: {message_type}"}
         })
+
 
 # Health Check Endpoints
 @router.get("/health")
@@ -699,12 +724,17 @@ async def update_agent_status(
     except Exception as e:
         logger.error(f"Status update error: {e}")
         raise HTTPException(status_code=500, detail="Failed to update status")
+    
 
-# Twilio Webhooks
+# -------------------------------------------------------------------------
+#  INBOUND CALL
+# -------------------------------------------------------------------------
 @router.post("/twilio/inbound-call")
-@track_call_duration
 async def handle_incoming_call(request: Request):
-    """Handle incoming Twilio calls with connection validation"""
+    """
+    Handle incoming Twilio calls with connection validation
+    Only the data-storage logic is changed: we insert into Call model.
+    """
     shared_state = get_shared_state(request.app)
     form_data = await request.form()
     CallSid = form_data.get("CallSid")
@@ -712,8 +742,8 @@ async def handle_incoming_call(request: Request):
     To = form_data.get("To")
 
     logger.info(f"Incoming call: {From} -> {To} (CallSid: {CallSid})")
-    
-    # First, check if backend is healthy
+
+    # Backend health check
     if not shared_state.health_status.backend_healthy:
         logger.error(f"Call {CallSid} received but backend is unhealthy")
         response = VoiceResponse()
@@ -725,30 +755,29 @@ async def handle_incoming_call(request: Request):
         response.hangup()
         CALLS_TOTAL.labels(status="backend_unhealthy").inc()
         return Response(content=str(response), media_type="application/xml")
-    
-    CALLS_TOTAL.labels(status="incoming").inc()
 
+    CALLS_TOTAL.labels(status="incoming").inc()
     response = VoiceResponse()
-    
+
     try:
         # Update last successful call timestamp
         await shared_state.redis_manager.redis_client.setex(
-            "last_successful_call",
-            3600,  # 1 hour TTL
-            datetime.now(timezone.utc).isoformat()
+            "last_successful_call", 3600, datetime.now(timezone.utc).isoformat()
         )
-        
-        # Determine organization
+
+        # Determine org & agent
         organization_id = await determine_organization_from_call(
-            shared_state.db_manager, 
-            shared_state.redis_manager, 
+            shared_state.db_manager,
+            shared_state.redis_manager,
             To
         )
-        
-        # Find best available agent
-        agent_id = await find_best_available_agent(shared_state.redis_manager, organization_id)
-        # Log call start
-        call_log = Call(
+        agent_id = await find_best_available_agent(
+            shared_state.redis_manager,
+            organization_id
+        )
+
+        # ---- INSERT INITIAL CALL RECORD (your Call model) ----
+        call_doc = await Call(
             call_sid=CallSid,
             organizationId=ObjectId(organization_id) if organization_id else None,
             agentId=ObjectId(agent_id) if agent_id else None,
@@ -756,14 +785,12 @@ async def handle_incoming_call(request: Request):
             to_number=To,
             callType=CallType.INCOMING,
             call_status=CallStatus.INITIATED,
-
             call_time=datetime.now(timezone.utc),
-            call_started_at=datetime.now(timezone.utc) if agent_id else None
-        )
-        await call_log.insert()
-        
+            call_started_at=datetime.now(timezone.utc) if agent_id else None,
+        ).insert()
+        logger.info(f"Inserted data scussfully like this forma: {call_doc}")
+
         if agent_id:
-            # Store call in Redis
             call_data = {
                 "call_id": CallSid,
                 "caller_number": From,
@@ -775,20 +802,17 @@ async def handle_incoming_call(request: Request):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             await shared_state.redis_manager.set_active_call(CallSid, call_data)
-            
-            # Update agent status to busy
+
             await shared_state.redis_manager.update_agent_status(agent_id, "busy")
             await shared_state.db_manager.db.agents.update_one(
                 {"userId": ObjectId(agent_id)},
                 {"$set": {"status": "busy", "last_activity": datetime.now(timezone.utc)}}
             )
-            
-            # Get agent session for SIP details
+
             agent_session = await shared_state.redis_manager.get_agent_session(agent_id)
             if not agent_session:
                 raise Exception(f"Agent session not found for {agent_id}")
 
-            # Send call notification to agent
             await shared_state.websocket_manager.send_to_agent(agent_id, {
                 "type": "incoming_call",
                 "data": {
@@ -800,14 +824,13 @@ async def handle_incoming_call(request: Request):
                 }
             })
 
-            # Create Twilio response
             response.say(
                 "Thank you for calling. Please wait while we connect you to an agent.",
                 voice="alice",
                 language="en-US"
             )
             response.pause(length=1)
-            
+
             dial = response.dial(
                 caller_id=From,
                 timeout=30,
@@ -816,7 +839,7 @@ async def handle_incoming_call(request: Request):
                 record="record-from-answer",
                 recording_status_callback="/twilio/recording-status"
             )
-            
+
             dial.client(
                 agent_session["sip_username"],
                 status_callback_event="initiated ringing answered completed",
@@ -826,19 +849,17 @@ async def handle_incoming_call(request: Request):
 
             ACTIVE_CALLS.inc()
             logger.info(f"Call {CallSid} routed to agent {agent_id}")
-            
+
         else:
-            # No agents available
             response.say(
                 "All our agents are currently busy. Please try again later. Goodbye.",
                 voice="alice",
                 language="en-US"
             )
             response.hangup()
-            
             CALLS_TOTAL.labels(status="no_agent").inc()
             logger.warning(f"No agents available for call {CallSid}")
-            
+
     except Exception as e:
         logger.error(f"Error handling incoming call {CallSid}: {e}")
         response.say(
@@ -851,115 +872,153 @@ async def handle_incoming_call(request: Request):
 
     return Response(content=str(response), media_type="application/xml")
 
-@router.post("/twilio/error-handler")
-async def handle_error_calls(request: Request):
-    """Handle calls when backend is unhealthy"""
-    form_data = await request.form()
-    CallSid = form_data.get("CallSid")
-    From = form_data.get("From")
-    To = form_data.get("To")
 
-    logger.warning(f"Call {CallSid} routed to error handler - Backend unhealthy")
-    
-    response = VoiceResponse()
-    response.say(
-        "We are currently experiencing technical difficulties and cannot take your call. "
-        "Please try again in a few minutes. We apologize for the inconvenience.",
-        voice="alice",
-        language="en-US"
-    )
-    response.hangup()
-    
-    CALLS_TOTAL.labels(status="error_handler").inc()
-    return Response(content=str(response), media_type="application/xml")
-
+# -------------------------------------------------------------------------
+#  CALL STATUS UPDATES
+# -------------------------------------------------------------------------
 @router.post("/twilio/call-status")
-async def handle_call_status(request: Request, call_id: str, agent_id: str):
-    """Handle call status updates"""
+async def handle_call_status(request: Request):
+    """
+    Handle Twilio call status updates.
+    Reads `call_id` (or `CallSid`), `agent_id`, and `DialCallStatus` (or CallStatus) from form data.
+    Updates Call model, agent metrics, Redis status, and notifies via WebSocket.
+    """
     shared_state = get_shared_state(request.app)
-    
     form_data = await request.form()
-    DialCallStatus = form_data.get("DialCallStatus")
+
+    print(form_data)
+
+    # Twilio sends CallSid instead of call_id
+    call_id = form_data.get("call_id") or form_data.get("CallSid")
+
+    print("Call SID: ",call_id)
     
+    # Sometimes DialCallStatus is missing; fallback to CallStatus
+    DialCallStatus = form_data.get("DialCallStatus") or form_data.get("CallStatus")
+
+    if not call_id:
+        logger.error(f"Missing call_id in call-status POST: {dict(form_data)}")
+        CALLS_TOTAL.labels(status="error").inc()
+        return {"status": "error", "message": "Missing call_id"}
+    
+    # Fetch call document from DB
+    call = await Call.find_one(Call.call_sid == call_id)
+    if not call:
+        logger.error(f"Call record not found for {call_id}")
+        CALLS_TOTAL.labels(status="error").inc()
+        return {"status": "error", "message": "Call record not found"}
+    
+    # --- Add this check here ---
+    if call.call_status in {CallStatus.COMPLETED, CallStatus.BUSY}:
+        logger.info(f"Call {call_id} already ended: {call.call_status}")
+        return {"status": "ok", "message": "Already processed"}
+
+    agent_id = str(call.agentId)
+    if not agent_id:
+        logger.error(f"Missing agent_id for call {call_id}")
+        CALLS_TOTAL.labels(status="error").inc()
+        return {"status": "error", "message": "Missing agent_id"}
+
+    # Validate DialCallStatus
+    if DialCallStatus not in {"completed", "busy", "no-answer", "failed", "canceled"}:
+        logger.warning(f"Invalid or missing DialCallStatus for call {call_id}: {DialCallStatus}")
+        DialCallStatus = "completed"  # fallback to 'completed'
+
     logger.info(f"Call status update: {DialCallStatus} for call {call_id}")
 
     try:
-        if DialCallStatus in {"completed", "busy", "no-answer", "failed", "canceled"}:
-            # Get call data
-            call_data = await shared_state.redis_manager.get_active_call(call_id)
-            
-            # Update call status
-            if call_data:
-                call_data["status"] = "ended"
-                call_data["end_reason"] = DialCallStatus
-                call_data["end_time"] = datetime.now(timezone.utc).isoformat()
-                
-                # Store final call record
-                await shared_state.db_manager.db.call_logs.insert_one({
-                    "call_id": call_id,
-                    "caller_number": call_data.get("caller_number"),
-                    "called_number": call_data.get("called_number"),
-                    "agent_id": agent_id,
-                    "organization_id": call_data.get("organization_id"),
-                    "status": DialCallStatus,
-                    "start_time": datetime.fromisoformat(call_data.get("timestamp", "").replace('Z', '+00:00')),
-                    "end_time": datetime.now(timezone.utc),
-                    "instance_id": settings.INSTANCE_ID
-                })
-                
-                # Remove from active calls
-                await shared_state.redis_manager.remove_active_call(call_id)
+        # 1️⃣ Get call data from Redis
+        call_data = await shared_state.redis_manager.get_active_call(call_id)
 
-            # Update agent status back to free
+        # 2️⃣ Calculate call duration safely (always use UTC-aware datetimes)
+        end_time = datetime.now(timezone.utc)
+
+        start_time = None
+        if call.call_started_at:
+            start_time = call.call_started_at
+            # Ensure DB datetime is timezone-aware
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+        elif call_data and call_data.get("timestamp"):
+            start_time = datetime.fromisoformat(call_data.get("timestamp").replace("Z", "+00:00"))
+
+        call_duration = int((end_time - start_time).total_seconds()) if start_time else None
+
+        # 3️⃣ Update Call document in DB
+        await call.update({
+            "$set": {
+                "call_status": CallStatus[DialCallStatus.upper()],
+                "call_completed_at": end_time,
+                "call_duration": call_duration,
+                "updatedAt": end_time
+            }
+        })
+
+        # 4️⃣ Remove from active calls in Redis
+        await shared_state.redis_manager.remove_active_call(call_id)
+
+        # 5️⃣ Update agent status + metrics in DB
+        update_query = {"$set": {"status": "free", "last_activity": end_time}}
+        if DialCallStatus == "completed":
+            update_query["$inc"] = {"successCalls": 1}
+            CALLS_TOTAL.labels(status="completed").inc()
+        else:
+            update_query["$inc"] = {"droppedCalls": 1}
+            CALLS_TOTAL.labels(status="dropped").inc()
+
+        await shared_state.db_manager.db.agents.update_one(
+            {"userId": ObjectId(agent_id)},
+            update_query
+        )
+
+        # 6️⃣ Update Redis agent status
+        await shared_state.redis_manager.update_agent_status(agent_id, "free")
+
+        # 7️⃣ Notify agent via WebSocket (no timeout argument)
+        await shared_state.websocket_manager.send_to_agent(
+            agent_id,
+            {
+                "type": "call_ended",
+                "data": {
+                    "call_id": call_id,
+                    "status": DialCallStatus,
+                    "timestamp": end_time.isoformat()
+                }
+            }
+        )
+
+        # 8️⃣ Update active calls metric safely
+        try:
+            if ACTIVE_CALLS._value.get() > 0:  # use .get() for MutexValue
+                ACTIVE_CALLS.dec()
+        except Exception as metric_error:
+            logger.warning(f"Failed to decrement ACTIVE_CALLS metric: {metric_error}")
+
+        logger.info(f"Call {call_id} ended successfully: {DialCallStatus}")
+
+        return {"status": "ok", "call_id": call_id, "agent_id": agent_id, "call_status": DialCallStatus}
+
+    except Exception as e:
+        logger.error(f"Error handling call status for {call_id}: {str(e)}")
+
+        # Ensure agent status is always reset to 'free'
+        try:
             await shared_state.redis_manager.update_agent_status(agent_id, "free")
             await shared_state.db_manager.db.agents.update_one(
                 {"userId": ObjectId(agent_id)},
                 {"$set": {"status": "free", "last_activity": datetime.now(timezone.utc)}}
             )
+        except Exception as inner:
+            logger.error(f"Failed to update agent status during exception handling: {str(inner)}")
 
-            # Send notification to agent
-            await shared_state.websocket_manager.send_to_agent(agent_id, {
-                "type": "call_ended",
-                "data": {
-                    "call_id": call_id,
-                    "status": DialCallStatus,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-            })
-
-            # Update database metrics
-            update_query = {"$set": {"status": "free", "last_activity": datetime.now(timezone.utc)}}
-            if DialCallStatus == "completed":
-                update_query["$inc"] = {"successCalls": 1}
-                CALLS_TOTAL.labels(status="completed").inc()
-            else:
-                update_query["$inc"] = {"droppedCalls": 1}
-                CALLS_TOTAL.labels(status="dropped").inc()
-
-            await shared_state.db_manager.db.agents.update_one(
-                {"userId": ObjectId(agent_id)}, 
-                update_query
-            )
-            
-            ACTIVE_CALLS.dec()
-            logger.info(f"Call {call_id} ended: {DialCallStatus}")
-
-    except Exception as e:
-        logger.error(f"Error handling call status for {call_id}: {e}")
-        # Ensure agent status is reset even on error
-        await shared_state.redis_manager.update_agent_status(agent_id, "free")
-        await shared_state.db_manager.db.agents.update_one(
-            {"userId": ObjectId(agent_id)},
-            {"$set": {"status": "free", "last_activity": datetime.now(timezone.utc)}}
-        )
-
-    return {"status": "ok"}
-
+        CALLS_TOTAL.labels(status="error").inc()
+        return {"status": "error", "message": str(e)}
+# -------------------------------------------------------------------------
+#  CLIENT STATUS
+# -------------------------------------------------------------------------
 @router.post("/twilio/client-status")
 async def handle_client_status(request: Request):
-    """Handle Twilio client status updates"""
     shared_state = get_shared_state(request.app)
-    
     form_data = await request.form()
     CallSid = form_data.get("CallSid")
     CallStatus = form_data.get("CallStatus")
@@ -967,9 +1026,7 @@ async def handle_client_status(request: Request):
 
     logger.info(f"Client status: {CallStatus} for call {CallSid}, client: {Called}")
 
-    # Update call status in Redis if connected
     if CallStatus == "in-progress":
-        # Find parent call
         pattern = "call:*"
         async for key in shared_state.redis_manager.redis_client.scan_iter(match=pattern):
             call_data = await shared_state.redis_manager.redis_client.hgetall(key)
@@ -978,35 +1035,111 @@ async def handle_client_status(request: Request):
                 await shared_state.redis_manager.redis_client.hset(key, mapping=call_data)
                 logger.info(f"Call {key.split(':')[1]} is now connected")
                 break
+    return {"status": "ok"}
+
+
+# -------------------------------------------------------------------------
+#  RECORDING STATUS  -> stores URL + duration and optional transcription
+# -------------------------------------------------------------------------
+@router.post("/twilio/recording-status")
+async def handle_recording_status(
+    request: Request,
+    background_tasks: BackgroundTasks
+):
+    form_data = await request.form()
+
+    CallSid = form_data.get("CallSid")
+    RecordingStatus = form_data.get("RecordingStatus")
+    RecordingUrl = form_data.get("RecordingUrl")
+    RecordingSid = form_data.get("RecordingSid")
+    RecordingDuration = form_data.get("RecordingDuration")
+    TranscriptionText = form_data.get("TranscriptionText")
+
+    # ✅ Log safely
+    logger.info(f"Recording callback received: {dict(form_data)}")
+
+    # ✅ Save recording info immediately
+    await Call.find_one(Call.call_sid == CallSid).update(
+        {
+            "$set": {
+                "recording_url": RecordingUrl,
+                "recording_sid": RecordingSid,
+                "recording_duration": int(RecordingDuration) if RecordingDuration else None,
+                "recording_status": RecordingStatus,
+                "call_transcript": TranscriptionText if TranscriptionText else None
+            }
+        }
+    )
+
+    # ✅ Start async transcription if recording completed
+    if RecordingStatus == "completed" and RecordingUrl:
+        audio_url = f"{RecordingUrl}.mp3"
+        background_tasks.add_task(transcribe_and_store, CallSid, audio_url)
+        # background_tasks.add_task(call_lead_generation_api, CallSid)
 
     return {"status": "ok"}
 
-@router.post("/twilio/recording-status")
-async def handle_recording_status(request: Request):
-    """Handle recording status callbacks"""
-    shared_state = get_shared_state(request.app)
-    
-    form_data = await request.form()
-    RecordingSid = form_data.get("RecordingSid")
-    RecordingStatus = form_data.get("RecordingStatus")
-    CallSid = form_data.get("CallSid")
-    RecordingUrl = form_data.get("RecordingUrl")
 
-    logger.info(f"Recording {RecordingSid} status: {RecordingStatus} for call {CallSid}")
+async def transcribe_and_store(call_sid: str, audio_url: str):
+    async with httpx.AsyncClient(
+        auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    ) as client:
+        audio_resp = await client.get(audio_url)
+        audio_resp.raise_for_status()
+        audio_bytes = audio_resp.content
 
-    # Store recording information
-    if RecordingStatus == "completed" and RecordingUrl:
+    transcript_resp = openai_client.audio.transcriptions.create(
+        model="whisper-1",
+        file=("call.mp3", audio_bytes)
+    )
+    transcript_text = transcript_resp.text
+
+    await Call.find_one(Call.call_sid == call_sid).update(
+        {"$set": {"call_transcript": transcript_text}}
+    )
+
+async def call_lead_generation_api(call_sid: str):
+    """
+    Send HTTP POST request to lead generation API.
+    Args:
+        call_sid: Twilio CallSid to include as query parameter.
+    """
+    lead_url = settings.LEAD_GENERATION_API_URL
+    lead_generation_url = f"{lead_url}/organizations/conversations/"
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            await shared_state.db_manager.db.call_recordings.insert_one({
-                "recording_sid": RecordingSid,
-                "call_sid": CallSid,
-                "recording_url": RecordingUrl,
-                "status": RecordingStatus,
-                "created_at": datetime.now(timezone.utc)
-            })
-        except Exception as e:
-            logger.error(f"Failed to store recording info: {e}")
+            response = await client.post(
+                lead_generation_url,
+                params={"call_sid": call_sid},
+                json={}  # Empty body to match cURL example
+            )
+            response.raise_for_status()
+            logger.info(f"Lead generation API called successfully for call_sid: {call_sid}")
+        except httpx.HTTPStatusError as e:
+            error_detail = e.response.json() if e.response.content else str(e)
+            logger.error(f"Lead generation API failed for call_sid: {call_sid}, status: {e.response.status_code}, detail: {error_detail}")
+            # Don't raise exception in background task; log instead
+        except httpx.RequestError as e:
+            logger.error(f"Network error calling lead generation API for call_sid: {call_sid}: {str(e)}")
 
+
+
+
+# -------------------------------------------------------------------------
+#  OPTIONAL SEPARATE TRANSCRIPTION CALLBACK
+#  (Only needed if you use transcribe_callback instead of embedding in recording)
+# -------------------------------------------------------------------------
+@router.post("/twilio/transcription-status")
+async def handle_transcription_status(request: Request):
+    form_data = await request.form()
+    CallSid = form_data.get("CallSid")
+    transcript = form_data.get("TranscriptionText")
+
+    if transcript:
+        await Call.find_one(Call.call_sid == CallSid).update(
+            {"$set": {"call_transcript": transcript}}
+        )
     return {"status": "ok"}
 
 # Admin endpoints for monitoring
@@ -1051,199 +1184,268 @@ async def list_active_calls(request: Request, current_agent: dict = Depends(get_
         raise HTTPException(status_code=500, detail="Failed to list calls")
     
 
+#--------------------------------------------------------
+#Working outbound
+#-------------------------------------------------------
+# @router.post("/voice")
+# @router.get("/voice")
+# async def voice_twiml(request: Request):
+#     """
+#     Handle direct outbound calls from Twilio Client.
+#     Returns TwiML <Dial> with dynamic caller ID based on agent's organization.
+#     """
 
-    
-@router.get("/agent/organization-info")
-async def get_agent_organization_info_endpoint(
-    current_agent: dict = Depends(get_current_agent)
-):
-    """Get organization information for the current agent"""
-    
-    agent_id = current_agent["agent_id"]
-    organization_info = await get_agent_organization_info( agent_id)
-    
-    logger.info(f"Organization info retrieved for agent {agent_id}: {organization_info['organization']['name']}")
-    
-    return {
-        "success": True,
-        "data": organization_info
-    }
+#     shared_state = get_shared_state(request.app)
+#     logger = getattr(shared_state, 'logger', None)
 
-@router.post("/twilio/outbound-call")
-async def make_outbound_call(
-    request: Request,
-    call_data: OutboundCallRequest,  
-    current_agent: dict = Depends(get_current_agent)
-):
-    """Agent initiates an outbound call via Twilio with organization validation"""
+#     try:
+#         # Parse request parameters
+#         if request.method == "POST":
+#             form = await request.form()
+#             to = form.get("To")
+#             from_ = form.get("From")
+#         else:
+#             to = request.query_params.get("To")
+#             from_ = request.query_params.get("From")
+
+#         agent_name = from_.replace('client:', '') if from_ and 'client:' in from_ else from_
+#         print("Agent Name: ",agent_name)
+
+#         if logger:
+#             logger.info(f"[Voice] Received call request: From={from_}, To={to}")
+
+#         # Input validation
+#         if not to or not from_:
+#             return _twiml_error("Missing 'To' or 'From' parameter", logger)
+
+#         if not agent_name:
+#             return _twiml_error("Invalid agent name in 'From' parameter", logger)
+
+#         # Fetch agent from DB
+#         agent = await shared_state.db_manager.db.agents.find_one({"sip_username": agent_name})
+#         print("Agent Information", agent)
+#         if not agent:
+#             return _twiml_error(f"Agent '{agent_name}' not found", logger)
+
+#         # Fetch organization info
+#         assign_to = agent.get("assignTo")
+#         print("Agent Assign to: ", assign_to)
+#         if not assign_to:
+#             return _twiml_error(f"No organization assigned to agent '{agent_name}'", logger)
+
+#         organization = await shared_state.db_manager.db.organizations.find_one({"_id": ObjectId(assign_to)})
+#         print("Organization Info: ", organization)
+#         if not organization:
+#             return _twiml_error(f"Organization not found for agent '{agent_name}'", logger)
+
+#         VALID_CALLER_ID = organization.get("organizationNumber")
+#         if not VALID_CALLER_ID:
+#             return _twiml_error(f"Organization caller ID missing for agent '{agent_name}'", logger)
+
+#         # Clean and format destination number
+#         cleaned_to = re.sub(r"[^\d]", "", to)
+#         formatted_to = _format_number(cleaned_to)
+
+#         if logger:
+#             logger.info(f"[Voice] Calling {formatted_to} from {VALID_CALLER_ID}")
+
+#         # Generate TwiML
+#         response = VoiceResponse()
+#         dial = Dial(callerId=VALID_CALLER_ID, timeout=30)
+#         dial.number(formatted_to)
+#         response.append(dial)
+
+#         print("Dial Info: ", dial)
+
+#         return Response(content=str(response), media_type="application/xml")
+
+#     except Exception as e:
+#         error_msg = f"Internal error in /voice: {str(e)}"
+#         if logger:
+#             logger.error(error_msg)
+#         return _twiml_error("An unexpected error occurred while placing the call", logger)
+
+
+# -------------------------------------------------------------------------
+#  OUTBOUND CALL - /voice
+# -------------------------------------------------------------------------
+@router.post("/voice")
+@router.get("/voice")
+async def voice_twiml(request: Request):
+    """
+    Handle direct outbound calls from Twilio Client.
+    Returns TwiML <Dial> with dynamic caller ID based on agent's organization.
+    """
+
     shared_state = get_shared_state(request.app)
-    twilio_client: Client = shared_state.twilio_client
-    db_manager = shared_state.db_manager
-
-    to_number = call_data.to_number
-    agent_id = current_agent["agent_id"]
+    logger = getattr(shared_state, 'logger', None)
 
     try:
-        # ### UPDATED ###
-        # Securely get the agent's organization info, including the official phone number.
-        org_info = await get_agent_organization_info(agent_id)
-        
-        # The from_number is now taken directly from the database lookup, not user input.
-        from_number = org_info["organization"]["phoneNumber"]
-
-        # ### UPDATED ###
-        # The previous validation block that compared user input is no longer needed and has been removed.
-
-        # Make the outbound call using the secure, internally-fetched `from_number`.
-        call = twilio_client.calls.create(
-            to=to_number,
-            from_=from_number,
-            url=f"{settings.WEBHOOK_URL}/twilio/outbound-call-handler?agent_id={agent_id}&organization_id={org_info['organization']['id']}",
-            method="POST",
-            status_callback=f"{settings.WEBHOOK_URL}/twilio/outbound-call-status?agent_id={agent_id}&organization_id={org_info['organization']['id']}",
-            status_callback_method="POST",
-            status_callback_event=["initiated", "ringing", "answered", "completed"]
-        )
-
-        logger.info(f"Agent {agent_id} initiated outbound call {call.sid} from {from_number} to {to_number}")
-
-        # Log the call in the database for tracking
-        call_log = {
-            "call_sid": call.sid,
-            "agent_id": str(agent_id),
-            "organization_id": org_info['organization']['id'],
-            "to_number": to_number,
-            "from_number": from_number,
-            "call_type": "outbound",
-            "status": "initiated",
-            "created_at": datetime.utcnow()
-        }
-        
-        try:
-            await db_manager.db.calls.insert_one(call_log)
-        except Exception as e:
-            logger.warning(f"Failed to log call: {e}")
-
-        return {
-            "success": True,
-            "call_sid": call.sid,
-            "to": to_number,
-            "from": from_number, # Return the number that was used
-            "organization_id": org_info['organization']['id'],
-            "organization_name": org_info['organization']['name']
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to make outbound call: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred while attempting to make the call.")
-
-@router.post("/twilio/outbound-call-handler")
-async def outbound_call_handler(
-    request: Request,
-    agent_id: str, 
-    organization_id: str  # You might not need this, but it's good to have
-):
-    """TwiML instructions to connect an answered outbound call to the originating agent."""
-    response = VoiceResponse()
-    response.say("The connection was successful. This is a test message.")
-
-    db = get_database()
-    
-    try:
-        # --- NEW LOGIC: Find the agent to connect to ---
-        print("agent_id", agent_id)
-        agent_obj_id = ObjectId(agent_id)
-        
-        # NOTE: This assumes `agent_id` is the document's _id. 
-        # If it's the `userId`, change the query to {"userId": agent_obj_id}
-        agent = await db.agents.find_one({"userId": agent_obj_id})
-        print("agent", agent)
-
-        if agent and agent.get("sip_address"):
-            sip_address = agent["sip_address"]
-            print(f"Found SIP Address: {sip_address}")
-            
-            # Get the organization's phone number to use as the Caller ID for the agent
-            org_info = await get_agent_organization_info(agent_id)
-            caller_id = org_info["organization"]["phoneNumber"]
-
-            # Use the <Dial> verb to connect the call
-            dial = Dial(caller_id=caller_id) # This sets the caller ID the agent sees
-            dial.sip(sip_address)
-            response.append(dial)
-            
+        # Parse request parameters
+        if request.method == "POST":
+            form = await request.form()
+            to = form.get("To")
+            from_ = form.get("From")
         else:
-            # Fallback if we can't find the agent or their SIP address
-            logger.error(f"Could not find agent or SIP address for agent_id: {agent_id}")
-            response.say("We're sorry, we could not connect you at this time. Goodbye.")
-            response.hangup()
+            to = request.query_params.get("To")
+            from_ = request.query_params.get("From")
+
+        agent_name = from_.replace('client:', '') if from_ and 'client:' in from_ else from_
+        print("Agent Name: ",agent_name)
+
+        if logger:
+            logger.info(f"[Voice] Received call request: From={from_}, To={to}")
+
+        # Input validation
+        if not to or not from_:
+            return _twiml_error("Missing 'To' or 'From' parameter", logger)
+
+        if not agent_name:
+            return _twiml_error("Invalid agent name in 'From' parameter", logger)
+
+        # Fetch agent from DB
+        agent = await shared_state.db_manager.db.agents.find_one({"sip_username": agent_name})
+        print("Agent Information", agent)
+        if not agent:
+            return _twiml_error(f"Agent '{agent_name}' not found", logger)
+
+        # Fetch organization info
+        assign_to = agent.get("assignTo")
+        print("Agent Assign to: ", assign_to)
+        if not assign_to:
+            return _twiml_error(f"No organization assigned to agent '{agent_name}'", logger)
+
+        organization = await shared_state.db_manager.db.organizations.find_one({"_id": ObjectId(assign_to)})
+        print("Organization Info: ", organization)
+        if not organization:
+            return _twiml_error(f"Organization not found for agent '{agent_name}'", logger)
+
+        VALID_CALLER_ID = organization.get("organizationNumber")
+        if not VALID_CALLER_ID:
+            return _twiml_error(f"Organization caller ID missing for agent '{agent_name}'", logger)
+
+        # Clean and format destination number
+        cleaned_to = re.sub(r"[^\d]", "", to)
+        formatted_to = _format_number(cleaned_to)
+
+        if logger:
+            logger.info(f"[Voice] Calling {formatted_to} from {VALID_CALLER_ID}")
+
+        
+
+        # Generate TwiML
+        response = VoiceResponse()
+        dial = Dial(callerId=VALID_CALLER_ID, timeout=30)
+        dial.number(formatted_to)
+        response.append(dial)
+
+        
+
+        return Response(content=str(response), media_type="application/xml")
+    
+    
 
     except Exception as e:
-        logger.error(f"Error in outbound_call_handler for agent {agent_id}: {e}")
-        response.say("We're sorry, an error occurred. Goodbye.")
-        response.hangup()
+        error_msg = f"Internal error in /voice: {str(e)}"
+        if logger:
+            logger.error(error_msg)
+        return _twiml_error("An unexpected error occurred while placing the call", logger)
+
+
     
-    return Response(content=str(response), media_type="application/xml")
 
-@router.post("/twilio/outbound-call-status")
-async def call_status_handler(
-    request: Request, 
-    agent_id: str, 
-    organization_id: str
-):
-    """Handle call lifecycle events from Twilio with organization context"""
-    form = await request.form()
-    call_sid = form.get("CallSid")
-    call_status = form.get("CallStatus")
-    call_duration = form.get("CallDuration")
 
-    logger.info(f"Call {call_sid} (agent {agent_id}, org {organization_id}) status update: {call_status}")
+# # ----------------- Twilio Status Callback -----------------
+# @router.post("/twilio/outbound-call-status")
+# async def outbound_call_status(request: Request):
+#     """
+#     Handle Twilio status callbacks and update the corresponding call record.
+#     """
+#     shared_state = get_shared_state(request.app)
+#     logger = getattr(shared_state, "logger", None)
+#     form = await request.form()
 
-    shared_state = get_shared_state(request.app)
-    db_manager = shared_state.db_manager
-    
-    try:
-        # Update call log in database
-        update_data = {
-            "status": call_status,
-            "updated_at": datetime.utcnow()
-        }
-        
-        if call_duration:
-            update_data["duration"] = int(call_duration)
-            
-        await db_manager.db.calls.update_one(
-            {"call_sid": call_sid},
-            {"$set": update_data}
-        )
-        
-        # Update agent statistics if call completed
-        if call_status in ["completed", "canceled", "failed", "busy", "no-answer"]:
-            increment_data = {"totalCalls": 1}
-            
-            if call_status == "completed":
-                increment_data["successCalls"] = 1
-            else:
-                increment_data["droppedCalls"] = 1
-                
-            # Update agent statistics
-            try:
-                agent_obj_id = ObjectId(agent_id) if isinstance(agent_id, str) else agent_id
-                await db_manager.db.agents.update_one(
-                    {"userId": agent_obj_id},
-                    {"$inc": increment_data}
-                )
-                logger.info(f"Updated agent {agent_id} statistics: {increment_data}")
-            except Exception as e:
-                logger.error(f"Failed to update agent statistics: {e}")
-            
-    except Exception as e:
-        logger.error(f"Failed to update call status: {e}")
+#     call_sid = form.get("CallSid")
+#     call_status_str = form.get("CallStatus")
+#     from_number = form.get("From")
+#     to_number = form.get("To")
+#     direction = form.get("Direction")
 
-    # Handle call end
-    if call_status in ["completed", "canceled", "failed", "busy", "no-answer"]:
-        logger.info(f"Call {call_sid} ended with status: {call_status}")
+#     # Map status string to CallStatus enum
+#     call_status = CallStatus(call_status_str) if call_status_str in CallStatus._value2member_map_ else CallStatus.FAILED
 
-    return Response(content="", media_type="application/xml")
+#     # Determine call type
+#     call_type = CallType.OUTGOING if direction and "outbound" in direction else CallType.INCOMING
+
+#     try:
+#         # ----------------- Find existing call record -----------------
+#         existing_call = await Call.find_one(
+#             (Call.from_number == from_number) &
+#             (Call.to_number == to_number) &
+#             (Call.call_status.in_([CallStatus.INITIATED, CallStatus.IN_PROGRESS]))
+#         )
+
+#         if existing_call:
+#             existing_call.call_sid = call_sid
+#             existing_call.call_status = call_status
+
+#             if call_status == CallStatus.IN_PROGRESS:
+#                 existing_call.call_started_at = datetime.now(timezone.utc)
+#             elif call_status in {CallStatus.COMPLETED, CallStatus.BUSY, CallStatus.FAILED, CallStatus.NO_ANSWER, CallStatus.CANCELED}:
+#                 existing_call.call_completed_at = datetime.now(timezone.utc)
+#                 if existing_call.call_started_at:
+#                     existing_call.call_duration = int(
+#                         (existing_call.call_completed_at - existing_call.call_started_at).total_seconds()
+#                     )
+
+#             await existing_call.save()
+
+#             agent_info = await shared_state.db_manager.db.agents.find_one({"_id": existing_call.agentId})
+#         else:
+#             # If no record found, create a new one
+#             existing_call = Call(
+#                 call_sid=call_sid,
+#                 from_number=from_number,
+#                 to_number=to_number,
+#                 callType=call_type,
+#                 call_status=call_status,
+#                 call_time=datetime.now(timezone.utc),
+#             )
+#             await existing_call.insert()
+#             agent_info = None
+
+#         # ----------------- Logging -----------------
+#         if logger:
+#             logger.info(
+#                 f"CallSid={call_sid}, Status={call_status}, From={from_number}, To={to_number}, "
+#                 f"Agent={agent_info.get('sip_username') if agent_info else 'Unknown'}"
+#             )
+
+#     except Exception as e:
+#         if logger:
+#             logger.error(f"Error in /twilio/outbound-call-status: {e}")
+
+#     return {"status": "ok"}
+
+
+# # ----------------- Helpers -----------------
+def _twiml_error(message: str, logger=None):
+    if logger:
+        logger.error(f"[Voice] Error: {message}")
+    resp = VoiceResponse()
+    resp.say(message)
+    return Response(content=str(resp), media_type="application/xml")
+
+
+def _format_number(number: str) -> str:
+    """
+    Format phone number for dialing (Bangladesh default +880 if missing).
+    """
+    if number.startswith("880") and len(number) == 11:
+        return f"+{number}"
+    elif len(number) == 10 and not number.startswith("880"):
+        return f"+880{number}"
+    elif number.startswith("+"):
+        return number
+    else:
+        return f"+{number}"

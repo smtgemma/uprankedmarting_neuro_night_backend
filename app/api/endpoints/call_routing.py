@@ -48,7 +48,9 @@ async def auto_route(data: AutoRouteRequest, db=Depends(get_database)):
 
         # 3️⃣ Update the webhook URL to point to inbound call handler
         updated = twilio_client.incoming_phone_numbers(sid_to_use).update(
-            voice_url=f"{webhook_url}twilio/inbound-call"
+            voice_url=f"{webhook_url}twilio/inbound-call",
+            status_callback=f"{webhook_url}twilio/call-status",  
+            status_callback_method="POST" 
         )
         
 

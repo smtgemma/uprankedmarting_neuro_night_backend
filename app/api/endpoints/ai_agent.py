@@ -2,12 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional, List
 from pydantic import BaseModel
 import httpx
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 import logging
 from app.services.elevenlabs import create_eleven_agent, update_eleven_agent, get_agent_data
 from app.db.database_connection import get_database
 from bson import ObjectId
 from datetime import datetime
 from app.services.prompt import generate_elevenlabs_prompt
+from app.api.models.ai_agent_model import AIAgent
+from app.core.config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -354,28 +358,55 @@ def build_elevenlabs_payload(
 async def create_agent(
     org_id: str,
     req: AgentCreateRequest,
-    db=Depends(get_database)
+    db: AsyncIOMotorDatabase = Depends(get_database)
 ):
-    org = await get_org_by_id(org_id, db)
+    """
+    Create an AI agent for the specified organization and link it to a phone number.
 
-    existing_agent = await db.aiagents.find_one({"organizationId": org_id})
+    Args:
+        org_id (str): The organization ID.
+        req (AgentCreateRequest): Request payload for agent creation.
+        db (AsyncIOMotorDatabase): MongoDB database instance.
+
+    Returns:
+        dict: Response containing agent creation and linking details.
+
+    Raises:
+        HTTPException: If validation fails, agent creation fails, or linking fails.
+    """
+    # Validate organization
+    logger.info(f"Creating AI agent for org_id: {org_id}")
+    org = await get_org_by_id(org_id, db)
+    if not org:
+        logger.error(f"Organization not found: {org_id}")
+        raise HTTPException(status_code=404, detail=f"Organization not found: {org_id}")
+
+    # Validate org_id as ObjectId
+    try:
+        org_id_obj = ObjectId(org_id)
+    except Exception as e:
+        logger.error(f"Invalid organizationId: {org_id}, error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid organizationId: {org_id}")
+
+    # Check if an AI agent already exists
+    existing_agent = await db.aiagents.find_one({"organizationId": org_id_obj})
     if existing_agent:
-        logger.error(f"Agent already exists for organization {org_id}. Only updates are allowed.")
+        logger.warning(f"AI agent already exists for organizationId: {org_id}, agent_id: {existing_agent.get('agentId')}")
         raise HTTPException(
             status_code=409,
-            detail="An AI agent already exists for this organization. You can only update the existing agent."
+            detail=f"AI agent already exists for this organization (agent_id: {existing_agent.get('agentId')})"
         )
 
-
-
+    # Generate ElevenLabs prompt
     prompt = generate_elevenlabs_prompt(
-        agent_name = f"{org.business_name} Call Center Agent",
+        agent_name=f"{org.business_name} Call Center Agent",
         organization_name=org.business_name,
         industry_name=org.industry,
         lead_questions=org.lead_questions,
         callback_timeframe="30 minutes"
     )
 
+    # Build ElevenLabs payload
     try:
         payload = build_elevenlabs_payload(
             org,
@@ -390,27 +421,34 @@ async def create_agent(
             temperature=req.temperature,
             daily_limit=req.daily_limit
         )
+        logger.debug(f"ElevenLabs payload: {payload}")
     except ValueError as e:
-        logger.error(f"Payload build failed: {str(e)}")
-        raise HTTPException(status_code=403, detail=str(e))
+        logger.error(f"Payload build failed for org_id {org_id}: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
 
     # Call ElevenLabs service
     agent_response = await create_eleven_agent(payload)
     agent_id = agent_response.get("agent_id")
     if not agent_id:
-        logger.error("Agent creation failed: no agent_id returned")
+        logger.error(f"Agent creation failed for org_id {org_id}: no agent_id returned")
         raise HTTPException(status_code=500, detail="Agent creation failed, no agent_id returned.")
 
-    # Save to AiAgent collection
-    ai_agent_doc = {
-        "_id": ObjectId(),
-        "agentId": agent_id,
-        "organizationId": org_id,
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
-    }
-    result = await db.aiagents.insert_one(ai_agent_doc)
-    logger.info(f"Successfully saved AI agent {agent_id} for org {org_id} with document ID: {result.inserted_id}")
+    # Create AI agent document
+    ai_agent = AIAgent(
+        agentId=agent_id,
+        organizationId=org_id_obj,
+    )
+
+    # Insert into aiagents collection
+    try:
+        result = await db.aiagents.insert_one(ai_agent.model_dump(exclude={"id"}))
+        logger.info(f"AI agent created successfully for org_id {org_id}, agent_id: {agent_id}, inserted_id: {str(result.inserted_id)}")
+    except DuplicateKeyError:
+        logger.error(f"Duplicate key error for organizationId: {org_id}")
+        raise HTTPException(status_code=409, detail="AI agent creation failed due to duplicate organizationId")
+    except Exception as e:
+        logger.error(f"Failed to create AI agent for org_id {org_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create AI agent: {str(e)}")
 
 
     # Link agent with organization
@@ -418,7 +456,7 @@ async def create_agent(
     label = f"{org.business_name} AI Agent connection"
 
     async with httpx.AsyncClient() as client:
-        org_api_url = f"http://127.0.0.1:9050/ai-call-routing/assign-phone-to-ai-agent"
+        org_api_url = f"{settings.WEBHOOK_URL}/ai-call-routing/assign-phone-to-ai-agent"
         response = await client.post(
             org_api_url,
             json={
@@ -439,8 +477,6 @@ async def create_agent(
         "agent": agent_response,
         "organization_link": response.json()
     }
-
-
 # ----------------------------
 # Endpoint: Update Agent
 # ----------------------------

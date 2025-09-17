@@ -256,6 +256,8 @@ class RedisManager:
                     # If last_activity is invalid, clean it up
                     await self.redis_client.delete(key)
                     logger.info(f"Cleaned up agent session with invalid timestamp: {key}")
+    
+    
 
 
 async def get_agent_session_by_session_id(self, session_id: str) -> Optional[dict]:
@@ -269,3 +271,4 @@ async def get_agent_session_by_session_id(self, session_id: str) -> Optional[dic
         return await self.get_agent_session(agent_id)
     
     return None
+

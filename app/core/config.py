@@ -11,6 +11,10 @@ class Settings(BaseSettings):
 
     # Elevenlabs
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY","")
+    ELEVENLABS_WEBHOOK: str = os.getenv("ELEVENLABS_WEBHOOK","")
+
+    # Open AI Key
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
     # Web hooks
     WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")
@@ -32,6 +36,9 @@ class Settings(BaseSettings):
     HEALTH_CHECK_INTERVAL: int = 300
     MAX_CONSECUTIVE_FAILURES: int = 3
     WEBHOOK_TIMEOUT: int = 15
+
+    # Lead Generation API
+    LEAD_GENERATION_API_URL: str = os.getenv("LEAD_GENERATION_API_URL", "")
     
     class Config:
         env_file = ".env"

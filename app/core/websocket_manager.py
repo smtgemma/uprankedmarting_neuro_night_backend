@@ -1,5 +1,5 @@
 from fastapi import WebSocket
-from typing import Dict, Set
+from typing import Dict
 import json
 import asyncio
 import logging
@@ -16,6 +16,11 @@ class WebSocketManager:
         self.instance_id = settings.INSTANCE_ID
         self._running = False
         self._message_listener_task = None
+
+    # --- New method ---
+    def is_agent_registered(self, agent_id: str) -> bool:
+        """Check if the agent is already registered in any session"""
+        return agent_id in self.agent_sessions
     
     async def start_message_listener(self):
         """Start listening for Redis pub/sub messages"""
@@ -91,6 +96,18 @@ class WebSocketManager:
     
     async def register_agent(self, session_id: str, agent_id: str, agent_data: dict):
         """Register agent with session"""
+        # Handle reconnection: only disconnect if session changed
+        if self.is_agent_registered(agent_id):
+            old_session_id = self.agent_sessions[agent_id]
+            if old_session_id != session_id:
+                await self.disconnect(old_session_id)
+                logger.warning(f"Agent {agent_id} reconnected, old session {old_session_id} disconnected")
+            else:
+                # Already registered with same session, skip everything
+                logger.info(f"Agent {agent_id} already registered with same session {session_id}, skipping registration")
+                return  # <--- Skip re-registration entirely
+        
+        # Register agent
         self.agent_sessions[agent_id] = session_id
         
         # Store in Redis
@@ -100,6 +117,7 @@ class WebSocketManager:
         await self.redis_manager.set_agent_session(agent_id, agent_data)
         
         logger.info(f"Agent {agent_id} registered with session {session_id}")
+
     
     async def send_to_connection(self, session_id: str, message: dict):
         """Send message to specific WebSocket connection"""
