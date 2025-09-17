@@ -23,7 +23,7 @@ const getOrganizationCallLogsManagement = catchAsync(
       "sortBy",
       "sortOrder",
     ]);
-    const filters = pickOptions(req.query, ["searchTerm"]);
+    const filters = pickOptions(req.query, ["searchTerm", "agentType"]);
 
     const result = await OrganizationServices.getOrganizationCallLogsManagement(
       options,
