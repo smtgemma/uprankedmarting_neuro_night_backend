@@ -521,6 +521,8 @@ const getOrganizationCallLogsManagement = async (
     ...humanCalls.map((call) => ({
       type: "human" as const,
       id: call.id,
+      organizationId: call.organizationId,
+      call_sid: call.call_sid,
       agent_id: call.agentId,
       agent_name: call.receivedBy?.user?.name || "Unknown Agent",
       from_number: call.from_number,
@@ -532,9 +534,13 @@ const getOrganizationCallLogsManagement = async (
       recording_url: call.recording_url,
       createdAt: call.createdAt,
     })),
+
     ...aiCallLogs.map((log) => ({
       type: "ai" as const,
       id: log.id,
+      conversation_id: log.conversation_id,
+      organizationId: log.organizationId,
+      call_sid: log.call_sid,
       agent_id: log.agent_id,
       agent_name: "AI Agent", // You might want to fetch the actual AI agent name
       from_number: log.from_number,
@@ -544,7 +550,8 @@ const getOrganizationCallLogsManagement = async (
       call_status: log.call_status,
       callType: log.callType,
       recording_url: null, // AI calls don't have recording_url in current schema
-      call_transcript: log.call_transcript,
+      recording_duration: log.recording_duration,
+      // call_transcript: log.call_transcript,
       createdAt: log.createdAt,
     })),
   ];
@@ -606,6 +613,7 @@ const getHumanAgentCalls = async (
       id: true,
       organizationId: true,
       agentId: true,
+      call_sid: true,
       from_number: true,
       to_number: true,
       call_time: true,

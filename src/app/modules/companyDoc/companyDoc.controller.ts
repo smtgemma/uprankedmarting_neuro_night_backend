@@ -6,7 +6,7 @@ import sendResponse from "../../utils/sendResponse";
 import { User } from "@prisma/client";
 
 const createCompanyDoc = catchAsync(async (req: Request, res: Response) => {
-  const result = await CompanyDocServices.createCompanyDoc(req);
+  const result = await CompanyDocServices.createCompanyDoc(req, res);
 
   sendResponse(res, {
     statusCode: status.CREATED,
