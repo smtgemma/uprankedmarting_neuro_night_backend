@@ -566,6 +566,7 @@ const getSingleUser = async (id: string, AuthUser: User) => {
 
   return {
     ...restUser,
+    otp: "********",
     Agent,
   };
 };
@@ -682,6 +683,7 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
 
   return {
     ...restUser,
+    otp: "********",
     Agent,
     callStatistics: callStatistics || {
       totalSuccessCalls: 0,
