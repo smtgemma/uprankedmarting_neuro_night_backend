@@ -77,16 +77,15 @@ const handleGoogleSheetsCallback = catchAsync(async (req, res) => {
     res.redirect(
       `${
         process.env.FRONTEND_URL
-      }/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(
-        result.spreadsheetUrl
-      )}`
+      // }/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(
+      }/dashboard/organization/tools`
     );
   } catch (error: any) {
     console.error("Google Sheets callback error:", error);
     res.redirect(
       `${
         process.env.FRONTEND_URL
-      }/dashboard/integrations?error=connection_failed&message=${encodeURIComponent(
+      }/dashboard/organization/tools?error=connection_failed&message=${encodeURIComponent(
         error.message
       )}`
     );
