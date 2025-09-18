@@ -55,7 +55,7 @@ export const sendEmail = async (
   `;
 
   await transporter.sendMail({
-    from: `"Super Job" <${config.sendEmail.email_from}>`,
+    from: `"Uprank Marting" <${config.sendEmail.email_from}>`,
     to,
     subject: `${
       isVerification
