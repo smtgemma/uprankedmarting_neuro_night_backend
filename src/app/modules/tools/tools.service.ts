@@ -327,7 +327,7 @@ const handleGoogleSheetsCallback = async (code: string, state: string) => {
         googleSheetsSpreadsheetId: spreadsheetId,
         googleSheetsCredentials:
           credentials as unknown as Prisma.InputJsonValue,
-        lastSyncedAt: null,  // Explicitly set to null to ensure initial sync fetches all data
+        lastSyncedAt: null, // Explicitly set to null to ensure initial sync fetches all data
       },
     });
 
