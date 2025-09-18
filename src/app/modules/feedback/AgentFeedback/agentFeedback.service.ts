@@ -30,13 +30,14 @@ const createAgentFeedback = async (
         agents: {
           select: {
             id: true,
+            userId: true
           },
         },
       },
     });
 
   const isAgentInOrg = checkisAgentAssignToMyOrganization?.agents?.some(
-    (agent) => agent.id.toString() === agentId
+    (agent) => agent.userId.toString() === agentId
   );
 
   if (!isAgentInOrg) {
@@ -49,10 +50,11 @@ const createAgentFeedback = async (
 
   const serviceData = {
     rating: data.rating,
-    feedbackText: data.feedbackText || undefined,
+    feedbackText: data.feedbackText,
     agentId: agentId,
     clientId: userId,
   };
+  console.log("serviceData", serviceData)
 
   const result = await prisma.agentFeedback.create({
     data: serviceData,
