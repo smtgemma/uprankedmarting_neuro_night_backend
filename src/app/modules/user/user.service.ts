@@ -19,7 +19,6 @@ import { sendAgentWelcomeEmail } from "../../utils/sendAgentWelcomeEmail";
 const createUserIntoDB = async (payload: any) => {
   const { userData, organizationData } = payload;
 
-  // ===== Check for existing user =====
   const existingUser = await prisma.user.findFirst({
     where: {
       OR: [{ email: userData.email }, { phone: userData.phone }],
@@ -33,7 +32,7 @@ const createUserIntoDB = async (payload: any) => {
   }
 
   const hashedPassword = await hashPassword(userData.password);
-  const { otp, expiresAt } = generateOTPData(4, 5); // 4-digit OTP, expires in 5 minutes
+  const { otp, expiresAt } = generateOTPData(4, 5);
 
   const userPayload = {
     ...userData,
@@ -46,16 +45,12 @@ const createUserIntoDB = async (payload: any) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // ===== Create User =====
       const createdUser = await tx.user.create({ data: userPayload });
 
-      // ===== Send Verification Email with OTP =====
-      await sendEmail(userData.email, otp, true); // isVerification: true for email verification
+      await sendEmail(userData.email, otp, true);
 
       let createdOrganization = null;
       if (organizationData) {
-        // Ensure unique organizationNumbe
-
         const existingOrganization = await tx.organization.findFirst({
           where: {
             ownerId: createdUser?.id,
@@ -76,7 +71,6 @@ const createUserIntoDB = async (payload: any) => {
           },
         });
 
-        // Connect user to organization
         await tx.user.update({
           where: { id: createdUser.id },
           data: {
@@ -84,21 +78,6 @@ const createUserIntoDB = async (payload: any) => {
           },
         });
       }
-
-      // let createdAgent = null;
-      // if (agentData) {
-      //   createdAgent = await tx.agent.create({
-      //     data: {
-      //       ...agentData,
-      //       userId: createdUser.id,
-      //       dateOfBirth: new Date(agentData.dateOfBirth),
-      //       assignTo: createdOrganization?.id || null,
-      //       status: "OFFLINE",
-      //       twilioIdentity: `${agentData?.agent_id}`,
-      //       isAvailable: agentData.isAvailable ?? true,
-      //     },
-      //   });
-      // }
 
       return {
         user: { ...createdUser, password: undefined },
@@ -128,7 +107,6 @@ const createUserIntoDB = async (payload: any) => {
 const createAgentIntoDB = async (payload: any) => {
   const { userData, agentData } = payload;
 
-  // Validate required fields
   if (!userData?.email || !userData?.phone) {
     throw new ApiError(
       status.BAD_REQUEST,
@@ -144,14 +122,11 @@ const createAgentIntoDB = async (payload: any) => {
   }
 
   try {
-    // ===== Check for existing user OUTSIDE transaction first =====
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [{ email: userData.email }, { phone: userData.phone }],
       },
     });
-
-    // console.log("existingUser", existingUser)
 
     if (existingUser) {
       throw new ApiError(
@@ -172,7 +147,6 @@ const createAgentIntoDB = async (payload: any) => {
     });
 
     const result = await prisma.$transaction(async (tx) => {
-      // ===== Double-check for existing user INSIDE transaction =====
       const existingUserInTx = await tx.user.findFirst({
         where: {
           OR: [{ email: userData.email }, { phone: userData.phone }],
@@ -186,7 +160,6 @@ const createAgentIntoDB = async (payload: any) => {
         );
       }
 
-      // ===== Create User =====
       const userPayload = {
         name: userData.name.trim(),
         bio: userData.bio?.trim() || "",
@@ -201,7 +174,6 @@ const createAgentIntoDB = async (payload: any) => {
         data: userPayload,
       });
 
-      // ===== Create Agent =====
       const agentPayload = {
         userId: createdUser.id,
         dateOfBirth: new Date(agentData.dateOfBirth),
@@ -216,10 +188,8 @@ const createAgentIntoDB = async (payload: any) => {
         jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
         employmentType: agentData.employmentType || employmentType.full_time,
         department: agentData.department?.trim() || "Customer Service",
-        // Keep as strings (no Date conversion)
         workStartTime: agentData.workStartTime,
         workEndTime: agentData.workEndTime,
-        // Convert only DateTime fields
         startWorkDateTime: agentData.startWorkDateTime
           ? new Date(agentData.startWorkDateTime)
           : null,
@@ -282,6 +252,7 @@ const createAgentIntoDB = async (payload: any) => {
     );
   }
 };
+
 const verifyOTP = async (email: string, otp: number) => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -307,7 +278,6 @@ const verifyOTP = async (email: string, otp: number) => {
     throw new ApiError(status.BAD_REQUEST, "OTP has expired!");
   }
 
-  // Update user to mark as verified and clear OTP fields
   const updatedUser = await prisma.user.update({
     where: { email },
     data: {
@@ -328,6 +298,78 @@ const verifyOTP = async (email: string, otp: number) => {
   return {
     user: updatedUser,
     message: "Email verified successfully!",
+  };
+};
+
+const forgotPassword = async (email: string) => {
+  const user = await prisma.user.findUnique({
+    where: { email, isDeleted: false },
+  });
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found!");
+  }
+
+  const { otp, expiresAt } = generateOTPData(4, 5);
+
+  await prisma.user.update({
+    where: { email },
+    data: {
+      otp,
+      otpExpiresAt: expiresAt,
+      isResentOtp: true,
+    },
+  });
+
+  await sendEmail(email, otp, false); // isVerification: false for password reset
+
+  return {
+    message: "Password reset OTP sent to your email. Please check your inbox.",
+  };
+};
+
+const resetPassword = async (email: string, otp: number, newPassword: string) => {
+  const user = await prisma.user.findUnique({
+    where: { email, isDeleted: false },
+  });
+
+  if (!user) {
+    throw new ApiError(status.NOT_FOUND, "User not found!");
+  }
+
+  if (!user.otp || !user.otpExpiresAt) {
+    throw new ApiError(status.BAD_REQUEST, "No OTP found for this user!");
+  }
+
+  if (user.otp !== otp) {
+    throw new ApiError(status.BAD_REQUEST, "Invalid OTP!");
+  }
+
+  if (new Date() > user.otpExpiresAt) {
+    throw new ApiError(status.BAD_REQUEST, "OTP has expired!");
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+
+  const updatedUser = await prisma.user.update({
+    where: { email },
+    data: {
+      password: hashedPassword,
+      otp: null,
+      otpExpiresAt: null,
+      isResentOtp: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+    },
+  });
+
+  return {
+    user: updatedUser,
+    message: "Password reset successfully!",
   };
 };
 
@@ -363,10 +405,8 @@ const getAllUserFromDB = async (query: Record<string, unknown>) => {
   };
 };
 
-// user.service.ts
 const updateUserIntoDB = async (user: User, payload: any) => {
   const currentUserId = user?.id;
-  // console.log("update user info ", user, payload);
   const isUserExist = await prisma.user.findUnique({
     where: { id: currentUserId },
     include: {
@@ -410,7 +450,6 @@ const updateUserIntoDB = async (user: User, payload: any) => {
     }
   }
 
-  //  Update User with only provided fields
   const updatedUser = await prisma.user.update({
     where: { id: currentUserId },
     data: {
@@ -421,7 +460,6 @@ const updateUserIntoDB = async (user: User, payload: any) => {
     },
   });
 
-  //  Update Organization safely with fallbacks
   if (organizationData && isUserExist?.ownedOrganization) {
     await prisma.organization.update({
       where: { id: isUserExist.ownedOrganization.id },
@@ -444,10 +482,8 @@ const updateUserIntoDB = async (user: User, payload: any) => {
 };
 
 const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
-  console.log("update agent info", user, agentId, payload);
   const currentUserRole = user?.role;
 
-  // Only super_admin can access this function
   if (currentUserRole !== UserRole.super_admin) {
     throw new ApiError(
       status.FORBIDDEN,
@@ -464,7 +500,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     );
   }
 
-  // Check if target user exists and is an agent
   const targetUser = await prisma.user.findUnique({
     where: { id: agentId, isDeleted: false },
     include: {
@@ -480,7 +515,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "Target user is not an agent");
   }
 
-  // console.log(targetUser);
   if (
     targetUser?.Agent?.ssn === agentData?.ssn ||
     targetUser?.Agent?.emergencyPhone === agentData?.emergencyPhone
@@ -495,9 +529,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     let updatedUser = targetUser;
     let updatedAgent = targetUser.Agent;
 
-    // Update user data if provided
     if (userData) {
-      // ===== Check for existing user =====
       const existingUser = await prisma.user.findFirst({
         where: {
           OR: [{ email: userData.email }, { phone: userData.phone }],
@@ -520,7 +552,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           bio: userData.bio,
           phone: userData.phone,
           image: payload?.image,
-          role: userData.role, // Super admin can change role
+          role: userData.role,
         },
         include: {
           Agent: true,
@@ -528,7 +560,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
       });
     }
 
-    // Update agent data if provided
     if (agentData) {
       updatedAgent = await transactionClient.agent.update({
         where: { userId: agentId },
@@ -549,16 +580,15 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 };
 
 const updateAgentSpecificInfo = async (user: User, payload: any) => {
-  console.log(payload,45)
-  if(!payload?.image){
+  if (!payload?.image) {
     throw new ApiError(status.BAD_REQUEST, "Image is required");
   }
-  // Check if user exists and is an agent
+
   const targetUser = await prisma.user.findUnique({
-    where: { 
-      id: user.id, 
+    where: {
+      id: user.id,
       isDeleted: false,
-      role: UserRole.agent // Ensure the user is an agent
+      role: UserRole.agent,
     },
     include: {
       Agent: true,
@@ -573,7 +603,6 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "User is not registered as an agent");
   }
 
-  // Update only the profile image
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
     data: {
@@ -599,13 +628,14 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
           totalCalls: true,
           successCalls: true,
           droppedCalls: true,
-        }
-      }
+        },
+      },
     },
   });
 
   return updatedUser;
-}
+};
+
 const getSingleUserByIdFromDB = async (userId: string) => {
   const user = await prisma.user.findFirst({
     where: {
@@ -613,8 +643,8 @@ const getSingleUserByIdFromDB = async (userId: string) => {
       isDeleted: false,
     },
     include: {
-      Agent: true, // If user is an agent, get agent details
-      ownedOrganization: true, // If user owns an organization
+      Agent: true,
+      ownedOrganization: true,
     },
   });
 
@@ -642,10 +672,8 @@ const updateUserRoleStatusByAdminIntoDB = async (
 
   const { role, status: UserCurrentStatus, isDeleted } = payload;
 
-  // Initialize the update data object
   const updatedData: Partial<User> = {};
 
-  // Check permissions based on admin role
   if (authUser.role === UserRole.super_admin) {
     updatedData.role = role;
     updatedData.status =
@@ -674,4 +702,6 @@ export const UserService = {
   updateAgentInfo,
   getSingleUserByIdFromDB,
   updateUserRoleStatusByAdminIntoDB,
+  forgotPassword,
+  resetPassword,
 };
