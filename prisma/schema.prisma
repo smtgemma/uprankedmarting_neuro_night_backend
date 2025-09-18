@@ -300,10 +300,10 @@ model aiagents {
 // }
 
 model AICallLog {
-  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
   call_sid           String?
-  organizationId     String   @db.ObjectId
-  agent_id           String   // links to aiagents.agentId
+  organizationId     String    @db.ObjectId
+  agent_id           String // links to aiagents.agentId
   conversation_id    String?
   from_number        String?
   to_number          String?
@@ -323,8 +323,6 @@ model AICallLog {
 
   @@map("AICallLog")
 }
-
-
 
 model Call {
   id String @id @default(auto()) @map("_id") @db.ObjectId
@@ -431,12 +429,12 @@ model AiknowledgeBase {
 }
 
 model OrganizationDoc {
-  id             String   @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String   @db.ObjectId
-  docFor         DocFor   @default(AGENT)
-  fileName       String?   // cleaned name (without extension)
-  cloudUrl       String?   // Cloudinary secure URL
-  fileFormat     String?   // pdf, docx, xlsx ইত্যাদি
+  id             String  @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String  @db.ObjectId
+  docFor         DocFor  @default(AGENT)
+  fileName       String? // cleaned name (without extension)
+  cloudUrl       String? // Cloudinary secure URL
+  fileFormat     String? // pdf, docx, xlsx ইত্যাদি
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -555,8 +553,8 @@ model ServiceFeedback {
 model AgentFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  agentId      String  @unique @db.ObjectId
-  clientId     String  @unique @db.ObjectId
+  agentId      String  @db.ObjectId 
+  clientId     String  @db.ObjectId 
   rating       Int
   feedbackText String?
 
@@ -566,6 +564,8 @@ model AgentFeedback {
   agent  Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
   client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  // Add composite unique constraint instead
+  @@unique([agentId, clientId])
   @@map("agent_feedbacks")
 }
 
