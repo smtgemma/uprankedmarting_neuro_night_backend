@@ -58,7 +58,7 @@ router.post(
 
 router.get(
   "/",
-  auth(UserRole.organization_admin),
+  auth(UserRole.super_admin),
   CompanyDocController.getAllCompanyDocs
 );
 router.get("/organization",auth(UserRole.organization_admin), CompanyDocController.getCompanyDocsByOrgAdmin);

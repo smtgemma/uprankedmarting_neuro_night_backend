@@ -146,7 +146,7 @@ router.post(
   "/verify-otp",
   // validateRequest(UserValidation.verifyOTPSchema),
   UserController.verifyOTP
-);
+)
 
 router.post(
   "/forgot-password",
@@ -165,7 +165,8 @@ router.patch(
   multerUpload.single("file"),
   auth(UserRole.organization_admin, UserRole.super_admin),
   (req: Request, res: Response, next: NextFunction) => {
-    const file = req.file;
+    const file = req?.file;
+    // console.log("file", file)
     if (req?.body?.data) {
       req.body = JSON.parse(req?.body?.data);
     }
@@ -198,6 +199,9 @@ router.patch(
   auth(UserRole.agent),
   (req: Request, res: Response, next: NextFunction) => {
     const file = req.file;
+    if (req?.body?.data) {
+      req.body = JSON.parse(req?.body?.data);
+    }
     if (file) {
       req.body.image = file?.path;
     }

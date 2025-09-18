@@ -139,12 +139,12 @@ model Agent {
   dateOfBirth    DateTime
   gender         String
   address        String
-  emergencyPhone String
-  ssn            String?
+  emergencyPhone String?  @unique
+  ssn            String?  @unique
 
   skills String[] @default([])
 
-  employeeId  String?
+  employeeId  String  @unique
   isAvailable Boolean @default(true)
   assignTo    String? @db.ObjectId
 
@@ -157,10 +157,16 @@ model Agent {
   startWorkDateTime DateTime?
   endWorkDateTime   DateTime?
 
-  totalCalls   Int @default(0)
+  // Call metrics
+  // totalCalls   Int @default(0)
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
+  // Timestamps
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt //later should be required
+
+  // Relations
   user           User            @relation(fields: [userId], references: [id])
   organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
@@ -202,8 +208,8 @@ model Organization {
 
   name               String
   industry           String?
-  address            String
-  websiteLink        String
+  address            String?
+  websiteLink        String?
   organizationNumber String?
   ownerId            String? @unique @db.ObjectId
 
@@ -230,8 +236,175 @@ model Organization {
   questions             Question[]
   qaPairs               QaPair[]
 
+  aiagent aiagents?
+
   @@map("organizations")
 }
+
+model aiagents {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  agentId        String @unique // ElevenLabs agent ID
+  organizationId String @unique @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  callLogs     AICallLog[] // 1-to-many relation
+
+  @@map("aiagents")
+}
+
+// {
+//   "_id": { "$oid": "650000000000000000000001" },
+//   "agentId": "elevenlabs_12345",
+//   "organizationId": { "$oid": "650000000000000000000010" },
+//   "createdAt": { "$date": "2025-09-14T00:00:00Z" },
+//   "updatedAt": { "$date": "2025-09-14T00:00:00Z" }
+// }
+
+// {
+//   "_id": { "$oid": "650000000000000000000101" },
+//   "agent_id": "elevenlabs_12345",
+//   "agent_name": "John Doe",
+//   "conversation_id": "conv_abc123",
+//   "start_time_unix_secs": 1694649600,
+//   "call_duration_secs": 300,
+//   "message_count": 15,
+//   "status": "completed",
+//   "call_successful": "yes",
+//   "direction": "outbound",
+//   "createdAt": { "$date": "2025-09-14T00:05:00Z" },
+//   "updatedAt": { "$date": "2025-09-14T00:05:00Z" }
+// }
+
+// model aicalllogs {
+//   id       String @id @default(auto()) @map("_id") @db.ObjectId
+//   agent_id String // links to aiagent.agentId
+
+//   agent_name           String?
+//   conversation_id      String?
+//   start_time_unix_secs Int?
+//   call_duration_secs   Int?
+//   message_count        Int?
+//   status               String?
+//   call_successful      String?
+//   direction            String?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   aiagents aiagents @relation(fields: [agent_id], references: [agentId])
+
+//   @@map("aicalllogs")
+// }
+
+model AICallLog {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  call_sid           String?
+  organizationId     String   @db.ObjectId
+  agent_id           String   // links to aiagents.agentId
+  conversation_id    String?
+  from_number        String?
+  to_number          String?
+  callType           String?
+  call_status        String?
+  call_time          DateTime?
+  call_started_at    DateTime?
+  call_completed_at  DateTime?
+  call_duration      Int?
+  recording_duration Int?
+  call_transcript    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  aiagents aiagents @relation(fields: [agent_id], references: [agentId])
+
+  @@map("AICallLog")
+}
+
+
+
+model Call {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String @db.ObjectId
+  agentId        String @db.ObjectId
+
+  from_number       String?
+  to_number         String?
+  call_time         DateTime? @default(now())
+  callType          String? // direction
+  call_status       String?
+  call_duration     Int?
+  call_started_at   DateTime?
+  call_completed_at DateTime?
+
+  call_sid String?
+
+  call_transcript    String?
+  recording_duration Int?
+  recording_sid      String?
+  recording_status   String?
+  recording_url      String?
+
+  processed               Boolean? @default(false)
+  transcription_requested Boolean? @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  receivedBy   Agent        @relation(fields: [agentId], references: [userId])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([call_sid])
+  @@map("Call")
+}
+
+// model Calls {
+//   id        String   @id @default(auto()) @map("_id") @db.ObjectId
+
+//   // Make these optional to match Python
+//   organizationId String?  @db.ObjectId  // Changed to optional
+//   agentId        String?  @db.ObjectId  // Changed to optional
+
+//   // Call information - match Python field names
+//   from_number    String
+//   to_number      String
+//   call_time      DateTime @default(now())  // Changed to match Python
+//   callType       String   // Keep as String for flexibility
+//   call_status    String   // Keep as String for flexibility
+
+//   call_duration     Int?
+//   call_started_at   DateTime @default(now())
+//   call_completed_at DateTime?
+
+//   // Twilio fields
+//   call_sid           String?
+//   call_transcript    String?
+//   recording_duration Int?
+//   recording_sid      String?
+//   recording_status   String?  // Added missing field
+//   recording_url      String?
+
+//   // Processing flags - added missing fields
+//   processed               Boolean @default(false)
+//   transcription_requested Boolean @default(false)
+
+//   // Timestamps - ✅ Correct (matches Python)
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   // Relations - updated to reference correct field
+//   receivedBy   Agent?       @relation(fields: [agentId], references: [id])  // Changed to id
+//   organization Organization? @relation(fields: [organizationId], references: [id]) // Made optional
+
+//   @@index([call_sid])
+//   @@map("call_recordss")
+// }
 
 model UploadVoice {
   id                    String  @id @default(auto()) @map("_id") @db.ObjectId
@@ -246,16 +419,6 @@ model UploadVoice {
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
-model aiagent {
-  id             String   @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String   @unique
-  organizationId String   @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@map("aiagents")
-}
-
 model AiknowledgeBase {
   id                String       @id @default(auto()) @map("_id") @db.ObjectId
   organizationId    String       @db.ObjectId
@@ -268,13 +431,12 @@ model AiknowledgeBase {
 }
 
 model OrganizationDoc {
-  id             String @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String @db.ObjectId
-  docFor         DocFor @default(AI)
-  content        Json
-
-  aiDocId   String?
-  aiDocName String?
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String   @db.ObjectId
+  docFor         DocFor   @default(AGENT)
+  fileName       String?   // cleaned name (without extension)
+  cloudUrl       String?   // Cloudinary secure URL
+  fileFormat     String?   // pdf, docx, xlsx ইত্যাদি
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -328,39 +490,54 @@ model Subscription {
   @@map("subscriptions")
 }
 
-model Call {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
+// model Call {
+//   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  organizationId String @db.ObjectId
-  receiverId     String @db.ObjectId
+//   organizationId String @db.ObjectId
+//   receiverId String @db.ObjectId
 
-  from_number  String
-  to_number    String
-  account_sid  String?
-  call_sid     String?
-  call_status  String
-  recordingUrl String?
-  summary      String?
+//   from_number String
+//   to_number String
+//   account_sid String?
+//   call_sid String? @unique
+//   call_status String
+//   recordingUrl String?
+//   summary String?
 
-  callTime          DateTime  @default(now())
-  callType          String
-  call_duration     Int?
-  call_started_at   DateTime  @default(now())
-  call_completed_at DateTime?
+//   callTime DateTime @default(now())
+//   callType String
+//   call_duration Int?
+//   call_started_at DateTime @default(now())
+//   call_completed_at DateTime?
+//   call_transcript String?
+//   recording_duration Int?
+//   recording_sid String?
+//   recording_status String?
+//   recording_url String?
 
-  call_transcript    String?
-  recording_duration Int?
-  recording_sid      String?
-  recording_status   String?
-  recording_url      String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+//   from_country String?
+//   to_city String?
+//   to_state String?
+//   to_zip String?
+//   to_country String?
+//   caller_country String?
+//   called_city String?
+//   called_state String?
+//   called_zip String?
+//   called_country String?
 
-  receivedBy   Agent        @relation(fields: [receiverId], references: [userId])
-  organization Organization @relation(fields: [organizationId], references: [id])
+//   processed Boolean @default(false)
+//   transcription_requested Boolean @default(false)
 
-  @@map("calls")
-}
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   receivedBy Agent @relation(fields: [receiverId], references: [userId])
+//   organization Organization @relation(fields: [organizationId], references: [id])
+
+//   @@map("calls")
+//   @@index([call_sid])
+// }
 
 model ServiceFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
