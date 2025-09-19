@@ -55,22 +55,102 @@ const fetchAndStoreAvailableNumbers = async () => {
 };
 
 // Optional: Add specific filters for common phone number queries
+// const getAllTwilioPhoneNumbersFromDB = async (
+//   query: Record<string, unknown>,
+//    filters: any = {},
+// ) => {
+
+//    let searchTerm = filters?.searchTerm as string;
+
+
+//   // // Build where clause for Call model
+//   // let whereClause: any = {
+//   //   agentId: user?.id,
+//   // };
+
+//   // // If search term exists, ADD search conditions to the existing whereClause
+//   // if (searchTerm) {
+//   //   whereClause.AND = [
+//   //     {
+//   //       OR: [
+//   //         { from_number: { contains: searchTerm, mode: "insensitive" } },
+//   //         { to_number: { contains: searchTerm, mode: "insensitive" } },
+//   //         { call_status: { contains: searchTerm, mode: "insensitive" } },
+//   //         { callType: { contains: searchTerm, mode: "insensitive" } },
+//   //         // {
+//   //         //   Agent: {
+//   //         //     employeeId: { contains: searchTerm, mode: "insensitive" },
+//   //         //   },
+//   //         // },
+//   //       ],
+//   //     },
+//   //   ];
+//   // }
+//   const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
+
+//   const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
+
+//   const customFilters: Record<string, any> = {};
+
+
+//   if (query.isPurchased !== undefined) {
+//     if (query.isPurchased === "true" || query.isPurchased === true) {
+//       // console.log("here true")
+//       customFilters.isPurchased = true;
+//     } else if (query.isPurchased === "false" || query.isPurchased === false) {
+//       // console.log("here false")
+//       customFilters.isPurchased = false;
+//     }
+//   }
+
+//   if (query.phoneNumberPattern) {
+//     customFilters.phoneNumber = {
+//       contains: query.phoneNumberPattern as string,
+//     };
+//   }
+
+//   if (query.capability) {
+//     const capabilities = Array.isArray(query.capability)
+//       ? query.capability
+//       : [query.capability];
+//     customFilters.capabilities = { hasSome: capabilities };
+//   }
+
+//   const result = await queryBuilder
+//     .search(searchableFields)
+//     .filter()
+//     .rawFilter(customFilters)
+//     .include({
+//       organization: true,
+//     })
+//     .sort()
+//     .paginate()
+//     .fields()
+//     .execute();
+
+//   const meta = await queryBuilder.countTotal();
+
+//   return {
+//     meta,
+//     data: result,
+//   };
+// };
+
 const getAllTwilioPhoneNumbersFromDB = async (
   query: Record<string, unknown>
 ) => {
+  let searchTerm = query?.searchTerm as string;
+
   const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
 
   const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
 
   const customFilters: Record<string, any> = {};
 
-
   if (query.isPurchased !== undefined) {
-    if (query.isPurchased === "true" || query.isPurchased === true) {
-      // console.log("here true")
+    if (query.isPurchased === "true" || query?.isPurchased === true) {
       customFilters.isPurchased = true;
-    } else if (query.isPurchased === "false" || query.isPurchased === false) {
-      // console.log("here false")
+    } else if (query.isPurchased === "false" || query?.isPurchased === false) {
       customFilters.isPurchased = false;
     }
   }
@@ -88,10 +168,15 @@ const getAllTwilioPhoneNumbersFromDB = async (
     customFilters.capabilities = { hasSome: capabilities };
   }
 
+  if (searchTerm) {
+    customFilters.OR = searchableFields.map((field) => ({
+      [field]: { contains: searchTerm, mode: "insensitive" },
+    }));
+  }
+
   const result = await queryBuilder
-    .search(searchableFields)
     .filter()
-    .rawFilter(customFilters)
+    .rawFilter(customFilters) // 👈 merged here
     .include({
       organization: true,
     })
