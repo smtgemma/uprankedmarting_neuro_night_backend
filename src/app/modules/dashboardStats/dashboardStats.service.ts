@@ -304,7 +304,7 @@ const getOrganizationAdminDashboardStats = async (
 
 const getOrganizationAdminMonthlyCallData = async (
   organizationId: string,
-  months: number = 6,
+  months: number = 12,
   year?: number
 ): Promise<MonthlyCallData[]> => {
   const monthlyData: MonthlyCallData[] = [];
@@ -345,14 +345,26 @@ const getOrganizationAdminMonthlyCallData = async (
 
       const effectiveMonthEnd = monthEnd > currentDate ? currentDate : monthEnd;
 
-      const [humanCalls, aiCalls, humanCallDuration, aiCallDuration] =
+      const [totalHumanCalls,humanCalls,totalAICalls, aiCalls, humanCallDuration, aiCallDuration] =
         await Promise.all([
+          // Human all calls - all organizations
+          prisma.call.count({
+            where: {
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
+            },
+          }),
           // Human completed calls
           prisma.call.count({
             where: {
               organizationId,
               call_time: { gte: monthStart, lte: effectiveMonthEnd },
               call_status: HUMAN_CALL_STATUS.COMPLETED,
+            },
+          }),
+           // AI all calls - all organizations
+          prisma.aICallLog.count({
+            where: {
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
             },
           }),
 
@@ -388,12 +400,13 @@ const getOrganizationAdminMonthlyCallData = async (
           }),
         ]);
 
-      const successCalls = humanCalls + aiCalls;
+       const successCalls = humanCalls + aiCalls;
+      const totalCalls = totalHumanCalls + totalAICalls;
 
       monthlyData.push({
         month: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
         successCalls,
-        totalCalls: successCalls,
+        totalCalls: totalCalls,
         aiCalls,
         humanCalls,
         humanTotalCallDuration: humanCallDuration._sum.recording_duration || 0,
@@ -633,8 +646,14 @@ const getAdminMonthlyCallData = async (
 
       const effectiveMonthEnd = monthEnd > currentDate ? currentDate : monthEnd;
 
-      const [humanCalls, aiCalls, humanCallDuration, aiCallDuration] =
+      const [totalHumanCalls, humanCalls,totalAICalls, aiCalls, humanCallDuration, aiCallDuration] =
         await Promise.all([
+          // Human all calls - all organizations
+          prisma.call.count({
+            where: {
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
+            },
+          }),
           // Human completed calls - all organizations
           prisma.call.count({
             where: {
@@ -643,6 +662,12 @@ const getAdminMonthlyCallData = async (
             },
           }),
 
+          // AI all calls - all organizations
+          prisma.aICallLog.count({
+            where: {
+              call_time: { gte: monthStart, lte: effectiveMonthEnd },
+            },
+          }),
           // AI completed calls - all organizations
           prisma.aICallLog.count({
             where: {
@@ -673,11 +698,12 @@ const getAdminMonthlyCallData = async (
         ]);
 
       const successCalls = humanCalls + aiCalls;
+      const totalCalls = totalHumanCalls + totalAICalls;
 
       monthlyData.push({
         month: `${monthNames[date.getMonth()]} ${date.getFullYear()}`,
         successCalls,
-        totalCalls: successCalls,
+        totalCalls: totalCalls,
         aiCalls,
         humanCalls,
         humanTotalCallDuration: humanCallDuration._sum.recording_duration || 0,
