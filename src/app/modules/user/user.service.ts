@@ -161,7 +161,7 @@ const createAgentIntoDB = async (payload: any) => {
 
     // ===== Generate unique employee ID OUTSIDE transaction =====
     const employeeId = await generateUniqueEmployeeId();
-    console.log("Generated Employee ID:", employeeId);
+    // console.log("Generated Employee ID:", employeeId);
 
     const hashedPassword = await hashPassword(userData?.password);
     const userName = await generateUniqueUsernameFromEmail(userData?.email);

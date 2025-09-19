@@ -89,10 +89,7 @@ export const sendAgentWelcomeEmail = async (
           <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;"><strong>Username:</strong></td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;">${agentData.sip_username}</td>
         </tr>
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;"><strong>Password:</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;">${agentData.sip_password}</td>
-        </tr>
+      
       </table>
     </div>
 
@@ -101,8 +98,6 @@ export const sendAgentWelcomeEmail = async (
       <ol style="color: #000; padding-left: 20px; margin: 0;">
         <li>Login to the agent dashboard using your email and temporary password</li>
         <li>Change your password immediately for security</li>
-        <li>Configure your SIP phone or softphone with the provided credentials</li>
-        <li>Set your status to "Available" when ready to receive calls</li>
       </ol>
     </div>
 
