@@ -134,13 +134,10 @@ IMPORTANT: For security reasons, please change your password immediately after f
 SIP Configuration Details:
 - SIP Address: ${agentData.sip_address}
 - Username: ${agentData.sip_username}
-- Password: ${agentData.sip_password}
 
 Quick Start Guide:
 1. Login to the agent dashboard using your email and temporary password
 2. Change your password immediately for security
-3. Configure your SIP phone with the provided credentials
-4. Set your status to "Available" when ready to receive calls
 
 Change Your Password Now: ${changePasswordLink}
 
