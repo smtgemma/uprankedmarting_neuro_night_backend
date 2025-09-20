@@ -31,7 +31,7 @@ const createOAuth2Client = () => {
     config.google_client_secret,
     config.google_redirect_uri
   );
-};
+}; 
 
 const createHubSpotLead = async () => {
   const dummyData = {

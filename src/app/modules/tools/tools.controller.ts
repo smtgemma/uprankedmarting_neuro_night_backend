@@ -116,7 +116,7 @@ const getGoogleSheetsStatus = catchAsync(async (req, res) => {
     message: "Google Sheets status retrieved successfully",
     data: result,
   });
-});
+}); 
 
 export const ToolsController = {
   createHubSpotLead,

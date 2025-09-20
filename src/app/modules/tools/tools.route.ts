@@ -18,7 +18,7 @@ router.get(
   ToolsController.getQuestionsByOrganization
 );
 
-router.post(
+router.post( 
   "/add-qa-pairs-to-sheets/:orgId",
   ToolsController.addQaPairsToGoogleSheets
 );

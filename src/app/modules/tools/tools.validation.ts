@@ -18,7 +18,7 @@ const configureGoogleSheetsSchema = z.object({
   body: z.object({
     spreadsheetId: z.string({
       required_error: "Spreadsheet ID is required",
-    }),
+    }), 
     credentials: z.object(
       {
         client_email: z
