@@ -220,6 +220,8 @@ model Organization {
   googleSheetsCredentials   Json?
   lastSyncedAt              DateTime?
 
+  hubspotCredentials Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -236,7 +238,8 @@ model Organization {
   questions             Question[]
   qaPairs               QaPair[]
 
-  aiagent aiagents?
+  aiagent           aiagents?
+  HubspotCredential HubspotCredential?
 
   @@map("organizations")
 }
@@ -553,8 +556,8 @@ model ServiceFeedback {
 model AgentFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  agentId      String  @db.ObjectId 
-  clientId     String  @db.ObjectId 
+  agentId      String  @db.ObjectId
+  clientId     String  @db.ObjectId
   rating       Int
   feedbackText String?
 
@@ -629,4 +632,17 @@ model QaPair {
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")
+}
+
+model HubspotCredential {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  org_id       String   @unique @db.ObjectId // unique for one-to-one relation
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+
+  organization Organization @relation(fields: [org_id], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

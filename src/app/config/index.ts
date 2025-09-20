@@ -69,4 +69,10 @@ export default {
   google_client_id: process.env.GOOGLE_CLIENT_ID,
   google_client_secret: process.env.GOOGLE_CLIENT_SECRET,
   google_redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+
+  // Add Hubspot configuration
+  hubspot_client_id: process.env.HUBSPOT_CLIENT_ID,
+  hubspot_client_secret: process.env.HUBSPOT_CLIENT_SECRET,
+  hubspot_redirect_uri: process.env.HUBSPOT_REDIRECT_URI,
+  hubspot_scopes: process.env.HUBSPOT_SCOPES
 };

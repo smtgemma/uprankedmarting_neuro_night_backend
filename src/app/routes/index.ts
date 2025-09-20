@@ -16,6 +16,7 @@ import { AssignmentRoutes } from "../modules/agentManagement/agent.routes";
 import { ToolsRoutes } from "../modules/tools/tools.route";
 import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
 import { DashboardStatsRoutes } from "../modules/dashboardStats/dashboardStats.route";
+import { HubSpotRoutes } from "../modules/tools/hubspot.route";
 
 const router = Router();
 
@@ -87,6 +88,10 @@ const moduleRoutes = [
   {
     path: "/dashboard",
     route: DashboardStatsRoutes,
+  },
+  {
+    path: "/tools/hubspot",
+    route: HubSpotRoutes,
   }
 ];
 

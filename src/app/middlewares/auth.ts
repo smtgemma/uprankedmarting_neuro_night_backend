@@ -9,6 +9,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 const auth = (...requiredRoles: UserRole[]) => {
   return catchAsync(async (req, _res, next) => {
     let token = req.headers.authorization;
+    console.log("Token: ", token);
 
     // if (token && token.startsWith("Bearer")) {
     //   token = req.headers.authorization?.split(" ")[1].trim();
