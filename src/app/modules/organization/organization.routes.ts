@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { OrganizationController } from "./organization.controller";
+import auth from "../../middlewares/auth";
+import { UserRole } from "@prisma/client";
 
 const router = Router();
 
@@ -10,10 +12,22 @@ router.get(
 );
 
 router.get(
+  '/organization-call-logs',
+  auth(UserRole.organization_admin), 
+  OrganizationController.getOrganizationCallLogsManagement
+);
+
+router.get(
+  '/platform-overview-stats',
+  OrganizationController.getPlatformOverview
+);
+
+router.get(
   "/:organizationId",
   //   auth(UserRole.organization_admin, UserRole.super_admin),
   OrganizationController.getSingleOrganization
 );
+
 
 // router.post(
 //   "/",

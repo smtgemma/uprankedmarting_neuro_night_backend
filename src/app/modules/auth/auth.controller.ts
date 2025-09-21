@@ -3,6 +3,7 @@ import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { AuthService } from "./auth.service";
 import config from "../../config";
+import { User } from "@prisma/client";
 
 const login = catchAsync(async (req, res) => {
   const { email, password } = req.body;
@@ -129,8 +130,46 @@ const getMe = catchAsync(async (req, res) => {
   });
 });
 
+const getSingleUser = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await AuthService.getSingleUser(id, req.user as User);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "User fetched successfully!",
+    data: result,
+  });
+})
+
+const getSingleAgentInfo = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await AuthService.getSingleAgentInfo(id, req.user as User);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agent fetched successfully!",
+    data: result,
+  });
+})
+
+// const getSingleUserForAdmin = catchAsync(async (req, res) => {
+//   const { id } = req.params;
+
+//   const result = await AuthService.getSingleUserForAdmin(id, req.user as User);
+
+//   sendResponse(res, {
+//     statusCode: status.OK,
+//     message: "User fetched successfully!",
+//     data: result,
+//   });
+// })
+
 export const AuthController = {
   login,
+  getSingleUser,
+  getSingleAgentInfo,
   verifyOTP,
   changePassword,
   forgotPassword,
@@ -138,4 +177,5 @@ export const AuthController = {
   resendOTP,
   refreshToken,
   getMe,
+  // getSingleUserForAdmin
 };

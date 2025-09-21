@@ -6,8 +6,6 @@ import sendResponse from "../../utils/sendResponse";
 import { User } from "@prisma/client";
 
 const createUser = catchAsync(async (req, res) => {
-  // const parsedData = UserValidation.createUserPayloadSchema.parse(req.body);
-
   const result = await UserService.createUserIntoDB(req.body);
 
   sendResponse(res, {
@@ -26,7 +24,7 @@ const createAgent = catchAsync(async (req, res) => {
   
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: result.message,
+    message: "Agent created successfully!",
     data: result,
   });
 });
@@ -53,8 +51,6 @@ const getAllUser = catchAsync(async (req, res) => {
     data: result.data,
   });
 });
-
-
 
 const updateUser = catchAsync(async (req, res) => {
   const user = req.user;
@@ -93,13 +89,13 @@ const updateAgentInfo = catchAsync(async (req, res) => {
 
 const updateAgentSpecificInfo = catchAsync(async (req, res) => {
   const user = req.user;
-  const result = await UserService.updateAgentSpecificInfo(user as User,  req.body);
+  const result = await UserService.updateAgentSpecificInfo(user as User, req.body);
   sendResponse(res, {
     statusCode: status.OK,
     message: "Agent info updated successfully!",
     data: result,
   });
-})
+});
 
 const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
   const authUser = req.user;
@@ -117,6 +113,28 @@ const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
   });
 });
 
+const forgotPassword = catchAsync(async (req, res) => {
+  const { email } = req.body;
+  const result = await UserService.forgotPassword(email);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
+const resetPassword = catchAsync(async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  const result = await UserService.resetPassword(email, otp, newPassword);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
 export const UserController = {
   verifyOTP,
   createUser,
@@ -127,4 +145,6 @@ export const UserController = {
   getSingleUserById,
   updateAgentInfo,
   updateUserRoleStatusByAdminIntoDB,
+  forgotPassword,
+  resetPassword,
 };

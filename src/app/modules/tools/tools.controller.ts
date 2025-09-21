@@ -3,18 +3,6 @@ import catchAsync from "../../utils/catchAsync";
 import { ToolsService } from "./tools.service";
 import sendResponse from "../../utils/sendResponse";
 
-// const createHubSpotLead = catchAsync(async (req, res) => {
-//   const { organizationId } = req.body;
-
-//   const result = await ToolsService.createHubSpotLead({ organizationId });
-
-//   sendResponse(res, {
-//     statusCode: status.CREATED,
-//     message: "Lead created in HubSpot successfully",
-//     data: result,
-//   });
-// });
-
 const createHubSpotLead = catchAsync(async (req, res) => {
   const result = await ToolsService.createHubSpotLead();
 
@@ -25,18 +13,15 @@ const createHubSpotLead = catchAsync(async (req, res) => {
   });
 });
 
-
 const exportOrganizationData = catchAsync(async (req, res) => {
   const { organizationId } = req.params;
   await ToolsService.exportOrganizationData(organizationId, res);
 });
 
-// Get all questions by organization ID
 const getQuestionsByOrganization = catchAsync(async (req, res) => {
   const { orgId } = req.params;
   const result = await ToolsService.getQuestionsByOrganization(orgId, res);
-  
-  // If result is not null, send JSON response (for fetch-only case)
+
   if (result) {
     sendResponse(res, {
       statusCode: status.OK,
@@ -44,17 +29,91 @@ const getQuestionsByOrganization = catchAsync(async (req, res) => {
       data: result,
     });
   }
-  // If result is null, the response was handled by Excel export
 });
 
-
-const addQuestionToGoogleSheets = catchAsync(async (req, res) => {
+const addQaPairsToGoogleSheets = catchAsync(async (req, res) => {
   const { orgId } = req.params;
-  const result = await ToolsService.addQuestionToGoogleSheets(orgId);
+  const result = await ToolsService.addQaPairsToGoogleSheets(orgId);
 
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "Questions added to Google Sheets successfully",
+    message: result.message,
+    data: result.data,
+  });
+});
+
+// NEW: Get Google Sheets connect URL
+const getGoogleSheetsConnectUrl = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const user = req.user;
+  const result = await ToolsService.getGoogleSheetsConnectUrl(orgId, user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: {
+      authUrl: result.authUrl,
+    },
+  });
+});
+
+// NEW: Handle Google OAuth callback
+const handleGoogleSheetsCallback = catchAsync(async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!code || !state) {
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?error=missing_parameters`
+    );
+  }
+
+  try {
+    const result = await ToolsService.handleGoogleSheetsCallback(
+      code as string,
+      state as string
+    );
+
+    // Redirect to frontend with success message
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      // }/dashboard/integrations?success=google_sheets_connected&spreadsheetUrl=${encodeURIComponent(
+      }/dashboard/organization/tools`
+    );
+  } catch (error: any) {
+    console.error("Google Sheets callback error:", error);
+    res.redirect(
+      `${
+        process.env.FRONTEND_URL
+      }/dashboard/organization/tools?error=connection_failed&message=${encodeURIComponent(
+        error.message
+      )}`
+    );
+  }
+});
+
+// NEW: Disconnect Google Sheets
+const disconnectGoogleSheets = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const user = req.user;
+  const result = await ToolsService.disconnectGoogleSheets(orgId, user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: result.message,
+    data: null,
+  });
+});
+
+// NEW: Get Google Sheets status
+const getGoogleSheetsStatus = catchAsync(async (req, res) => {
+  const { orgId } = req.params;
+  const user = req.user;
+  const result = await ToolsService.getGoogleSheetsStatus(orgId, user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Google Sheets status retrieved successfully",
     data: result,
   });
 });
@@ -63,5 +122,9 @@ export const ToolsController = {
   createHubSpotLead,
   exportOrganizationData,
   getQuestionsByOrganization,
-  addQuestionToGoogleSheets,
+  addQaPairsToGoogleSheets,
+  getGoogleSheetsConnectUrl,
+  handleGoogleSheetsCallback,
+  disconnectGoogleSheets,
+  getGoogleSheetsStatus,
 };

@@ -12,7 +12,7 @@ const createServiceFeedback = catchAsync(async (req, res) => {
   );
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "Service feedback created successfully!",
+    message: "Service feedback submitted successfully!",
     data: result,
   });
 });
