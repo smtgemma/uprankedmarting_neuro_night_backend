@@ -91,25 +91,49 @@ const getHubSpotConnectUrl = catchAsync(async (req, res) => {
   });
 });
 
+// const handleHubSpotCallback = catchAsync(async (req, res) => {
+//   const { code, state } = req.query;
+  
+//   console.log("HubSpot callback query params:", { code, state }); // Debug log
+//   if (!code || !state) {
+//     console.error("Missing parameters in HubSpot callback:", { code, state });
+//     return res.redirect(
+//       `http://localhost:3000/dashboard/organization/tools?error=missing_parameters`
+//     );
+//   }
+
+//   try {
+//     const result = await HubSpotService.handleHubSpotCallback(code as string, state as string);
+//     res.redirect(
+//       `http://localhost:3000/dashboard/organization/tools?success=hubspot_connected`
+//     );
+//   } catch (error: any) {
+//     console.error("HubSpot callback error:", error.response?.data || error.message);
+//     res.redirect(
+//       `http://localhost:3000/dashboard/organization/tools?error=connection_failed&message=${encodeURIComponent(error.message)}`
+//     );
+//   }
+// });
+
+
 const handleHubSpotCallback = catchAsync(async (req, res) => {
   const { code, state } = req.query;
-  console.log("HubSpot callback query params:", { code, state }); // Debug log
+  console.log("HubSpot callback query params:", { code, state });
   if (!code || !state) {
-    console.error("Missing parameters in HubSpot callback:", { code, state });
-    return res.redirect(
-      `http://localhost:3000/dashboard/organization/tools?error=missing_parameters`
-    );
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing`);
   }
 
   try {
-    const result = await HubSpotService.handleHubSpotCallback(code as string, state as string);
-    res.redirect(
-      `http://localhost:3000/dashboard/organization/tools?success=hubspot_connected`
+    await HubSpotService.handleHubSpotCallback(
+      code as string,
+      state as string
     );
+    res.redirect(`${process.env.FRONTEND_URL}/dashboard/organization/tools`);
   } catch (error: any) {
-    console.error("HubSpot callback error:", error.response?.data || error.message);
     res.redirect(
-      `http://localhost:3000/dashboard/organization/tools?error=connection_failed&message=${encodeURIComponent(error.message)}`
+      `${process.env.FRONTEND_URL}/dashboard/organization/tools?error=${encodeURIComponent(
+        error.message
+      )}`
     );
   }
 });
