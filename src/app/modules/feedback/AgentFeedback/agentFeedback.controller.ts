@@ -14,7 +14,7 @@ const createAgentFeedback = catchAsync(async (req, res) => {
   );
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "Agent feedback created successfully!",
+    message: "Agent feedback submitted successfully!",
     data: result,
   });
 });

@@ -1,4 +1,4 @@
-import { UserRole } from "@prisma/client";
+import { SubscriptionStatus, UserRole } from "@prisma/client";
 import prisma from "../../utils/prisma";
 const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
   const {
@@ -46,6 +46,9 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
             websiteLink: true,
             organizationNumber: true,
             subscriptions: {
+              where: {
+                status: SubscriptionStatus.ACTIVE,
+              },
               select: {
                 id: true,
                 startDate: true,
@@ -56,23 +59,6 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
                 planLevel: true,
                 purchasedNumber: true,
                 numberOfAgents: true,
-                // createdAt: true,
-                // updatedAt: true,
-                // plan: {
-                //   select: {
-                //     id: true,
-                //     planName: true,
-                //     amount: true,
-                //     currency: true,
-                //     interval: true,
-                //     intervalCount: true,
-                //     description: true,
-                //     features: true,
-                //     planLevel: true,
-                //     createdAt: true,
-                //     updatedAt: true
-                //   }
-                // }
               },
               orderBy: {
                 createdAt: "desc",

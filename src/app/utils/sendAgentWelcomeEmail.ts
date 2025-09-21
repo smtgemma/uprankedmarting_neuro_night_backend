@@ -29,7 +29,7 @@ export const sendAgentWelcomeEmail = async (
     timeStyle: "short",
   }).format(new Date());
 
-  const changePasswordLink = `${config.url.frontend}/auth/change-password`;
+  const changePasswordLink = `${config.url.frontend}/auth/new-password`;
 
   const html = `
   <div style="max-width: 600px; margin: 0 auto; background-color: #F6F7F9; color: #000; border-radius: 8px; padding: 24px;">
@@ -89,10 +89,7 @@ export const sendAgentWelcomeEmail = async (
           <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;"><strong>Username:</strong></td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;">${agentData.sip_username}</td>
         </tr>
-        <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;"><strong>Password:</strong></td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd; color: #000;">${agentData.sip_password}</td>
-        </tr>
+      
       </table>
     </div>
 
@@ -101,8 +98,6 @@ export const sendAgentWelcomeEmail = async (
       <ol style="color: #000; padding-left: 20px; margin: 0;">
         <li>Login to the agent dashboard using your email and temporary password</li>
         <li>Change your password immediately for security</li>
-        <li>Configure your SIP phone or softphone with the provided credentials</li>
-        <li>Set your status to "Available" when ready to receive calls</li>
       </ol>
     </div>
 
@@ -134,13 +129,10 @@ IMPORTANT: For security reasons, please change your password immediately after f
 SIP Configuration Details:
 - SIP Address: ${agentData.sip_address}
 - Username: ${agentData.sip_username}
-- Password: ${agentData.sip_password}
 
 Quick Start Guide:
 1. Login to the agent dashboard using your email and temporary password
 2. Change your password immediately for security
-3. Configure your SIP phone with the provided credentials
-4. Set your status to "Available" when ready to receive calls
 
 Change Your Password Now: ${changePasswordLink}
 

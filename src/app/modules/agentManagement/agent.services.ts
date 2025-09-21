@@ -706,11 +706,16 @@ const getAgentCallsManagementInfo = async (
           { to_number: { contains: searchTerm, mode: "insensitive" } },
           { call_status: { contains: searchTerm, mode: "insensitive" } },
           { callType: { contains: searchTerm, mode: "insensitive" } },
+          // {
+          //   Agent: {
+          //     employeeId: { contains: searchTerm, mode: "insensitive" },
+          //   },
+          // },
         ],
       },
     ];
   }
-  console.log(whereClause);
+  // console.log(whereClause);
 
   const [calls, total] = await Promise.all([
     prisma.call.findMany({

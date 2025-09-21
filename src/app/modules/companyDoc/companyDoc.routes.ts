@@ -63,7 +63,7 @@ router.get(
 );
 router.get("/organization",auth(UserRole.organization_admin), CompanyDocController.getCompanyDocsByOrgAdmin);
 router.get("/:id", CompanyDocController.getSingleCompanyDoc);
-router.get("/organization/:organizationId",auth(UserRole.organization_admin, UserRole.super_admin), CompanyDocController.getCompanyDocsByOrgnizationId);
+router.get("/organization/:organizationId",auth(UserRole.organization_admin, UserRole.super_admin,UserRole.agent), CompanyDocController.getCompanyDocsByOrgnizationId);
 router.get("/type/:docFor", CompanyDocController.getCompanyDocsByType);
 router.put(
   "/:id",
