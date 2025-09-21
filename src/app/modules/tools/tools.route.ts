@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { ToolsController } from "./tools.controller";
-import validateRequest from "../../middlewares/validateRequest";
-import { ToolsValidation } from "./tools.validation";
-import auth from "../../middlewares/auth";
+
 import { UserRole } from "@prisma/client";
+import { ToolsController } from "./tools.controller";
+import auth from "../../middlewares/auth";
 
 const router = Router();
 
@@ -23,7 +22,7 @@ router.post(
   ToolsController.addQaPairsToGoogleSheets
 );
 
-// NEW Google Sheets OAuth routes
+// Google Sheets OAuth routes
 router.get(
   "/google-sheets/connect/:orgId",
   auth(UserRole.super_admin, UserRole.organization_admin),
@@ -46,4 +45,42 @@ router.delete(
   auth(UserRole.super_admin, UserRole.organization_admin),
   ToolsController.disconnectGoogleSheets
 );
+
+// HubSpot OAuth routes
+router.get(
+  "/hubspot/connect/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.getHubSpotConnectUrl
+);
+
+router.get(
+  "/hubspot/callback",
+  ToolsController.handleHubSpotCallback
+);
+
+router.post(
+  "/add-qa-pairs-to-hubspot/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.addQaPairsToHubSpot
+);
+
+router.get(
+  "/hubspot/status/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.getHubSpotStatus
+);
+
+router.delete(
+  "/hubspot/disconnect/:orgId",
+  auth(UserRole.super_admin, UserRole.organization_admin),
+  ToolsController.disconnectHubSpot
+);
+
+
+router.post(
+  "/reset-sync/:orgId",
+  auth(UserRole.super_admin),
+  ToolsController.resetSyncTimestamps
+);
+
 export const ToolsRoutes = router;

@@ -220,6 +220,12 @@ model Organization {
   googleSheetsCredentials   Json?
   lastSyncedAt              DateTime?
 
+  // HubSpot integration fields
+  hubspotAccessToken  String?
+  hubspotRefreshToken String?
+  hubspotExpiresAt    DateTime?
+  lastHubSpotSyncedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -553,8 +559,8 @@ model ServiceFeedback {
 model AgentFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  agentId      String  @db.ObjectId 
-  clientId     String  @db.ObjectId 
+  agentId      String  @db.ObjectId
+  clientId     String  @db.ObjectId
   rating       Int
   feedbackText String?
 
