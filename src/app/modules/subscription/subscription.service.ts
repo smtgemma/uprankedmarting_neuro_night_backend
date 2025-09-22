@@ -232,7 +232,7 @@ const createSubscription = async (
     if (existingActiveSubscription) {
       throw new AppError(
         status.BAD_REQUEST,
-        `Organization already has an active subscription (ID: ${existingActiveSubscription.id}). An organization can only have one active subscription.`
+        `Organization already has an active subscription. An organization can only have one active subscription.`
       );
     }
 
@@ -260,7 +260,7 @@ const createSubscription = async (
     if (existingSubscriptionWithNumber) {
       throw new AppError(
         status.BAD_REQUEST,
-        `Organization already has a purchased number (${existingSubscriptionWithNumber.purchasedNumber}). An organization can only purchase one number.`
+        `Organization already has a purchased number. An organization can only purchase one number.`
       );
     }
 
