@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  uprank-marting-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: uprank-marting-server  
+    container_name: uprank-backend_neuro_night_ai
+    ports:
+      - "5000:5000"
+    env_file:
+    - .env
+    restart: unless-stopped
