@@ -209,7 +209,34 @@ const createSubscription = async (
       throw new AppError(status.NOT_FOUND, "Organization not found");
     }
 
-    // 2. Check if organization already has a subscription with a purchased number
+    // 2. Check if organization already has any active subscription
+    const existingActiveSubscription = await tx.subscription.findFirst({
+      where: {
+        organizationId: organizationId,
+        status: {
+          in: [
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.TRIALING,
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.INCOMPLETE,
+            SubscriptionStatus.UNPAID,
+          ],
+        },
+        OR: [
+          { endDate: { gte: new Date() } }, // Subscription hasn't expired
+          { endDate: null }, // No end date (e.g., still active or trialing)
+        ],
+      },
+    });
+
+    if (existingActiveSubscription) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        `Organization already has an active subscription (ID: ${existingActiveSubscription.id}). An organization can only have one active subscription.`
+      );
+    }
+
+    // 3. Check if organization already has a subscription with a purchased number
     const existingSubscriptionWithNumber = await tx.subscription.findFirst({
       where: {
         organizationId: organizationId,
@@ -237,40 +264,12 @@ const createSubscription = async (
       );
     }
 
-    // 3. Verify plan exists
+    // 4. Verify plan exists
     const plan = await tx.plan.findUnique({
       where: { id: planId },
     });
     if (!plan) {
       throw new AppError(status.NOT_FOUND, "Plan not found");
-    }
-
-    // 4. Check for existing active subscription for the same plan
-    const existingActiveSubscription = await tx.subscription.findFirst({
-      where: {
-        organizationId: organizationId,
-        planId: planId,
-        status: {
-          in: [
-            SubscriptionStatus.ACTIVE,
-            SubscriptionStatus.TRIALING,
-            SubscriptionStatus.PAST_DUE,
-            SubscriptionStatus.INCOMPLETE,
-            SubscriptionStatus.UNPAID,
-          ],
-        },
-        OR: [
-          { endDate: { gte: new Date() } }, // Subscription hasn't expired
-          { endDate: null }, // No end date (e.g., still active or trialing)
-        ],
-      },
-    });
-
-    if (existingActiveSubscription) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        `Organization already has an active subscription for this plan (ID: ${planId}). Please wait until the current subscription expires or choose a different plan.`
-      );
     }
 
     // 5. Normalize phone number format
