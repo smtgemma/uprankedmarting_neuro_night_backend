@@ -8,7 +8,7 @@ export const generateUniqueEmployeeId = async (): Promise<string> => {
       orderBy: { employeeId: "desc" },
     });
 
-    console.log("Last Agent:", lastAgent);
+    // console.log("Last Agent:", lastAgent);
 
     let newIdNum: number;
 
