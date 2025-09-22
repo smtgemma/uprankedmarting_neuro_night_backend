@@ -486,6 +486,7 @@ model Question {
   @@map("questions")
 }
 
+
 model QaPair {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   org_id   String @db.ObjectId
