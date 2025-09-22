@@ -306,6 +306,7 @@ def build_elevenlabs_payload(
         },
         "platform_settings": {
             "overrides": {
+                "enable_conversation_initiation_client_data_from_webhook": True,
                 "conversation_config_override": {
                     "conversation": {
                         "text_only": False
@@ -316,6 +317,11 @@ def build_elevenlabs_payload(
                 "agent_concurrency_limit": -1,
                 "daily_limit": daily_limit,
                 "bursting_enabled": True
+            },
+            "workspace_overrides": {
+                "webhooks": {
+                    "post_call_webhook_id": "0943e7f2a8f446df938787dd84ef82b5"
+                }
             }
         },
         "name": f"{org.business_name} AI Agent"
