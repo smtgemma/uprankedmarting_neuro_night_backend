@@ -281,12 +281,12 @@ const resendOTP = async (email: string) => {
     throw new ApiError(status.NOT_FOUND, "User not found!");
   }
 
-  if (user.isVerified && !user.isResetPassword) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "User is already verified and not in password reset process!"
-    );
-  }
+  // if (user.isVerified && !user.isResetPassword) {
+  //   throw new ApiError(
+  //     status.BAD_REQUEST,
+  //     "User is already verified and not in password reset process!"
+  //   );
+  // }
 
   const { otp, expiresAt } = generateOTPData(4, 5);
 
