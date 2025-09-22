@@ -41,11 +41,6 @@ MANIFEST
 # =============================================================================
 
 # VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 .history/
 
 # PyCharm
@@ -60,6 +55,7 @@ MANIFEST
 # =============================================================================
 
 # Environment variables file
+temp_auto_push.bat
 # This file contains sensitive information like API keys and database passwords.
 # A .env.example file should be committed instead.
 .env
@@ -116,4 +112,5 @@ ehthumbs_vista.db
 # Temporary files
 *.swp
 *~
-*.tmp
+*.tmp.gitignore
+branch_structure.json

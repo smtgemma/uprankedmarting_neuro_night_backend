@@ -191,7 +191,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app", 
-        port=9000, 
+        port=9050, 
         workers=1,
         reload=True,
         log_level="info"
