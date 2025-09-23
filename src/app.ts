@@ -28,8 +28,8 @@ const allowedOrigins = [
   "answersmart.ai",
   "https://aibackend.answersmart.ai",
   "https://www.answersmart.ai",
-  "https://backend.answersmart.ai/",
-  "https://lead.answersmart.ai/",
+  "https://backend.answersmart.ai",
+  "https://lead.answersmart.ai",
 ];
 
 app.use(
