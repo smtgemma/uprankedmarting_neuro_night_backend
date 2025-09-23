@@ -18,13 +18,18 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 
 const allowedOrigins = [
-  "http://localhost:3000", 
-  "http://localhost:3001", 
-  "http://localhost:3002",
-  "http://localhost:3003", // React local
-  "http://localhost:3004", // React local
-  "http://10.0.30.84:3000", // অন্য client
-  "https://your-production-frontend-url.com", // deployed client
+  // "http://localhost:3000",
+  // "http://localhost:3001",
+  // "http://localhost:3002",
+  // "http://localhost:3003",
+  // "http://localhost:3004",
+  // "http://10.0.30.84:3000",
+  "https://answersmart.ai",
+  "answersmart.ai",
+  "https://aibackend.answersmart.ai",
+  "https://www.answersmart.ai",
+  "https://backend.answersmart.ai/",
+  "https://lead.answersmart.ai/",
 ];
 
 app.use(
