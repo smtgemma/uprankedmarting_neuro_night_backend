@@ -119,6 +119,8 @@ const getAllAgentFromDB = async (
                 assignedBy: true,
               },
             },
+            successCalls: true,
+            droppedCalls: true,
             // assignments: {
             //   where: {
             //     status: {
@@ -171,6 +173,7 @@ const getAllAgentFromDB = async (
         ...user,
         Agent: {
           ...user.Agent,
+          totalCalls: (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
           avgRating: parseFloat(avgRating.toFixed(1)), // Round to 1 decimal place
           totalFeedbacks: feedbacks.length,
         },
@@ -183,6 +186,7 @@ const getAllAgentFromDB = async (
         ...user.Agent,
         avgRating: 0,
         totalFeedbacks: 0,
+        totalCalls: 0,
       },
     };
   });
