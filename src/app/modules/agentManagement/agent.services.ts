@@ -111,6 +111,11 @@ const getAllAgentFromDB = async (
             status: true,
             assignTo: true,
             assignments: {
+              where: {
+                NOT: {
+                  status: AssignmentStatus.REJECTED,
+                },
+              },
               select: {
                 id: true,
                 status: true,
@@ -173,7 +178,8 @@ const getAllAgentFromDB = async (
         ...user,
         Agent: {
           ...user.Agent,
-          totalCalls: (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
+          totalCalls:
+            (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
           avgRating: parseFloat(avgRating.toFixed(1)), // Round to 1 decimal place
           totalFeedbacks: feedbacks.length,
         },
@@ -589,6 +595,11 @@ const getAllAgentForAdmin = async (
             },
             assignTo: true,
             assignments: {
+              where: {
+                NOT: {
+                  status: AssignmentStatus.REJECTED,
+                },
+              },
               select: {
                 id: true,
                 organization: {
@@ -600,7 +611,7 @@ const getAllAgentForAdmin = async (
                 agentUserId: true,
                 status: true,
                 assignedBy: true,
-              },
+              }
             },
             organization: {
               select: {
