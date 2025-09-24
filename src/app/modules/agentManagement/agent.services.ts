@@ -660,6 +660,7 @@ const getAllAgentForAdmin = async (
       Agent: {
         id: agent?.id || null,
         skills: agent?.skills || [],
+        totalCalls: (agent?.successCalls || 0) + (agent?.droppedCalls || 0),
         successCalls: agent?.successCalls || 0,
         droppedCalls: agent?.droppedCalls || 0,
         isAvailable: agent?.isAvailable ?? false,
