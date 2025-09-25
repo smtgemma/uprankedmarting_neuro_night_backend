@@ -326,7 +326,7 @@ const createSubscription = async (
       endDate.setDate(endDate.getDate() + (plan.intervalCount || 1));
     }
 
-// 8. Calculate final amount based on plan level
+    // 8. Calculate final amount based on plan level
     let finalAmount: number;
     if (planLevel === PlanLevel.only_ai) {
       finalAmount = plan.amount; // Only package price for only_ai
