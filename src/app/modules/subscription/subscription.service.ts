@@ -328,7 +328,7 @@ const createSubscription = async (
 
     // 8. Calculate final amount (base + $20 per agent)
     const finalAmount =
-      plan.amount + (numberOfAgents > 0 ? numberOfAgents * 20 : 0);
+      plan?.amount + (numberOfAgents > 0 ? numberOfAgents * plan?.amount : 0);
 
     // 9. Create payment intent in Stripe
     const paymentIntent = await stripe.paymentIntents.create({
