@@ -1,5 +1,11 @@
 // services/assignment.service.ts
-import { PrismaClient, AssignmentStatus, UserRole, User } from "@prisma/client";
+import {
+  PrismaClient,
+  AssignmentStatus,
+  UserRole,
+  User,
+  SubscriptionStatus,
+} from "@prisma/client";
 import ApiError from "../../errors/AppError";
 import status from "http-status";
 import {
@@ -611,7 +617,7 @@ const getAllAgentForAdmin = async (
                 agentUserId: true,
                 status: true,
                 assignedBy: true,
-              }
+              },
             },
             organization: {
               select: {
@@ -795,13 +801,54 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       throw new ApiError(status.NOT_FOUND, "Agent not found!");
     }
 
+    // status: 'ACTIVE',
+    //   planLevel: 'only_real_agent',
+    // 2. Validate organization exists and user owns it
     // 2. Validate organization exists and user owns it
     const organization = await tx.organization.findUnique({
       where: { ownerId: user.id },
+      include: {
+        subscriptions: true,
+        AgentAssignment: {
+          where: {
+            status: {
+              in: [
+                AssignmentStatus.APPROVED,
+                AssignmentStatus.REMOVAL_REQUESTED,
+              ],
+            },
+          },
+        },
+      },
     });
+
 
     if (!organization) {
       throw new ApiError(status.NOT_FOUND, "Organization not found!");
+    }
+
+    // 🔎 Check active subscription
+    const activeSubscription = organization.subscriptions.find(
+      (sub) => sub.status === SubscriptionStatus.ACTIVE
+    );
+
+    if (!activeSubscription) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "⚠️ Your organization has no active subscription!"
+      );
+    }
+
+    // 🔎 Check agent limit
+    const currentAssignedAgents = organization.AgentAssignment.length;
+    if (
+      activeSubscription.numberOfAgents &&
+      currentAssignedAgents >= activeSubscription.numberOfAgents
+    ) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        `⚠️ Agent limit reached! Your subscription only allows ${activeSubscription.numberOfAgents} agent(s).`
+      );
     }
 
     // 3. Check if agent has active assignments in other organizations
