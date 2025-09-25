@@ -334,8 +334,7 @@ const createSubscription = async (
       planLevel === PlanLevel.only_real_agent ||
       planLevel === PlanLevel.ai_then_real_agent
     ) {
-      finalAmount =
-        plan.amount + (numberOfAgents > 1 ? numberOfAgents * plan.amount : 0);
+      finalAmount = numberOfAgents > 1 ? numberOfAgents * plan.amount : plan.amount;
     } else {
       throw new AppError(status.BAD_REQUEST, "Invalid plan level");
     }
