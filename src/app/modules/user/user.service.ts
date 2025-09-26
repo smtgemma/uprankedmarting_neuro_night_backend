@@ -100,148 +100,328 @@ const createUserIntoDB = async (payload: any) => {
   }
 };
 
+// const createAgentIntoDB = async (payload: any) => {
+//   const { userData, agentData } = payload;
+
+//   if (!userData?.email || !userData?.phone) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "Email and phone are required fields"
+//     );
+//   }
+
+//   if (!agentData?.sip_domain || !agentData?.sip_password) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "SIP domain and password are required"
+//     );
+//   }
+
+//   try {
+//     const existingUser = await prisma.user.findFirst({
+//       where: {
+//         OR: [{ email: userData.email }, { phone: userData.phone }],
+//       },
+//     });
+
+//     if (existingUser) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "User with this email or phone already exists!"
+//       );
+//     }
+
+//     // ===== Check for unique emergencyPhone and ssn =====
+//     if (agentData.emergencyPhone) {
+//       const existingEmergencyPhone = await prisma.agent.findFirst({
+//         where: {
+//           emergencyPhone: agentData.emergencyPhone.trim(),
+//         },
+//       });
+
+//       if (existingEmergencyPhone) {
+//         throw new ApiError(
+//           status.BAD_REQUEST,
+//           "Emergency phone number already exists!"
+//         );
+//       }
+//     }
+
+//     if (agentData.ssn) {
+//       const existingSSN = await prisma.agent.findFirst({
+//         where: {
+//           ssn: agentData.ssn,
+//         },
+//       });
+
+//       if (existingSSN) {
+//         throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
+//       }
+//     }
+
+//     // ===== Generate unique employee ID OUTSIDE transaction =====
+//     const employeeId = await generateUniqueEmployeeId();
+//     // console.log("Generated Employee ID:", employeeId);
+
+//     const hashedPassword = await hashPassword(userData?.password);
+//     const userName = await generateUniqueUsernameFromEmail(userData?.email);
+//     const sip_domain = agentData?.sip_domain;
+//     const password = agentData?.sip_password;
+
+//     const result = await prisma.$transaction(
+//       async (tx) => {
+//         // ===== Double-check for existing user INSIDE transaction =====
+//         const existingUserInTx = await tx.user.findFirst({
+//           where: {
+//             OR: [{ email: userData.email }, { phone: userData.phone }],
+//           },
+//         });
+
+//         if (existingUserInTx) {
+//           throw new ApiError(
+//             status.BAD_REQUEST,
+//             "User with this email or phone already exists!"
+//           );
+//         }
+
+//         // ===== Double-check for unique emergencyPhone and ssn INSIDE transaction =====
+//         if (agentData.emergencyPhone) {
+//           const existingEmergencyPhoneInTx = await tx.agent.findFirst({
+//             where: {
+//               emergencyPhone: agentData.emergencyPhone.trim(),
+//             },
+//           });
+
+//           if (existingEmergencyPhoneInTx) {
+//             throw new ApiError(
+//               status.BAD_REQUEST,
+//               "Emergency phone number already exists!"
+//             );
+//           }
+//         }
+
+//         if (agentData.ssn) {
+//           const existingSSNInTx = await tx.agent.findFirst({
+//             where: {
+//               ssn: agentData.ssn,
+//             },
+//           });
+
+//           if (existingSSNInTx) {
+//             throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
+//           }
+//         }
+
+//         const sipInfo = await TwilioSipService.createSipEndpoint({
+//           userName,
+//           password,
+//           sip_domain,
+//         });
+
+//         if (!sipInfo) {
+//           throw new ApiError(
+//             status.INTERNAL_SERVER_ERROR,
+//             "Failed to create SIP endpoint"
+//           );
+//         }
+
+//         // ===== Create User =====
+//         const userPayload = {
+//           name: userData.name.trim(),
+//           bio: userData.bio?.trim() || "",
+//           email: userData.email.toLowerCase().trim(),
+//           phone: userData.phone.trim(),
+//           role: UserRole.agent,
+//           password: hashedPassword,
+//           isVerified: true,
+//         };
+
+//         const createdUser = await tx.user.create({
+//           data: userPayload,
+//         });
+
+//         // ===== Create Agent =====
+//         const agentPayload = {
+//           userId: createdUser.id,
+//           employeeId: employeeId,
+//           dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
+//           gender: agentData.gender,
+//           address: agentData.address?.trim(),
+//           emergencyPhone: agentData.emergencyPhone?.trim() || "",
+//           ssn: agentData.ssn,
+//           skills: agentData.skills || [],
+//           sip_address: sipInfo?.fullSipUri,
+//           sip_username: userName,
+//           sip_password: password,
+//           jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
+//           employmentType: agentData.employmentType || employmentType.full_time,
+//           department: agentData.department?.trim() || "Customer Service",
+//           workStartTime: agentData.workStartTime,
+//           workEndTime: agentData.workEndTime,
+//           startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
+//           endWorkDateTime: null,
+//           successCalls: 0,
+//           droppedCalls: 0,
+//         };
+
+//         const EmailPayload = {
+//           name: createdUser?.name,
+//           email: createdUser?.email,
+//           phone: createdUser?.phone,
+//           password: userData?.password,
+//           sip_address: sipInfo?.fullSipUri,
+//           sip_username: userName,
+//           sip_password: password,
+//           employeeId: employeeId,
+//         };
+
+//         const createdAgent = await tx.agent.create({
+//           data: agentPayload,
+//         });
+
+//         await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
+
+//         return {
+//           user: { ...createdUser, password: undefined },
+//           agent: createdAgent,
+//         };
+//       },
+//       {
+//         timeout: 10000, // Increase transaction timeout to 10 seconds
+//       }
+//     );
+
+//     return result;
+//   } catch (error: any) {
+//     console.error("Error creating agent:", error);
+
+//     if (error.code === "P2002") {
+//       const field = error.meta?.target?.[0];
+//       const fieldMap: { [key: string]: string } = {
+//         email: "Email",
+//         phone: "Phone",
+//         userId: "User ID",
+//         // twilioIdentity: "Twilio Identity",
+//         employeeId: "Employee ID",
+//         emergencyPhone: "Emergency Phone",
+//         ssn: "SSN",
+//       };
+
+//       const fieldName = fieldMap[field] || field || "Field";
+//       throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
+//     }
+
+//     if (error instanceof ApiError) throw error;
+
+//     throw new ApiError(
+//       status.INTERNAL_SERVER_ERROR,
+//       "Failed to create agent: " + error.message
+//     );
+//   }
+// };
+
 const createAgentIntoDB = async (payload: any) => {
   const { userData, agentData } = payload;
 
   if (!userData?.email || !userData?.phone) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Email and phone are required fields"
-    );
+    throw new ApiError(status.BAD_REQUEST, "Email and phone are required fields");
   }
 
   if (!agentData?.sip_domain || !agentData?.sip_password) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "SIP domain and password are required"
-    );
+    throw new ApiError(status.BAD_REQUEST, "SIP domain and password are required");
   }
+
+  let sipInfo = null as any;
 
   try {
     const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email: userData.email }, { phone: userData.phone }],
-      },
+      where: { OR: [{ email: userData.email }, { phone: userData.phone }] },
     });
 
     if (existingUser) {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        "User with this email or phone already exists!"
-      );
+      throw new ApiError(status.BAD_REQUEST, "User with this email or phone already exists!");
     }
 
-    // ===== Check for unique emergencyPhone and ssn =====
+    // Check for unique emergencyPhone and ssn
     if (agentData.emergencyPhone) {
       const existingEmergencyPhone = await prisma.agent.findFirst({
-        where: {
-          emergencyPhone: agentData.emergencyPhone.trim(),
-        },
+        where: { emergencyPhone: agentData.emergencyPhone.trim() },
       });
-
       if (existingEmergencyPhone) {
-        throw new ApiError(
-          status.BAD_REQUEST,
-          "Emergency phone number already exists!"
-        );
+        throw new ApiError(status.BAD_REQUEST, "Emergency phone number already exists!");
       }
     }
 
     if (agentData.ssn) {
       const existingSSN = await prisma.agent.findFirst({
-        where: {
-          ssn: agentData.ssn,
-        },
+        where: { ssn: agentData.ssn },
       });
-
       if (existingSSN) {
         throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
       }
     }
 
-    // ===== Generate unique employee ID OUTSIDE transaction =====
+    // Generate unique employee ID
     const employeeId = await generateUniqueEmployeeId();
-    // console.log("Generated Employee ID:", employeeId);
-
     const hashedPassword = await hashPassword(userData?.password);
     const userName = await generateUniqueUsernameFromEmail(userData?.email);
     const sip_domain = agentData?.sip_domain;
     const password = agentData?.sip_password;
 
-    const result = await prisma.$transaction(
-      async (tx) => {
-        // ===== Double-check for existing user INSIDE transaction =====
-        const existingUserInTx = await tx.user.findFirst({
-          where: {
-            OR: [{ email: userData.email }, { phone: userData.phone }],
-          },
+    // Create SIP endpoint first (outside transaction for easier cleanup)
+    sipInfo = await TwilioSipService.createSipEndpoint({
+      userName,
+      password,
+      sip_domain,
+    });
+
+    if (!sipInfo) {
+      throw new ApiError(status.INTERNAL_SERVER_ERROR, "Failed to create SIP endpoint");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Double-check for existing user INSIDE transaction
+      const existingUserInTx = await tx.user.findFirst({
+        where: { OR: [{ email: userData.email }, { phone: userData.phone }] },
+      });
+
+      if (existingUserInTx) {
+        throw new ApiError(status.BAD_REQUEST, "User with this email or phone already exists!");
+      }
+
+      // Double-check for unique emergencyPhone and ssn INSIDE transaction
+      if (agentData.emergencyPhone) {
+        const existingEmergencyPhoneInTx = await tx.agent.findFirst({
+          where: { emergencyPhone: agentData.emergencyPhone.trim() },
         });
-
-        if (existingUserInTx) {
-          throw new ApiError(
-            status.BAD_REQUEST,
-            "User with this email or phone already exists!"
-          );
+        if (existingEmergencyPhoneInTx) {
+          throw new ApiError(status.BAD_REQUEST, "Emergency phone number already exists!");
         }
+      }
 
-        // ===== Double-check for unique emergencyPhone and ssn INSIDE transaction =====
-        if (agentData.emergencyPhone) {
-          const existingEmergencyPhoneInTx = await tx.agent.findFirst({
-            where: {
-              emergencyPhone: agentData.emergencyPhone.trim(),
-            },
-          });
-
-          if (existingEmergencyPhoneInTx) {
-            throw new ApiError(
-              status.BAD_REQUEST,
-              "Emergency phone number already exists!"
-            );
-          }
-        }
-
-        if (agentData.ssn) {
-          const existingSSNInTx = await tx.agent.findFirst({
-            where: {
-              ssn: agentData.ssn,
-            },
-          });
-
-          if (existingSSNInTx) {
-            throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
-          }
-        }
-
-        const sipInfo = await TwilioSipService.createSipEndpoint({
-          userName,
-          password,
-          sip_domain,
+      if (agentData.ssn) {
+        const existingSSNInTx = await tx.agent.findFirst({
+          where: { ssn: agentData.ssn },
         });
-
-        if (!sipInfo) {
-          throw new ApiError(
-            status.INTERNAL_SERVER_ERROR,
-            "Failed to create SIP endpoint"
-          );
+        if (existingSSNInTx) {
+          throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
         }
+      }
 
-        // ===== Create User =====
-        const userPayload = {
-          name: userData.name.trim(),
-          bio: userData.bio?.trim() || "",
-          email: userData.email.toLowerCase().trim(),
-          phone: userData.phone.trim(),
-          role: UserRole.agent,
-          password: hashedPassword,
-          isVerified: true,
-        };
+      // Create User
+      const userPayload = {
+        name: userData.name.trim(),
+        bio: userData.bio?.trim() || "",
+        email: userData.email.toLowerCase().trim(),
+        phone: userData.phone.trim(),
+        role: UserRole.agent,
+        password: hashedPassword,
+        isVerified: true,
+      };
 
-        const createdUser = await tx.user.create({
-          data: userPayload,
-        });
+      const createdUser = await tx.user.create({ data: userPayload });
 
-        // ===== Create Agent =====
-        const agentPayload = {
+       const agentPayload = {
           userId: createdUser.id,
           employeeId: employeeId,
           dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
@@ -264,62 +444,53 @@ const createAgentIntoDB = async (payload: any) => {
           droppedCalls: 0,
         };
 
-        const EmailPayload = {
-          name: createdUser?.name,
-          email: createdUser?.email,
-          phone: createdUser?.phone,
-          password: userData?.password,
-          sip_address: sipInfo?.fullSipUri,
-          sip_username: userName,
-          sip_password: password,
-          employeeId: employeeId,
-        };
+      const createdAgent = await tx.agent.create({ data: agentPayload });
 
-        const createdAgent = await tx.agent.create({
-          data: agentPayload,
-        });
+      // Send welcome email
+      const EmailPayload = {
+        name: createdUser?.name,
+        email: createdUser?.email,
+        phone: createdUser?.phone,
+        password: userData?.password,
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+        employeeId: employeeId,
+      };
 
-        await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
+      await sendAgentWelcomeEmail(createdUser.email, EmailPayload);
 
-        return {
-          user: { ...createdUser, password: undefined },
-          agent: createdAgent,
-        };
-      },
-      {
-        timeout: 10000, // Increase transaction timeout to 10 seconds
-      }
-    );
+      return {
+        user: { ...createdUser, password: undefined },
+        agent: createdAgent,
+      };
+    }, { timeout: 10000 });
 
     return result;
+
   } catch (error: any) {
+    // Cleanup SIP endpoint if agent creation failed
+    // if (sipInfo?.credentialListSid) {
+    //   await TwilioSipService.deleteSipEndpoint(sipInfo.credentialListSid);
+    // }
+
     console.error("Error creating agent:", error);
 
     if (error.code === "P2002") {
       const field = error.meta?.target?.[0];
       const fieldMap: { [key: string]: string } = {
-        email: "Email",
-        phone: "Phone",
-        userId: "User ID",
-        // twilioIdentity: "Twilio Identity",
-        employeeId: "Employee ID",
-        emergencyPhone: "Emergency Phone",
-        ssn: "SSN",
+        email: "Email", phone: "Phone", userId: "User ID",
+        employeeId: "Employee ID", emergencyPhone: "Emergency Phone", ssn: "SSN"
       };
-
       const fieldName = fieldMap[field] || field || "Field";
       throw new ApiError(status.BAD_REQUEST, `${fieldName} already exists`);
     }
 
     if (error instanceof ApiError) throw error;
 
-    throw new ApiError(
-      status.INTERNAL_SERVER_ERROR,
-      "Failed to create agent: " + error.message
-    );
+    throw new ApiError(status.INTERNAL_SERVER_ERROR, "Failed to create agent: " + error.message);
   }
 };
-
 const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   const currentUserRole = user?.role;
 
@@ -408,7 +579,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
         },
       });
 
-      console.log("existingUser", existingUser);
+      // console.log("existingUser", existingUser);
 
       if (existingUser) {
         throw new ApiError(
