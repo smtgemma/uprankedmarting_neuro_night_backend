@@ -815,7 +815,7 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
               in: [
                 AssignmentStatus.APPROVED,
                 AssignmentStatus.REMOVAL_REQUESTED,
-                AssignmentStatus.PENDING
+                AssignmentStatus.PENDING,
               ],
             },
           },
@@ -839,20 +839,42 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       );
     }
 
-
     // 🔎 Check agent limit
-    const currentAssignedAgents = organization.AgentAssignment.length;
-    console.log("Current Assigned Agents:", currentAssignedAgents)
+    // const currentAssignedAgents = organization.AgentAssignment.length;
+    // // console.log("Current Assigned Agents:", currentAssignedAgents)
+    // if (
+    //   activeSubscription.numberOfAgents &&
+    //   currentAssignedAgents >= activeSubscription.numberOfAgents
+    // ) {
+    //   throw new ApiError(
+    //     status.BAD_REQUEST,
+    //     `⚠️ Agent limit reached! Your subscription only allows ${activeSubscription.numberOfAgents} agent(s).`
+    //   );
+    // }
+
+    // 🔎 Count assigned & pending
+    const currentAssignedAgents = organization.AgentAssignment.filter(
+      (a) =>
+        a.status === AssignmentStatus.APPROVED ||
+        a.status === AssignmentStatus.REMOVAL_REQUESTED
+    ).length;
+
+    const pendingRequests = organization.AgentAssignment.filter(
+      (a) => a.status === AssignmentStatus.PENDING
+    ).length;
+
+    // ✅ Total requests = already assigned + pending
+    const totalRequests = currentAssignedAgents + pendingRequests;
+
     if (
       activeSubscription.numberOfAgents &&
-      currentAssignedAgents >= activeSubscription.numberOfAgents
+      totalRequests >= activeSubscription.numberOfAgents
     ) {
       throw new ApiError(
         status.BAD_REQUEST,
-        `⚠️ Agent limit reached! Your subscription only allows ${activeSubscription.numberOfAgents} agent(s).`
+        `⚠️ Agent limit reached! Your subscription allows ${activeSubscription.numberOfAgents} agent(s). Already Assigned: ${currentAssignedAgents} agents, Pending: ${pendingRequests} requests.`
       );
     }
-
 
     // 3. Check if agent has active assignments in other organizations
     const activeOtherAssignment = await tx.agentAssignment.findFirst({
