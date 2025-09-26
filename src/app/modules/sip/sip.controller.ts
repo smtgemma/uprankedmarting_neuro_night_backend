@@ -20,26 +20,26 @@ const createSipEndpoint = catchAsync(async (req: Request, res: Response) => {
 
 // Get all SIP endpoints
 const getSipEndpoints = catchAsync(async (req: Request, res: Response) => {
-  const { domainSid } = req.query;
+  // const { domainSid } = req.query;
   
-  const result = await TwilioSipService.getSipEndpoints(domainSid as string);
+  // const result = await TwilioSipService.getSipEndpoints(domainSid as string);
   
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: 'SIP endpoints fetched successfully!',
-    data: result,
-  });
+  // sendResponse(res, {
+  //   statusCode: status.OK,
+  //   message: 'SIP endpoints fetched successfully!',
+  //   data: result,
+  // });
 });
 
 // Get default domain
 const getDefaultSipDomain = catchAsync(async (req: Request, res: Response) => {
-  const result = await TwilioSipService.getDefaultDomain();
+  // const result = await TwilioSipService.getDefaultDomain();
   
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: 'Default SIP domain fetched successfully!',
-    data: { domainSid: result },
-  });
+  // sendResponse(res, {
+  //   statusCode: status.OK,
+  //   message: 'Default SIP domain fetched successfully!',
+  //   data: { domainSid: result },
+  // });
 });
 
 export const TwilioSipController = {
