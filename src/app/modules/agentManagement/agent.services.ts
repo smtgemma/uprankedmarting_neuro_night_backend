@@ -815,6 +815,7 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
               in: [
                 AssignmentStatus.APPROVED,
                 AssignmentStatus.REMOVAL_REQUESTED,
+                AssignmentStatus.PENDING
               ],
             },
           },
@@ -822,6 +823,7 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       },
     });
 
+    console.log(organization)
 
     if (!organization) {
       throw new ApiError(status.NOT_FOUND, "Organization not found!");
