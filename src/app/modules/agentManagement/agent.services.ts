@@ -815,13 +815,13 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
               in: [
                 AssignmentStatus.APPROVED,
                 AssignmentStatus.REMOVAL_REQUESTED,
+                AssignmentStatus.PENDING
               ],
             },
           },
         },
       },
     });
-
 
     if (!organization) {
       throw new ApiError(status.NOT_FOUND, "Organization not found!");
@@ -839,8 +839,10 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       );
     }
 
+
     // 🔎 Check agent limit
     const currentAssignedAgents = organization.AgentAssignment.length;
+    console.log("Current Assigned Agents:", currentAssignedAgents)
     if (
       activeSubscription.numberOfAgents &&
       currentAssignedAgents >= activeSubscription.numberOfAgents
@@ -850,6 +852,7 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
         `⚠️ Agent limit reached! Your subscription only allows ${activeSubscription.numberOfAgents} agent(s).`
       );
     }
+
 
     // 3. Check if agent has active assignments in other organizations
     const activeOtherAssignment = await tx.agentAssignment.findFirst({
