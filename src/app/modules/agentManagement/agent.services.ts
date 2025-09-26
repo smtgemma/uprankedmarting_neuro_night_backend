@@ -839,7 +839,6 @@ const requestAgentAssignment = async (agentUserId: string, user: User) => {
       );
     }
 
-    // console.log("Active Subscription:", activeSubscription)
 
     // 🔎 Check agent limit
     const currentAssignedAgents = organization.AgentAssignment.length;
