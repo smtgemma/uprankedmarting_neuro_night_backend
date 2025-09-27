@@ -16,6 +16,7 @@ import { AssignmentRoutes } from "../modules/agentManagement/agent.routes";
 import { ToolsRoutes } from "../modules/tools/tools.route";
 import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
 import { DashboardStatsRoutes } from "../modules/dashboardStats/dashboardStats.route";
+import { ContactRoutes } from "../modules/contact/contact.route";
 
 const router = Router();
 
@@ -87,7 +88,11 @@ const moduleRoutes = [
   {
     path: "/dashboard",
     route: DashboardStatsRoutes,
-  }
+  },
+  {
+    path: "/contact",
+    route: ContactRoutes,
+  },
 ];
 
 moduleRoutes.forEach((route) => router.use(route.path, route.route));
