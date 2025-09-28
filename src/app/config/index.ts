@@ -5,7 +5,7 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 export default {
   NODE_ENV: process.env.NODE_ENV,
-  port: process.env.PORT,
+  port: 5500, // process.env.PORT,
   host: process.env.HOST,
   databaseUrl: process.env.DATABASE_URL,
   hubspot_api_key: process.env.HUBSPOT_API_KEY,
@@ -71,7 +71,7 @@ export default {
   google_client_id: process.env.GOOGLE_CLIENT_ID,
   google_client_secret: process.env.GOOGLE_CLIENT_SECRET,
   google_redirect_uri: process.env.GOOGLE_REDIRECT_URI,
-  
+
   // HubSpot Configuration - Fixed
   hubspot_client_id: process.env.HUBSPOT_CLIENT_ID,
   hubspot_client_secret: process.env.HUBSPOT_CLIENT_SECRET,
