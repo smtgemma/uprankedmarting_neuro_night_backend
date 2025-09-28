@@ -1,8 +1,10 @@
-.env
 dist
-.vscode
 generated
+temp_auto_push.bat
 node_modules
 package-lock.json
 .vercel
 demoSchema
+.gitignore
+branch_structure.json
+config.bat
