@@ -153,75 +153,13 @@ if (!accountSid || !authToken) {
 
 const client = twilio(accountSid, authToken);
 
-// Create a SIP endpoint with registration
-// const createSipEndpoint = async (data: {
-//   userName: string;
-//   password: string;
-//   sip_domain: string;
-// }) => {
-//   try {
-//     const { userName, password, sip_domain } = data;
-
-//     // Get the existing SIP domain
-//     const domainSid = await getSipDomain(sip_domain);
-//     if (!domainSid) {
-//       throw new Error(
-//         `SIP domain ${sip_domain} not found. Please create it first in Twilio console.`
-//       );
-//     }
-
-
-//     // Create a unique credential list for this agent
-//     const credentialListName = `${sip_domain.replace(".sip.twilio.com", "")}-${userName}-creds`;
-//     const newCredentialList = await client.sip.credentialLists.create({
-//       friendlyName: credentialListName,
-//     });
-
-//     // Add credentials to the list
-//     const credential = await client.sip.credentialLists(newCredentialList.sid).credentials.create({
-//       username: userName,
-//       password: password,
-//       sipRegistration: true,
-//     });
-
-//     // Map credential list to SIP domain for authentication (this enables registration)
-//     const sipEndpoint = await client.sip
-//       .domains(domainSid)
-//       .auth.calls.credentialListMappings.create({
-//         credentialListSid: newCredentialList.sid,
-//       });
-
-//     return {
-//       credentialListSid: newCredentialList.sid,
-//       credentialSid: credential.sid,
-//       userName,
-//       sip_domain,
-//       sipUri: `${userName}@${sip_domain}`,
-//       fullSipUri: `sip:${userName}@${sip_domain}`,
-//       domainSid: domainSid,
-//     };
-//   } catch (error: any) {
-//     // Handle Twilio API errors
-//     if (error.code === 20001) {
-//       throw new Error(`Invalid Twilio credentials: ${error.message}`);
-//     } else if (error.code === 20003) {
-//       throw new Error(`Twilio authentication failed: ${error.message}`);
-//     } else if (error.code === 20404) {
-//       throw new Error(`SIP domain not found: ${error.message}`);
-//     } else if (error.code === 21408) {
-//       throw new Error(`Credential list creation failed: ${error.message}`);
-//     }
-//     throw new Error(`Failed to create SIP endpoint: ${error.message}`);
-//   }
-// };
-
 const createSipEndpoint = async (data: {
   userName: string;
   password: string;
   sip_domain: string;
 }) => {
+  const { userName, password, sip_domain } = data;
   try {
-    const { userName, password, sip_domain } = data;
 
     // Get the existing SIP domain
     const domainSid = await getSipDomain(sip_domain);
@@ -231,40 +169,27 @@ const createSipEndpoint = async (data: {
       );
     }
 
-    // Create a unique credential list for this agent
-    const credentialListName = `${sip_domain.replace(".sip.twilio.com", "")}-${userName}-creds`;
-    const newCredentialList = await client.sip.credentialLists.create({
-      friendlyName: credentialListName,
-    });
+    // Get or create the main credential list for the domain
+    const credentialListSid = await getOrCreateCredentialList(domainSid, sip_domain);
+    
+    // Check if username already exists in the credential list
+    const existingCredential = await checkExistingCredential(credentialListSid, userName);
+    if (existingCredential) {
+      throw new Error(`Username ${userName} already exists in the credential list`);
+    }
 
-    // Add credentials (user/password) to the list
+    // Add credentials (user/password) to the existing list
     const credential = await client
       .sip
-      .credentialLists(newCredentialList.sid)
+      .credentialLists(credentialListSid)
       .credentials
       .create({
         username: userName,
         password: password,
       });
 
-    // Map credential list to SIP domain for outbound calls
-    await client.sip
-      .domains(domainSid)
-      .auth.calls.credentialListMappings
-      .create({
-        credentialListSid: newCredentialList.sid,
-      });
-
-    // Map credential list to SIP domain for SIP Registration (this is key!)
-    await client.sip
-      .domains(domainSid)
-      .auth.registrations.credentialListMappings
-      .create({
-        credentialListSid: newCredentialList.sid,
-      });
-
     return {
-      credentialListSid: newCredentialList.sid,
+      credentialListSid: credentialListSid,
       credentialSid: credential.sid,
       userName,
       sip_domain,
@@ -280,9 +205,96 @@ const createSipEndpoint = async (data: {
     } else if (error.code === 20404) {
       throw new Error(`SIP domain not found: ${error.message}`);
     } else if (error.code === 21408) {
-      throw new Error(`Credential list creation failed: ${error.message}`);
+      throw new Error(`Credential creation failed: ${error.message}`);
+    } else if (error.code === 21405) {
+      throw new Error(`Username ${userName} already exists in credential list`);
     }
     throw new Error(`Failed to create SIP endpoint: ${error.message}`);
+  }
+};
+
+// Helper function to get or create the main credential list for a domain
+const getOrCreateCredentialList = async (domainSid: string, domainName: string) => {
+  try {
+    const baseDomainName = domainName.replace(".sip.twilio.com", "");
+    const mainCredentialListName = `${baseDomainName}-main-credentials`;
+    
+    // List all credential lists
+    const credentialLists = await client.sip.credentialLists.list();
+    
+    // Look for existing credential list for this domain
+    const existingCredentialList = credentialLists.find(
+      list => list.friendlyName === mainCredentialListName
+    );
+
+    if (existingCredentialList) {
+      console.log(`Using existing credential list: ${existingCredentialList.sid}`);
+      return existingCredentialList.sid;
+    }
+
+    // Create new main credential list for the domain
+    console.log(`Creating new credential list: ${mainCredentialListName}`);
+    const newCredentialList = await client.sip.credentialLists.create({
+      friendlyName: mainCredentialListName,
+    });
+
+    // Map credential list to SIP domain (only for new lists)
+    await mapCredentialListToDomain(domainSid, newCredentialList.sid);
+
+    return newCredentialList.sid;
+  } catch (error: any) {
+    throw new Error(`Failed to get or create credential list: ${error.message}`);
+  }
+};
+
+// Map credential list to SIP domain (with proper error handling)
+const mapCredentialListToDomain = async (domainSid: string, credentialListSid: string) => {
+  try {
+    // Map for calls
+    await client.sip
+      .domains(domainSid)
+      .auth.calls.credentialListMappings
+      .create({
+        credentialListSid: credentialListSid,
+      });
+    console.log(`Mapped credential list to domain for calls`);
+  } catch (error: any) {
+    if (error.code === 21408) {
+      console.log(`Credential list already mapped for calls: ${error.message}`);
+    } else {
+      throw new Error(`Failed to map credential list for calls: ${error.message}`);
+    }
+  }
+
+  try {
+    // Map for registrations
+    await client.sip
+      .domains(domainSid)
+      .auth.registrations.credentialListMappings
+      .create({
+        credentialListSid: credentialListSid,
+      });
+    console.log(`Mapped credential list to domain for registrations`);
+  } catch (error: any) {
+    if (error.code === 21408) {
+      console.log(`Credential list already mapped for registrations: ${error.message}`);
+    } else {
+      throw new Error(`Failed to map credential list for registrations: ${error.message}`);
+    }
+  }
+};
+
+// Check if credential already exists
+const checkExistingCredential = async (credentialListSid: string, username: string) => {
+  try {
+    const credentials = await client.sip
+      .credentialLists(credentialListSid)
+      .credentials
+      .list();
+
+    return credentials.find(cred => cred.username === username);
+  } catch (error: any) {
+    throw new Error(`Failed to check existing credentials: ${error.message}`);
   }
 };
 
@@ -299,11 +311,25 @@ const getSipDomain = async (domainName: string) => {
   }
 };
 
-// Delete SIP endpoint (cleanup if agent creation fails)
-const deleteSipEndpoint = async (credentialListSid: string) => {
+// Delete SIP endpoint (now just removes credential from the list)
+const deleteSipEndpoint = async (credentialListSid: string, username: string) => {
   try {
-    await client.sip.credentialLists(credentialListSid).remove();
-    return true;
+    const credentials = await client.sip
+      .credentialLists(credentialListSid)
+      .credentials
+      .list();
+
+    const userCredential = credentials.find(cred => cred.username === username);
+    if (userCredential) {
+      await client.sip
+        .credentialLists(credentialListSid)
+        .credentials(userCredential.sid)
+        .remove();
+      return true;
+    }
+    
+    console.warn(`Username ${username} not found in credential list ${credentialListSid}`);
+    return false;
   } catch (error: any) {
     console.error("Failed to delete SIP endpoint:", error.message);
     return false;
@@ -315,7 +341,8 @@ const updateSipEndpointPassword = async (credentialListSid: string, username: st
   try {
     const credentials = await client.sip
       .credentialLists(credentialListSid)
-      .credentials.list();
+      .credentials
+      .list();
 
     const userCredential = credentials.find(cred => cred.username === username);
     if (userCredential) {
@@ -339,4 +366,3 @@ export const TwilioSipService = {
   updateSipEndpointPassword,
   getSipDomain,
 };
-
