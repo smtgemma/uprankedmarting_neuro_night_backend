@@ -29,7 +29,7 @@ export const sendAgentWelcomeEmail = async (
     timeStyle: "short",
   }).format(new Date());
 
-  const changePasswordLink = `${config.url.frontend}/auth/new-password`;
+  const changePasswordLink = `${config.url.frontend}/dashboard/agent/settings/change-password`;
 
   const html = `
   <div style="max-width: 600px; margin: 0 auto; background-color: #F6F7F9; color: #000; border-radius: 8px; padding: 24px;">
