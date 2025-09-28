@@ -5,7 +5,7 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 export default {
   NODE_ENV: process.env.NODE_ENV,
-  port: 5500, // process.env.PORT,
+  port: process.env.PORT, // process.env.PORT,
   host: process.env.HOST,
   databaseUrl: process.env.DATABASE_URL,
   hubspot_api_key: process.env.HUBSPOT_API_KEY,
