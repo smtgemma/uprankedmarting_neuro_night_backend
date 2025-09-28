@@ -10,12 +10,11 @@ import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
 import { scheduleExpirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
 
 const app: Application = express();
-app.set("trust proxy", 1); 
+app.set("trust proxy", 1);
 
 app.use(express.json());
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
 
 const allowedOrigins = [
   // "http://localhost:3001",
@@ -26,6 +25,7 @@ const allowedOrigins = [
   "https://www.answersmart.ai",
   "https://backend.answersmart.ai",
   "https://lead.answersmart.ai",
+  "http://localhost:3000",
 ];
 
 app.use(
@@ -34,7 +34,6 @@ app.use(
     credentials: true, // cookie/session allow করবে
   })
 );
-
 
 // app.use(
 //   cors({
