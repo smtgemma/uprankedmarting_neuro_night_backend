@@ -58,7 +58,7 @@ export default {
   twilio: {
     account_sid: process.env.ACCOUNT_SID,
     auth_token: process.env.AUTH_TOKEN,
-    credential_list_sid: process.env.CREDENTIAL_LIST_SID,
+    // credential_list_sid: process.env.CREDENTIAL_LIST_SID,
     twilio_number: process.env.TWILIO_NUMBER,
     twilio_auto_route_url: process.env.TWILIO_AUTO_ROUTE_URL,
   },
