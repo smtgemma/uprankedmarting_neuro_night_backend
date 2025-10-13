@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { TwilioPhoneNumberService } from "./availableNumbers.services";
+import { User } from "@prisma/client";
 
 const createTwilioPhoneNumber = catchAsync(
   async (req: Request, res: Response) => {
@@ -27,6 +28,19 @@ const getAllTwilioPhoneNumbers = catchAsync(
       message: "Twilio phone numbers retrieved successfully!",
       data: result.data,
       meta: result.meta // Include pagination metadata
+    });
+  }
+);
+
+const getMyOwnPurchasedNumbersFromDB = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await TwilioPhoneNumberService.getMyOwnPurchasedNumbersFromDB(req.query, req.user as User);
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Twilio phone numbers retrieved successfully!",
+      data: result.data,
+      meta: result.meta
     });
   }
 );
@@ -87,6 +101,7 @@ const deleteTwilioPhoneNumber = catchAsync(
 
 export const TwilioPhoneNumberController = {
   createTwilioPhoneNumber,
+  getMyOwnPurchasedNumbersFromDB,
   getAllTwilioPhoneNumbers,
   getSingleTwilioPhoneNumber,
   updateTwilioPhoneNumber,

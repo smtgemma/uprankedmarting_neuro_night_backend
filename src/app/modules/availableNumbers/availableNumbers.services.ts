@@ -4,10 +4,11 @@ import config from "../../config";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
+import { User } from "@prisma/client";
 // Initialize Twilio client
 const twilioClient = new Twilio(
   config.twilio.account_sid,
-  config.twilio.auth_token 
+  config.twilio.auth_token
 );
 // Fetch available numbers from Twilio and store in DB
 const fetchAndStoreAvailableNumbers = async () => {
@@ -251,9 +252,82 @@ const deleteTwilioPhoneNumberFromDB = async (sid: string): Promise<void> => {
   }
 };
 
+// get my own purchased numbers
+const getMyOwnPurchasedNumbersFromDB = async (
+  query: Record<string, unknown>,
+  user: User
+) => {
+  let searchTerm = query?.searchTerm as string;
+  const orgAdmin = await prisma.user.findFirst({
+    where: {
+      id: user?.id,
+    },
+    select: {
+      ownedOrganization: {
+        select: {
+          id: true,
+        },
+      },
+    }
+  })
+
+
+  const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
+
+  const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
+
+
+  const customFilters: Record<string, any> = {
+    purchasedByOrganizationId: orgAdmin?.ownedOrganization?.id
+  }
+
+
+  if (query.phoneNumberPattern) {
+    customFilters.phoneNumber = {
+      contains: query.phoneNumberPattern as string,
+    };
+  }
+
+
+  if (searchTerm) {
+    customFilters.OR = searchableFields.map((field) => ({
+      [field]: { contains: searchTerm, mode: "insensitive" },
+    }));
+  }
+
+  const result = await queryBuilder
+    .filter()
+    .rawFilter(customFilters) // 👈 merged here
+    .include({
+      organization: {
+        select: {
+          id: true,
+          ownerId: true,
+          name: true,
+          organizationNumber: true,
+          industry: true,
+          address: true,
+          websiteLink: true
+        },
+      },
+    })
+    .sort()
+    .paginate()
+    .fields()
+    .execute();
+
+  const meta = await queryBuilder.countTotal();
+
+  return {
+    meta,
+    data: result,
+  };
+};
+
 export const TwilioPhoneNumberService = {
   fetchAndStoreAvailableNumbers,
   getAllTwilioPhoneNumbersFromDB,
+  getMyOwnPurchasedNumbersFromDB,
   getSingleTwilioPhoneNumberFromDB,
   updateTwilioPhoneNumberIntoDB,
   deleteTwilioPhoneNumberFromDB,

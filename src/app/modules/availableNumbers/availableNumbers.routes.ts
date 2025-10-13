@@ -14,6 +14,11 @@ router.get(
     auth(UserRole.super_admin),
     TwilioPhoneNumberController.fetchAndStoreAvailableNumbers
 )
+router.get(
+    "/my-numbers",
+    auth(UserRole.organization_admin),
+    TwilioPhoneNumberController.getMyOwnPurchasedNumbersFromDB
+)
 
 router.get(
   "/:id",
