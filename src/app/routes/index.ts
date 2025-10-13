@@ -17,6 +17,7 @@ import { ToolsRoutes } from "../modules/tools/tools.route";
 import { ClientManagementRoutes } from "../modules/clientManagement/clientManagement.routes";
 import { DashboardStatsRoutes } from "../modules/dashboardStats/dashboardStats.route";
 import { ContactRoutes } from "../modules/contact/contact.route";
+import { PhoneNumberRequestRoutes } from "../modules/PhoneNumberRequest/PhoneNumberRequest.route";
 
 const router = Router();
 
@@ -92,6 +93,10 @@ const moduleRoutes = [
   {
     path: "/contact",
     route: ContactRoutes,
+  },
+  {
+    path: "/number-request",
+    route: PhoneNumberRequestRoutes,
   },
 ];
 

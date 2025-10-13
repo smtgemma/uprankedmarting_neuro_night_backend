@@ -240,7 +240,8 @@ model Organization {
   questions             Question[]
   qaPairs               QaPair[]
 
-  aiagent aiagents?
+  aiagent             aiagents?
+  phoneNumberRequests PhoneNumberRequest?
 
   @@map("organizations")
 }
@@ -469,6 +470,8 @@ model AvailableTwilioNumber {
   purchasedByOrganizationId String?       @db.ObjectId
   organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
 
+  requestAssignNumber PhoneNumberRequest?
+
   @@map("available_twilio_numbers")
 }
 
@@ -486,7 +489,6 @@ model Question {
   @@map("questions")
 }
 
-
 model QaPair {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   org_id   String @db.ObjectId
@@ -500,4 +502,38 @@ model QaPair {
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")
+}
+
+enum PhoneNumberRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+}
+
+model PhoneNumberRequest {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String?       @unique @db.ObjectId
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  requesterName  String
+  requesterEmail String
+  requesterPhone String
+  message        String?
+
+  requestedPhonePattern String? // e.g., "US", "212", etc.
+  status                PhoneNumberRequestStatus @default(PENDING)
+
+  assignedNumberId String?                @unique @db.ObjectId
+  assignedNumber   AvailableTwilioNumber? @relation(fields: [assignedNumberId], references: [id])
+
+  rejectionReason String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  assignedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("phone_number_requests")
 }
