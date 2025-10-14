@@ -12,7 +12,7 @@ interface PhoneNumberRequestData {
   requestedPhonePattern?: string
 }
 
-export const sendPhoneNumberRequestEmail = async (data: PhoneNumberRequestData , from:string) => {
+export const sendPhoneNumberRequestEmail = async (data: PhoneNumberRequestData, from: string) => {
   const transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
     port: 587,
@@ -22,6 +22,8 @@ export const sendPhoneNumberRequestEmail = async (data: PhoneNumberRequestData ,
       pass: config.sendEmail.brevo_pass,
     },
   });
+
+  // console.log("data", from, config.sendEmail);
 
   const formattedDate = new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -59,12 +61,13 @@ export const sendPhoneNumberRequestEmail = async (data: PhoneNumberRequestData ,
     </div>
   `;
 
-  await transporter.sendMail({
-    from: `"Answer Smart" <${from}>`,
-    to: config.superAdmin.email,
-    // replyTo: requesterEmail,
+  const info = await transporter.sendMail({
+    from,
+    to: "mdsajjadhosenshohan.dev@gmail.com",
     subject: `New Phone Number Request - Answer Smart`,
-    text: `New phone number request from ${requesterName} (${requesterEmail})`,
     html,
   });
+
+  console.log(" Email sent successfully:", info.messageId);
+  return info;
 };

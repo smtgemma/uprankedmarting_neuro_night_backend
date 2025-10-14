@@ -1,10 +1,11 @@
 // ============ 3. SERVICE LAYER ============
 // phoneNumberRequest.services.ts
 
-import { User } from "@prisma/client";
+import { PhoneNumberRequestStatus, User } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import prisma from "../../utils/prisma";
 import { sendPhoneNumberRequestEmail } from "../../utils/sendEmailForPhoneNumber";
+import { TwilioPhoneNumberService } from "../availableNumbers/availableNumbers.services";
 
 const submitPhoneNumberRequestToDB = async (
   payload: {
@@ -59,33 +60,52 @@ const submitPhoneNumberRequestToDB = async (
     },
   });
 
+
+
   await sendPhoneNumberRequestEmail(payload, user?.email);
 
   return request;
 };
 
-const getAllPhoneNumberRequestsFromDB = async (
-  query: Record<string, unknown>
-) => {
+const getAllPhoneNumberRequestsFromDB = async (query: Record<string, unknown>) => {
   const queryBuilder = new QueryBuilder(prisma.phoneNumberRequest, query);
   const searchableFields = ["requesterName", "requesterEmail", "requesterPhone"];
 
   const customFilters: Record<string, any> = {};
 
+  //  Search by term
   if (query.searchTerm) {
     customFilters.OR = searchableFields.map((field) => ({
       [field]: { contains: query.searchTerm as string, mode: "insensitive" },
     }));
   }
 
+  // Status filter with validation
+  const validStatuses = [
+    PhoneNumberRequestStatus.PENDING,
+    PhoneNumberRequestStatus.APPROVED,
+    PhoneNumberRequestStatus.REJECTED,
+    PhoneNumberRequestStatus.ASSIGNED,
+  ];
+
   if (query.status) {
-    customFilters.status = query.status;
+    const status = query.status as PhoneNumberRequestStatus;
+
+    if (!validStatuses.includes(status)) {
+      throw new Error(
+        `Invalid status value: ${status}. Allowed values are ${validStatuses.join(", ")}.`
+      );
+    }
+
+    customFilters.status = status;
   }
 
+  // Filter by organization
   if (query.organizationId) {
     customFilters.organizationId = query.organizationId;
   }
 
+  //  Execute query
   const result = await queryBuilder
     .filter()
     .rawFilter(customFilters)
@@ -110,6 +130,7 @@ const getAllPhoneNumberRequestsFromDB = async (
     data: result,
   };
 };
+
 
 const getSinglePhoneNumberRequestFromDB = async (id: string) => {
   const request = await prisma.phoneNumberRequest.findUnique({
@@ -148,6 +169,9 @@ const approvePhoneNumberRequestInDB = async (
     throw new Error("Request not found");
   }
 
+  // i have to fetch all numbers from twilio and check if they are available
+  await TwilioPhoneNumberService.fetchAndStoreAvailableNumbers;
+  
   // Check if phone number exists and is available
   const phoneNumber = await prisma.availableTwilioNumber.findUnique({
     where: { id: assignedNumberId },
