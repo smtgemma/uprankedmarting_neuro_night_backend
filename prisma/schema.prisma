@@ -127,6 +127,11 @@ enum employmentType {
   contract
 }
 
+enum agentPrivacy {
+  public
+  private
+}
+
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
@@ -150,12 +155,15 @@ model Agent {
 
   jobTitle       String
   employmentType employmentType
-  department     String
+  department     String?
 
-  workEndTime       String?
-  workStartTime     String?
-  startWorkDateTime DateTime?
-  endWorkDateTime   DateTime?
+  // workEndTime       String?
+  // workStartTime     String?
+  // startWorkDateTime DateTime?
+  // endWorkDateTime   DateTime?
+
+  privacy agentPrivacy @default(private)
+  otherInfo String?
 
   successCalls Int @default(0)
   droppedCalls Int @default(0)

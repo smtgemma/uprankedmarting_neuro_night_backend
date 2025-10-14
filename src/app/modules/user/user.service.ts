@@ -1,7 +1,7 @@
 import status from "http-status";
 import prisma from "../../utils/prisma";
 import ApiError from "../../errors/AppError";
-import { employmentType, User, UserRole, UserStatus } from "@prisma/client";
+import { agentPrivacy, employmentType, User, UserRole, UserStatus } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { hashPassword } from "../../helpers/hashPassword";
 import { generateOTPData } from "../../utils/otp";
@@ -331,6 +331,10 @@ const createAgentIntoDB = async (payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "SIP domain and password are required");
   }
 
+  if(!agentData?.privacy && (agentData?.privacy !== agentPrivacy.public || agentData?.privacy !== agentPrivacy.private)) {
+    throw new ApiError(status.BAD_REQUEST, "Privacy would be either public or private");
+  }
+
   let sipInfo = null as any;
 
   try {
@@ -436,10 +440,10 @@ const createAgentIntoDB = async (payload: any) => {
           jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
           employmentType: agentData.employmentType || employmentType.full_time,
           department: agentData.department?.trim() || "Customer Service",
-          workStartTime: agentData.workStartTime,
-          workEndTime: agentData.workEndTime,
-          startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
-          endWorkDateTime: null,
+          // workStartTime: agentData.workStartTime,
+          // workEndTime: agentData.workEndTime,
+          // startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
+          // endWorkDateTime: null,
           successCalls: 0,
           droppedCalls: 0,
         };
@@ -646,11 +650,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
           emergencyPhone: agentData.emergencyPhone,
           ssn: agentData.ssn,
           skills: agentData.skills,
-          dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
-          startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
-          endWorkDateTime: agentData?.endWorkDateTime
-            ? parseAnyDate(agentData.endWorkDateTime)
-            : null,
+          dateOfBirth: parseAnyDate(agentData?.dateOfBirth)
         },
       });
     }
@@ -970,10 +970,13 @@ const getSingleUserByIdFromDB = async (userId: string) => {
           assignTo: true,
           jobTitle: true,
           employmentType: true,
-          department: true,
-          workEndTime: true,
-          workStartTime: true,
-          startWorkDateTime: true,
+
+          otherInfo: true,
+          privacy: true,
+          // department: true,
+          // workEndTime: true,
+          // workStartTime: true,
+          // startWorkDateTime: true,
           successCalls: true,
           droppedCalls: true,
           createdAt: true,
