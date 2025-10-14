@@ -134,6 +134,67 @@ enum agentPrivacy {
   private
 }
 
+enum AssignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REMOVAL_REQUESTED
+}
+
+// model Agent {
+//   id        String @id @default(auto()) @map("_id") @db.ObjectId
+//   userId    String @unique @db.ObjectId
+//   creatorId String @db.ObjectId
+//   creator   User   @relation("AgentCreator", fields: [creatorId], references: [id])
+
+//   status       AgentStatus @default(offline)
+//   sip_address  String?
+//   sip_username String?
+//   sip_password String?
+
+//   dateOfBirth    DateTime
+//   gender         String
+//   address        String
+//   emergencyPhone String?  @unique
+//   ssn            String?  @unique
+
+//   skills String[] @default([])
+
+//   employeeId  String  @unique
+//   isAvailable Boolean @default(true)
+//   assignTo    String? @db.ObjectId
+
+//   jobTitle       String
+//   employmentType employmentType
+//   department     String?
+
+//   // workEndTime       String?
+//   // workStartTime     String?
+//   // startWorkDateTime DateTime?
+//   // endWorkDateTime   DateTime?
+
+//   privacy   agentPrivacy @default(private)
+//   otherInfo String?
+
+//   successCalls Int @default(0)
+//   droppedCalls Int @default(0)
+
+//   // Timestamps
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt //later should be required
+
+//   // Relations
+//   user           User            @relation("AgentUser", fields: [userId], references: [id])
+//   organization   Organization?   @relation(fields: [assignTo], references: [id])
+//   AgentFeedbacks AgentFeedback[]
+//   calls          Call[]
+
+//   assignments AgentAssignment[]
+
+//   @@map("agents")
+// }
+
+// 1. Modified Agent Model
 model Agent {
   id        String @id @default(auto()) @map("_id") @db.ObjectId
   userId    String @unique @db.ObjectId
@@ -155,44 +216,35 @@ model Agent {
 
   employeeId  String  @unique
   isAvailable Boolean @default(true)
-  assignTo    String? @db.ObjectId
+
+  //  CHANGED: assignTo is now an array for multiple organizations
+  assignTo String[] @default([]) @db.ObjectId
 
   jobTitle       String
   employmentType employmentType
   department     String?
 
-  // workEndTime       String?
-  // workStartTime     String?
-  // startWorkDateTime DateTime?
-  // endWorkDateTime   DateTime?
-
+  //  NEW: Privacy setting determines assignment behavior
   privacy   agentPrivacy @default(private)
   otherInfo String?
 
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
-  // Timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt //later should be required
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user           User            @relation("AgentUser", fields: [userId], references: [id])
-  organization   Organization?   @relation(fields: [assignTo], references: [id])
+  user           User              @relation("AgentUser", fields: [userId], references: [id])
+  organization   Organization?     @relation(fields: [assignTo], references: [id])
+  //  REMOVED: Direct organization relation (now handled via assignTo array)
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
-
-  assignments AgentAssignment[]
+  assignments    AgentAssignment[]
 
   @@map("agents")
 }
 
-enum AssignmentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REMOVAL_REQUESTED
-}
 
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
@@ -212,6 +264,30 @@ model AgentAssignment {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
 }
+
+
+// // 2. Updated AgentAssignment Model
+// model AgentAssignment {
+//   id             String           @id @default(auto()) @map("_id") @db.ObjectId
+//   agentUserId    String           @db.ObjectId
+//   organizationId String           @db.ObjectId
+//   status         AssignmentStatus @default(PENDING)
+//   assignedBy     String?          @db.ObjectId
+//   assignedAt     DateTime         @default(now())
+//   approvedAt     DateTime?
+//   rejectedAt     DateTime?
+//   reason         String?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
+//   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+//   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
+
+//   // ✅ NEW: Composite unique constraint to prevent duplicate assignments
+//   @@unique([agentUserId, organizationId])
+// }
 
 model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
