@@ -320,7 +320,7 @@ const createUserIntoDB = async (payload: any) => {
 //   }
 // };
 
-const createAgentIntoDB = async (payload: any) => {
+const createAgentIntoDB = async (payload: any, creator: User) => {
   const { userData, agentData } = payload;
 
   if (!userData?.email || !userData?.phone) {
@@ -331,7 +331,7 @@ const createAgentIntoDB = async (payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "SIP domain and password are required");
   }
 
-  if(!agentData?.privacy && (agentData?.privacy !== agentPrivacy.public || agentData?.privacy !== agentPrivacy.private)) {
+  if (!agentData?.privacy) {
     throw new ApiError(status.BAD_REQUEST, "Privacy would be either public or private");
   }
 
@@ -425,28 +425,31 @@ const createAgentIntoDB = async (payload: any) => {
 
       const createdUser = await tx.user.create({ data: userPayload });
 
-       const agentPayload = {
-          userId: createdUser.id,
-          employeeId: employeeId,
-          dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
-          gender: agentData.gender,
-          address: agentData.address?.trim(),
-          emergencyPhone: agentData.emergencyPhone?.trim() || "",
-          ssn: agentData.ssn,
-          skills: agentData.skills || [],
-          sip_address: sipInfo?.fullSipUri,
-          sip_username: userName,
-          sip_password: password,
-          jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
-          employmentType: agentData.employmentType || employmentType.full_time,
-          department: agentData.department?.trim() || "Customer Service",
-          // workStartTime: agentData.workStartTime,
-          // workEndTime: agentData.workEndTime,
-          // startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
-          // endWorkDateTime: null,
-          successCalls: 0,
-          droppedCalls: 0,
-        };
+      const agentPayload = {
+        creatorId: creator?.id,
+        userId: createdUser.id,
+        employeeId: employeeId,
+        dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
+        gender: agentData.gender,
+        address: agentData.address?.trim(),
+        emergencyPhone: agentData.emergencyPhone?.trim() || "",
+        ssn: agentData.ssn,
+        skills: agentData.skills || [],
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+        jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
+        employmentType: agentData.employmentType || employmentType.full_time,
+        department: agentData.department?.trim() || "Customer Service",
+        privacy: agentData?.privacy,
+        otherInfo: agentData.otherInfo?.trim() || "",
+        // workStartTime: agentData.workStartTime,
+        // workEndTime: agentData.workEndTime,
+        // startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
+        // endWorkDateTime: null,
+        successCalls: 0,
+        droppedCalls: 0,
+      };
 
       const createdAgent = await tx.agent.create({ data: agentPayload });
 

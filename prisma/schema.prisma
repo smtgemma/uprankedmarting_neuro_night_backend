@@ -96,7 +96,9 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  Agent             Agent?
+  Agent        Agent?  @relation("AgentUser")
+  AgentCreator Agent[] @relation("AgentCreator")
+
   ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
   ServiceFeedbacks  ServiceFeedback[]
   AgentFeedbacks    AgentFeedback[]
@@ -133,8 +135,10 @@ enum agentPrivacy {
 }
 
 model Agent {
-  id     String @id @default(auto()) @map("_id") @db.ObjectId
-  userId String @unique @db.ObjectId
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String @unique @db.ObjectId
+  creatorId String @db.ObjectId
+  creator   User   @relation("AgentCreator", fields: [creatorId], references: [id])
 
   status       AgentStatus @default(offline)
   sip_address  String?
@@ -162,7 +166,7 @@ model Agent {
   // startWorkDateTime DateTime?
   // endWorkDateTime   DateTime?
 
-  privacy agentPrivacy @default(private)
+  privacy   agentPrivacy @default(private)
   otherInfo String?
 
   successCalls Int @default(0)
@@ -173,7 +177,7 @@ model Agent {
   updatedAt DateTime @updatedAt //later should be required
 
   // Relations
-  user           User            @relation(fields: [userId], references: [id])
+  user           User            @relation("AgentUser", fields: [userId], references: [id])
   organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
   calls          Call[]

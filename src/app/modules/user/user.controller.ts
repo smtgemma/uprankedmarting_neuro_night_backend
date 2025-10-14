@@ -20,7 +20,7 @@ const createUser = catchAsync(async (req, res) => {
 
 // Create agent
 const createAgent = catchAsync(async (req, res) => {
-  const result = await UserService.createAgentIntoDB(req.body);
+  const result = await UserService.createAgentIntoDB(req.body, req.user as User);
   
   sendResponse(res, {
     statusCode: status.CREATED,

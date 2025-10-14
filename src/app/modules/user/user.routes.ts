@@ -140,7 +140,7 @@ router.get(
 );
 
 router.post("/register-user", UserController.createUser);
-router.post("/register-agent", UserController.createAgent);
+router.post("/register-agent",auth(UserRole.organization_admin), UserController.createAgent);
 
 router.post(
   "/verify-otp",
