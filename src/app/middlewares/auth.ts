@@ -27,13 +27,19 @@ const auth = (...requiredRoles: UserRole[]) => {
     const user = await prisma.user.findUnique({
       where: {
         email: verifiedUser.email,
-        status: UserStatus.ACTIVE,
+        // status: UserStatus.ACTIVE,
       },
     });
 
     // Checking if the user is exist
     if (!user) {
       throw new ApiError(status.NOT_FOUND, "User not found!");
+    }
+
+    if(user){
+      if(user.status !== UserStatus.ACTIVE){
+        throw new ApiError(status.NOT_FOUND, "The user is not active!");
+      }
     }
 
     if (

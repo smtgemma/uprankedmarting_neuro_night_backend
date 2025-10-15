@@ -9,7 +9,7 @@ const createAgentFeedback = async (
   userId: string,
   agentId: string
 ): Promise<AgentFeedback> => {
-  // console.log("Agent ID:", agentId , "clientId", userId)
+  // Check if feedback already exists
   const checkAgentFeedback = await prisma.agentFeedback.findFirst({
     where: {
       agentId: agentId,
@@ -21,40 +21,49 @@ const createAgentFeedback = async (
     throw new AppError(status.BAD_REQUEST, "Agent feedback already exists!");
   }
 
-  const checkisAgentAssignToMyOrganization =
-    await prisma.organization.findFirst({
-      where: {
-        ownerId: userId,
-      },
-      include: {
-        agents: {
-          select: {
-            id: true,
-            userId: true
-          },
-        },
-      },
-    });
+  // Find the organization owned by this user
+  const userOrganization = await prisma.organization.findFirst({
+    where: {
+      ownerId: userId,
+    },
+  });
 
-  const isAgentInOrg = checkisAgentAssignToMyOrganization?.agents?.some(
-    (agent) => agent.userId.toString() === agentId
-  );
+  if (!userOrganization) {
+    throw new AppError(
+      status.NOT_FOUND,
+      "Organization not found for this user!"
+    );
+  }
 
-  if (!isAgentInOrg) {
-    console.log("Agent not found in this organization:", agentId);
+  // console.log(userOrganization?.id, agentId)
+
+  // Check if agent is assigned to this organization using the new array approach
+  const agent = await prisma.agent.findFirst({
+    where: {
+      userId: agentId,
+      assignTo: {
+        has: userOrganization.id, // Check if organization ID exists in assignTo array
+      },
+    },
+  });
+
+  // console.log(agent)
+
+  if (!agent) {
+    // console.log("Agent not found in this organization:", agentId);
     throw new AppError(
       status.BAD_REQUEST,
       "Agent is not assigned to your organization!"
     );
   }
 
+  // Create the feedback
   const serviceData = {
     rating: data.rating,
     feedbackText: data.feedbackText,
     agentId: agentId,
     clientId: userId,
   };
-  // console.log("serviceData", serviceData)
 
   const result = await prisma.agentFeedback.create({
     data: serviceData,

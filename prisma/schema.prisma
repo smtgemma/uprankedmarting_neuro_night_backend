@@ -80,7 +80,6 @@ model User {
   image     String? @default("")
   bio       String? @default("")
   phone     String  @unique
-  isDeleted Boolean @default(false)
 
   passwordChangedAt DateTime?
   isVerified        Boolean   @default(false)

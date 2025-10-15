@@ -8,7 +8,7 @@ import { hashPassword } from "../../helpers/hashPassword";
 import { RefreshPayload } from "./auth.interface";
 import { sendEmail } from "../../utils/sendEmail";
 import { generateOTPData } from "../../utils/otp";
-import { User, UserRole } from "@prisma/client";
+import { User, UserRole, UserStatus } from "@prisma/client";
 
 const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
@@ -365,7 +365,7 @@ const getMe = async (email: string) => {
   const user = await prisma.user.findFirst({
     where: {
       email: email,
-      isDeleted: false,
+      status: UserStatus.ACTIVE
     },
     include: {
       Agent: {
@@ -516,7 +516,7 @@ const getMe = async (email: string) => {
 //   const user = await prisma.user.findFirst({
 //     where: {
 //       id,
-//       isDeleted: false,
+//       status: UserStatus.ACTIVE,
 //     },
 //     include: {
 //       Agent: true,
@@ -545,14 +545,14 @@ const getMe = async (email: string) => {
 //   };
 // };
 const getSingleUser = async (id: string, AuthUser: User) => {
-  let org_admin_Info = null;
+  let userOrganizationId: string | null = null;
+  
   if (AuthUser.role === UserRole.organization_admin) {
-    org_admin_Info = await prisma.user.findFirst({
+    const org_admin_Info = await prisma.user.findFirst({
       where: {
         id: AuthUser.id,
       },
       select: {
-        id: true,
         ownedOrganization: {
           select: {
             id: true,
@@ -560,11 +560,13 @@ const getSingleUser = async (id: string, AuthUser: User) => {
         },
       },
     });
+    userOrganizationId = org_admin_Info?.ownedOrganization?.id || null;
   }
+
   const user = await prisma.user.findFirst({
     where: {
       id,
-      isDeleted: false,
+    
     },
     include: {
       Agent: {
@@ -587,14 +589,8 @@ const getSingleUser = async (id: string, AuthUser: User) => {
           organization: true,
           jobTitle: true,
           employmentType: true,
-
           otherInfo: true,
           privacy: true,
-          // department: true,
-          // workEndTime: true,
-          // workStartTime: true,
-          // startWorkDateTime: true,
-          // endWorkDateTime: true,
           successCalls: true,
           droppedCalls: true,
           createdAt: true,
@@ -606,21 +602,24 @@ const getSingleUser = async (id: string, AuthUser: User) => {
   });
 
   if (!user) {
-    throw new ApiError(status.NOT_FOUND, "User not found");
+    throw new ApiError(status.NOT_FOUND, "User not found!!");
   }
 
   let Agent = null;
   if (user.Agent) {
+    // Determine if sip_password should be shown
+    let shouldShowSipPassword = false;
+    
+    if (AuthUser.role === UserRole.super_admin) {
+      shouldShowSipPassword = true;
+    } else if (AuthUser.role === UserRole.organization_admin && userOrganizationId) {
+      // Check if agent is assigned to this organization admin's organization
+      shouldShowSipPassword = user.Agent.assignTo.includes(userOrganizationId);
+    }
+    
     Agent = {
       ...user.Agent,
-      sip_password: !user.Agent.sip_password
-        ? "********"
-        : AuthUser.role === UserRole.super_admin
-        ? user.Agent.sip_password
-        : AuthUser.role === UserRole.organization_admin &&
-          org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
-        ? user.Agent.sip_password
-        : "********",
+      sip_password: shouldShowSipPassword ? user.Agent.sip_password : "********",
     };
   }
 
@@ -634,10 +633,134 @@ const getSingleUser = async (id: string, AuthUser: User) => {
   };
 };
 
+// const getSingleAgentInfo = async (id: string, AuthUser: User) => {
+//   let org_admin_Info = null;
+//   if (AuthUser.role === UserRole.organization_admin) {
+//     org_admin_Info = await prisma.user.findFirst({
+//       where: {
+//         id: AuthUser.id,
+//       },
+//       select: {
+//         id: true,
+//         ownedOrganization: {
+//           select: {
+//             id: true,
+//           },
+//         },
+//       },
+//     });
+//   }
+
+//   const user = await prisma.user.findFirst({
+//     where: {
+//       id,
+//       status: UserStatus.ACTIVE,
+//     },
+//     include: {
+//       Agent: true,
+//       ownedOrganization: true,
+//     },
+//   });
+
+//   if (!user) {
+//     throw new ApiError(status.NOT_FOUND, "User not found");
+//   }
+
+//   let Agent = null;
+//   if (user.Agent) {
+//     Agent = {
+//       ...user.Agent,
+//       sip_password: !user.Agent.sip_password
+//         ? "********"
+//         : AuthUser.role === UserRole.super_admin
+//         ? user.Agent.sip_password
+//         : AuthUser.role === UserRole.organization_admin &&
+//           org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
+//         ? user.Agent.sip_password
+//         : "********",
+//     };
+//   }
+
+//   // Get call statistics for the user (only if they're an agent)
+//   let callStatistics = null;
+//   if (user?.Agent) {
+//     const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
+//       // Total  call statistics
+//       prisma.call.aggregate({
+//         where: {
+//           agentId: id,
+//         },
+//         _count: { id: true },
+//         _avg: { recording_duration: true },
+//         _sum: { recording_duration: true },
+//       }),
+
+//       // Total success call statistics
+//       prisma.call.aggregate({
+//         where: {
+//           agentId: id,
+//           call_status: "completed",
+//         },
+//         _count: { id: true },
+//         _avg: { recording_duration: true },
+//         _sum: { recording_duration: true },
+//       }),
+
+//       // Today's call statistics
+//       prisma.call.aggregate({
+//         where: {
+//           agentId: id,
+//           call_status: "completed",
+//           call_time: {
+//             gte: new Date(new Date().setHours(0, 0, 0, 0)),
+//             lte: new Date(new Date().setHours(23, 59, 59, 999)),
+//           },
+//         },
+//         _count: { id: true },
+//         _avg: { recording_duration: true },
+//       }),
+//     ]);
+
+//     // totalCalls: agent.callStatistics.totalCalls ?? 0,
+//     // avgCallDuration: agent.callStatistics.avgCallDuration,
+//     // todaySuccessCalls: agent.callStatistics.todaySuccessCalls,
+//     // totalCallDuration: agent.callStatistics.totalCallDuration,
+//     // totalSuccessCalls: agent.callStatistics.totalSuccessCalls,
+//     // totalDropCalls: agent.callStatistics.droppedCalls ?? 0,
+
+//     callStatistics = {
+//       totalCalls: totalCallStats._count.id || 0,
+//       avgCallDuration: Math.round(
+//         totalSuccessStats._avg.recording_duration || 0
+//       ),
+//       todaySuccessCalls: todayStats._count.id || 0,
+//       totalSuccessCalls: totalSuccessStats._count.id || 0,
+//       totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
+//       // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
+//     };
+//   }
+
+//   // remove password from user object
+//   const { password, ...restUser } = user;
+
+//   return {
+//     ...restUser,
+//     otp: "********",
+//     Agent,
+//     callStatistics: callStatistics || {
+//       totalSuccessCalls: 0,
+//       totalCallDuration: 0,
+//       avgCallDuration: 0,
+//       todaySuccessCalls: 0,
+//     },
+//   };
+// };
+
 const getSingleAgentInfo = async (id: string, AuthUser: User) => {
-  let org_admin_Info = null;
+  let userOrganizationId: string | null = null;
+  
   if (AuthUser.role === UserRole.organization_admin) {
-    org_admin_Info = await prisma.user.findFirst({
+    const org_admin_Info = await prisma.user.findFirst({
       where: {
         id: AuthUser.id,
       },
@@ -650,12 +773,13 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
         },
       },
     });
+    userOrganizationId = org_admin_Info?.ownedOrganization?.id || null;
   }
 
   const user = await prisma.user.findFirst({
     where: {
       id,
-      isDeleted: false,
+    
     },
     include: {
       Agent: true,
@@ -669,76 +793,83 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
 
   let Agent = null;
   if (user.Agent) {
+    // Determine if sip_password should be shown
+    let shouldShowSipPassword = false;
+    
+    if (AuthUser.role === UserRole.super_admin) {
+      shouldShowSipPassword = true;
+    } else if (AuthUser.role === UserRole.organization_admin && userOrganizationId) {
+      // FIXED: Check if organization ID exists in the assignTo array
+      shouldShowSipPassword = user.Agent.assignTo.includes(userOrganizationId);
+    }
+    
     Agent = {
       ...user.Agent,
-      sip_password: !user.Agent.sip_password
-        ? "********"
-        : AuthUser.role === UserRole.super_admin
-        ? user.Agent.sip_password
-        : AuthUser.role === UserRole.organization_admin &&
-          org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
-        ? user.Agent.sip_password
-        : "********",
+      sip_password: shouldShowSipPassword ? user.Agent.sip_password : "********",
     };
   }
 
   // Get call statistics for the user (only if they're an agent)
   let callStatistics = null;
   if (user?.Agent) {
-    const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
-      // Total  call statistics
-      prisma.call.aggregate({
-        where: {
-          agentId: id,
-        },
-        _count: { id: true },
-        _avg: { recording_duration: true },
-        _sum: { recording_duration: true },
-      }),
-
-      // Total success call statistics
-      prisma.call.aggregate({
-        where: {
-          agentId: id,
-          call_status: "completed",
-        },
-        _count: { id: true },
-        _avg: { recording_duration: true },
-        _sum: { recording_duration: true },
-      }),
-
-      // Today's call statistics
-      prisma.call.aggregate({
-        where: {
-          agentId: id,
-          call_status: "completed",
-          call_time: {
-            gte: new Date(new Date().setHours(0, 0, 0, 0)),
-            lte: new Date(new Date().setHours(23, 59, 59, 999)),
+    try {
+      const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
+        // Total call statistics
+        prisma.call.aggregate({
+          where: {
+            agentId: id,
           },
-        },
-        _count: { id: true },
-        _avg: { recording_duration: true },
-      }),
-    ]);
+          _count: { id: true },
+          _avg: { recording_duration: true },
+          _sum: { recording_duration: true },
+        }),
 
-    // totalCalls: agent.callStatistics.totalCalls ?? 0,
-    // avgCallDuration: agent.callStatistics.avgCallDuration,
-    // todaySuccessCalls: agent.callStatistics.todaySuccessCalls,
-    // totalCallDuration: agent.callStatistics.totalCallDuration,
-    // totalSuccessCalls: agent.callStatistics.totalSuccessCalls,
-    // totalDropCalls: agent.callStatistics.droppedCalls ?? 0,
+        // Total success call statistics
+        prisma.call.aggregate({
+          where: {
+            agentId: id,
+            call_status: "completed",
+          },
+          _count: { id: true },
+          _avg: { recording_duration: true },
+          _sum: { recording_duration: true },
+        }),
 
-    callStatistics = {
-      totalCalls: totalCallStats._count.id || 0,
-      avgCallDuration: Math.round(
-        totalSuccessStats._avg.recording_duration || 0
-      ),
-      todaySuccessCalls: todayStats._count.id || 0,
-      totalSuccessCalls: totalSuccessStats._count.id || 0,
-      totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
-      // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
-    };
+        // Today's call statistics
+        prisma.call.aggregate({
+          where: {
+            agentId: id,
+            call_status: "completed",
+            call_time: {
+              gte: new Date(new Date().setHours(0, 0, 0, 0)),
+              lte: new Date(new Date().setHours(23, 59, 59, 999)),
+            },
+          },
+          _count: { id: true },
+          _avg: { recording_duration: true },
+        }),
+      ]);
+
+      callStatistics = {
+        totalCalls: totalCallStats._count.id || 0,
+        avgCallDuration: Math.round(totalSuccessStats._avg.recording_duration || 0),
+        todaySuccessCalls: todayStats._count.id || 0,
+        totalSuccessCalls: totalSuccessStats._count.id || 0,
+        totalCallDuration: totalCallStats._sum.recording_duration || 0, // Added this field
+        totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
+        // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
+      };
+    } catch (error) {
+      console.error("Error fetching call statistics:", error);
+      callStatistics = {
+        totalCalls: 0,
+        avgCallDuration: 0,
+        todaySuccessCalls: 0,
+        totalSuccessCalls: 0,
+        totalCallDuration: 0,
+        totalSuccessCallDuration: 0,
+      };
+    }
   }
 
   // remove password from user object
@@ -749,14 +880,15 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
     otp: "********",
     Agent,
     callStatistics: callStatistics || {
+      totalCalls: 0,
       totalSuccessCalls: 0,
       totalCallDuration: 0,
       avgCallDuration: 0,
       todaySuccessCalls: 0,
+      totalSuccessCallDuration: 0,
     },
   };
 };
-
 export const AuthService = {
   getMe,
   // getSingleUserForAdmin,

@@ -1,4 +1,4 @@
-import { SubscriptionStatus, UserRole } from "@prisma/client";
+import { SubscriptionStatus, UserRole, UserStatus } from "@prisma/client";
 import prisma from "../../utils/prisma";
 const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
   const {
@@ -11,7 +11,7 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
 
   const where: any = {
     role: UserRole.organization_admin,
-    isDeleted: false,
+    status: UserStatus.ACTIVE,
   };
 
   // Add search functionality

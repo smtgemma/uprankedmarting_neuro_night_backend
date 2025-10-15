@@ -1,7 +1,7 @@
 import status from "http-status";
 import prisma from "../../utils/prisma";
 import ApiError from "../../errors/AppError";
-import { agentPrivacy, employmentType, User, UserRole, UserStatus } from "@prisma/client";
+import { agentPrivacy, AssignmentStatus, employmentType, SubscriptionStatus, User, UserRole, UserStatus } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import { hashPassword } from "../../helpers/hashPassword";
 import { generateOTPData } from "../../utils/otp";
@@ -12,6 +12,7 @@ import { sendAgentWelcomeEmail } from "../../utils/sendAgentWelcomeEmail";
 import { parseAnyDate } from "../../utils/Date/parseAnyDate";
 import { generateUniqueEmployeeId } from "../../utils/generateUniqueEmployeeId";
 import { AssignmentService } from "../agentManagement/agent.services";
+import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 
 const createUserIntoDB = async (payload: any) => {
   const { userData, organizationData } = payload;
@@ -324,6 +325,52 @@ const createUserIntoDB = async (payload: any) => {
 const createAgentIntoDB = async (payload: any, creator: User) => {
   const { userData, agentData } = payload;
 
+ const findUser = await prisma.user.findFirst({
+    where: {
+      id: creator.id
+    },
+    include: {
+      ownedOrganization: {
+        select: {
+          id: true
+        }
+      }
+    }
+  })
+
+  if (!findUser?.ownedOrganization?.id) {
+    throw new ApiError(status.BAD_REQUEST, "Organization not found for this user");
+  }
+
+  const organizationId = findUser.ownedOrganization.id;
+
+  const checkActivePlanSubscription = await prisma.subscription.findFirst({
+    where: {
+      organizationId: organizationId,
+      status: SubscriptionStatus.ACTIVE
+    }
+  })
+
+  if (!checkActivePlanSubscription) {
+    throw new ApiError(status.BAD_REQUEST, "You need to have an active subscription to create an agent");
+  }
+
+  // Count how many agents this organization has already created
+  const createdAgentsCount = await prisma.agent.count({
+    where: {
+      creatorId: creator.id // Count agents created by this organization admin
+    }
+  });
+
+  // Check if adding another agent would exceed the limit
+  if (checkActivePlanSubscription.numberOfAgents && 
+      createdAgentsCount >= checkActivePlanSubscription.numberOfAgents) {
+
+    const message = `Agent creation limit exceeded. You have already created ${createdAgentsCount} agents. Your plan allows only ${checkActivePlanSubscription.numberOfAgents} agents. Please upgrade your plan to create more agents.`;
+    throw new ApiError(status.BAD_REQUEST, message);
+  }
+
+  // return null;
   if (!userData?.email || !userData?.phone) {
     throw new ApiError(status.BAD_REQUEST, "Email and phone are required fields");
   }
@@ -526,7 +573,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
   // Check if target user exists and is an agent
   const targetUser = await prisma.user.findUnique({
-    where: { id: agentId, isDeleted: false },
+    where: { id: agentId, status: UserStatus.ACTIVE },
     include: {
       Agent: true,
     },
@@ -717,7 +764,7 @@ const verifyOTP = async (email: string, otp: number) => {
 
 const forgotPassword = async (email: string) => {
   const user = await prisma.user.findUnique({
-    where: { email, isDeleted: false },
+    where: { email, status: UserStatus.ACTIVE },
   });
 
   if (!user) {
@@ -744,7 +791,7 @@ const forgotPassword = async (email: string) => {
 
 const resetPassword = async (email: string, otp: number, newPassword: string) => {
   const user = await prisma.user.findUnique({
-    where: { email, isDeleted: false },
+    where: { email, status: UserStatus.ACTIVE },
   });
 
   if (!user) {
@@ -791,7 +838,7 @@ const getAllUserFromDB = async (query: Record<string, unknown>) => {
   const userQuery = new QueryBuilder(prisma.user, query)
     .search(["name", "email", "phone"])
     .filter()
-    .rawFilter({ isDeleted: false, role: query?.role })
+    .rawFilter({ status: query?.status, role: query?.role })
     .sort()
     .include({
       Agent: true,
@@ -902,7 +949,7 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
   const targetUser = await prisma.user.findUnique({
     where: {
       id: user.id,
-      isDeleted: false,
+      status: UserStatus.ACTIVE,
       role: UserRole.agent, // Ensure the user is an agent
     },
     include: {
@@ -957,7 +1004,7 @@ const getSingleUserByIdFromDB = async (userId: string) => {
   const user = await prisma.user.findFirst({
     where: {
       id: userId,
-      isDeleted: false,
+      status: UserStatus.ACTIVE,
     },
     include: {
       Agent: {
@@ -1003,7 +1050,7 @@ const getSingleUserByIdFromDB = async (userId: string) => {
   return rest;
 };
 
-const updateUserRoleStatusByAdminIntoDB = async (
+const updateUserStatusByAdminIntoDB = async (
   authUser: User,
   user_id: string,
   payload: Partial<User>
@@ -1016,15 +1063,16 @@ const updateUserRoleStatusByAdminIntoDB = async (
     throw new ApiError(status.NOT_FOUND, "User not found!");
   }
 
-  const { role, status: UserCurrentStatus, isDeleted } = payload;
+  const { status: UserCurrentStatus } = payload;
 
   const updatedData: Partial<User> = {};
 
   if (authUser.role === UserRole.super_admin) {
-    updatedData.role = role;
+    // updatedData.role = role;
     updatedData.status =
-      isDeleted === true ? UserStatus.DELETED : UserCurrentStatus;
-    updatedData.isDeleted = isDeleted;
+      UserCurrentStatus === UserStatus.ACTIVE
+        ? UserStatus.BLOCKED
+        : UserStatus.ACTIVE;
   }
 
   const updatedUser = await prisma.user.update({
@@ -1047,7 +1095,7 @@ export const UserService = {
   updateUserIntoDB,
   updateAgentInfo,
   getSingleUserByIdFromDB,
-  updateUserRoleStatusByAdminIntoDB,
+  updateUserStatusByAdminIntoDB,
   forgotPassword,
   resetPassword,
 };

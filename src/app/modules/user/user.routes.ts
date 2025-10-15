@@ -210,9 +210,9 @@ router.patch(
 );
 
 router.patch(
-  "/user-role-status/update/:userId",
+  "/user-status/update/:userId",
   auth(UserRole.super_admin),
-  UserController.updateUserRoleStatusByAdminIntoDB
+  UserController.updateUserStatusByAdminIntoDB
 );
 
 export const UserRoutes = router;

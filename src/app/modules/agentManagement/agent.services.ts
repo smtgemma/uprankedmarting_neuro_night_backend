@@ -5,6 +5,7 @@ import {
   User,
   SubscriptionStatus,
   agentPrivacy,
+  UserStatus,
 } from "@prisma/client";
 import ApiError from "../../errors/AppError";
 import status from "http-status";
@@ -15,7 +16,6 @@ import {
 import AppError from "../../errors/AppError";
 import { createDateFilter } from "../../utils/Date/parseAnyDate";
 import prisma from "../../utils/prisma";
-import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 
 
 // const getAllAgentFromDB = async (
@@ -40,7 +40,7 @@ import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 //     paginationHelper.calculatePagination(options);
 
 //   let whereClause: any = {
-//     isDeleted: false,
+//     status: UserStatus.ACTIVE,
 //     role: UserRole.agent,
 //   };
 
@@ -276,7 +276,7 @@ import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 //     paginationHelper.calculatePagination(options);
 
 //   let whereClause: any = {
-//     isDeleted: false,
+//     status: UserStatus.ACTIVE,
 //     role: UserRole.agent,
 //   };
 
@@ -370,7 +370,7 @@ import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 //     paginationHelper.calculatePagination(options);
 
 //   let whereClause: any = {
-//     isDeleted: false,
+//     status: UserStatus.ACTIVE,
 //     role: UserRole.agent,
 //   };
 
@@ -567,7 +567,7 @@ const getAllAgentFromDB = async (
     paginationHelper.calculatePagination(options);
 
   let whereClause: any = {
-    isDeleted: false,
+    status: UserStatus.ACTIVE,
     role: UserRole.agent,
   };
 
@@ -584,7 +584,7 @@ const getAllAgentFromDB = async (
       );
     }
 
-    if (viewType === "my-agents") {
+     if (viewType === "my-agents") {
       // ✅ UPDATED: Check if org ID is in assignTo array
       whereClause.Agent = {
         assignTo: {
@@ -597,15 +597,22 @@ const getAllAgentFromDB = async (
         creatorId: user.id,
       };
     } else if (viewType === "unassigned") {
-      // ✅ FIXED: Unassigned agents (empty assignTo array)
+      // ✅ FIXED: Show agents that are NOT assigned to my organization but are public
       whereClause.Agent = {
-        OR: [
-          // { assignTo: { isSet: false } },
-          { assignTo: { equals: null } },
-          { assignTo: { isEmpty: true } },
-          // {assignTo: { isSet: false}}
-        ],
-        privacy: agentPrivacy.public,
+        AND: [
+          {
+            // Agents that do NOT have my organization ID in assignTo array
+            NOT: {
+              assignTo: {
+                has: userOrganization?.id,
+              },
+            },
+          },
+          {
+            // Only public agents can be assigned
+            privacy: agentPrivacy.public,
+          }
+        ]
       };
     } else if (viewType === "all") {
       // ✅ NEW: All public agents + my created agents
@@ -616,6 +623,7 @@ const getAllAgentFromDB = async (
         ],
       };
     }
+    
   }
 
   //  NEW: Privacy filter
@@ -866,7 +874,7 @@ const getAgentsManagementInfo = async (
     paginationHelper.calculatePagination(options);
 
   let whereClause: any = {
-    isDeleted: false,
+    status: UserStatus.ACTIVE,
     role: UserRole.agent,
   };
 
@@ -973,7 +981,7 @@ const getAllAgentForAdmin = async (
     paginationHelper.calculatePagination(options);
 
   let whereClause: any = {
-    isDeleted: false,
+    status: UserStatus.ACTIVE,
     role: UserRole.agent,
   };
 
@@ -1004,6 +1012,8 @@ const getAllAgentForAdmin = async (
       },
     };
   }
+
+  console.log("whereClause:", whereClause)
 
   // Availability filter
   if (isAvailable !== undefined) {
@@ -2924,7 +2934,7 @@ const getSingleAgentInfo = async (
     paginationHelper.calculatePagination(options);
 
   let whereClause: any = {
-    isDeleted: false,
+    status: UserStatus.ACTIVE,
     role: UserRole.agent,
   };
 

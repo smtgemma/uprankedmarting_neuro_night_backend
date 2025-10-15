@@ -97,10 +97,10 @@ const updateAgentSpecificInfo = catchAsync(async (req, res) => {
   });
 });
 
-const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
+const updateUserStatusByAdminIntoDB = catchAsync(async (req, res) => {
   const authUser = req.user;
   const { userId } = req.params;
-  const result = await UserService.updateUserRoleStatusByAdminIntoDB(
+  const result = await UserService.updateUserStatusByAdminIntoDB(
     authUser as User,
     userId,
     req.body
@@ -144,7 +144,7 @@ export const UserController = {
   updateUser,
   getSingleUserById,
   updateAgentInfo,
-  updateUserRoleStatusByAdminIntoDB,
+  updateUserStatusByAdminIntoDB,
   forgotPassword,
   resetPassword,
 };
