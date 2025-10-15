@@ -11,6 +11,7 @@ import { TwilioSipService } from "../sip/sip.service";
 import { sendAgentWelcomeEmail } from "../../utils/sendAgentWelcomeEmail";
 import { parseAnyDate } from "../../utils/Date/parseAnyDate";
 import { generateUniqueEmployeeId } from "../../utils/generateUniqueEmployeeId";
+import { AssignmentService } from "../agentManagement/agent.services";
 
 const createUserIntoDB = async (payload: any) => {
   const { userData, organizationData } = payload;
@@ -428,6 +429,7 @@ const createAgentIntoDB = async (payload: any, creator: User) => {
       const agentPayload = {
         creatorId: creator?.id,
         userId: createdUser.id,
+        assignTo: [],
         employeeId: employeeId,
         dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
         gender: agentData.gender,
@@ -472,6 +474,8 @@ const createAgentIntoDB = async (payload: any, creator: User) => {
         agent: createdAgent,
       };
     }, { timeout: 10000 });
+
+    const assignment = await AssignmentService.requestAgentAssignment(result?.user?.id, creator);
 
     return result;
 

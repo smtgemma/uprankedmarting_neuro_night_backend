@@ -13,11 +13,535 @@ import {
   paginationHelper,
 } from "../../utils/paginationHelpers";
 import AppError from "../../errors/AppError";
-import { createDateFilter, parseAnyDate } from "../../utils/Date/parseAnyDate";
+import { createDateFilter } from "../../utils/Date/parseAnyDate";
 import prisma from "../../utils/prisma";
 import { clouddebugger } from "googleapis/build/src/apis/clouddebugger";
 
 
+// const getAllAgentFromDB = async (
+//   options: IPaginationOptions,
+//   filters: any = {},
+//   user: User
+// ) => {
+//   const searchTerm = filters?.searchTerm as string;
+//   const isAvailable = filters?.isAvailable as boolean | string;
+//   const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
+
+//   if (
+//     viewType !== undefined &&
+//     viewType !== "all" &&
+//     viewType !== "my-agents" &&
+//     viewType !== "unassigned"
+//   ) {
+//     throw new AppError(status.BAD_REQUEST, "Invalid view type!");
+//   }
+
+//   const { page, limit, skip, sortBy, sortOrder } =
+//     paginationHelper.calculatePagination(options);
+
+//   let whereClause: any = {
+//     isDeleted: false,
+//     role: UserRole.agent,
+//   };
+
+//   // Handle view type filtering
+//   if (user?.role === UserRole.organization_admin && viewType === "my-agents") {
+//     const userOrganization = await prisma.organization.findUnique({
+//       where: { ownerId: user?.id },
+//     });
+
+//     if (!userOrganization) {
+//       throw new AppError(
+//         status.NOT_FOUND,
+//         "Organization not found for this user!"
+//       );
+//     }
+
+//     whereClause.Agent = {
+//       assignTo: userOrganization?.id,
+//     };
+//   } else if (viewType === "unassigned") {
+//     // console.log("unassigned");
+//     // Unassigned = assignTo is null OR field missing
+//     whereClause.Agent = {
+//       OR: [
+//         { assignTo: null },
+//         {
+//           assignTo: {
+//             isSet: false,
+//           },
+//         },
+//       ],
+//     };
+//   }
+
+//   // Search functionality
+//   if (searchTerm) {
+//     whereClause.OR = [
+//       { name: { contains: searchTerm, mode: "insensitive" } },
+//       { email: { contains: searchTerm, mode: "insensitive" } },
+//       { phone: { contains: searchTerm, mode: "insensitive" } },
+//     ];
+//   }
+
+//   // Availability filter
+//   if (isAvailable !== undefined) {
+//     whereClause.Agent = {
+//       ...whereClause.Agent,
+//       isAvailable: isAvailable === "true" || isAvailable === true,
+//     };
+//   }
+
+//   // console.log(whereClause);
+
+//   const [users, total] = await Promise.all([
+//     prisma.user.findMany({
+//       where: whereClause,
+//       select: {
+//         id: true,
+//         name: true,
+//         email: true,
+//         phone: true,
+//         bio: true,
+//         image: true,
+//         Agent: {
+//           select: {
+//             AgentFeedbacks: {
+//               select: {
+//                 id: true,
+//                 rating: true,
+//               },
+//             },
+
+//             skills: true,
+//             isAvailable: true,
+//             status: true,
+//             assignTo: true,
+//             assignments: {
+//               where: {
+//                 NOT: {
+//                   status: AssignmentStatus.REJECTED,
+//                 },
+//               },
+//               select: {
+//                 id: true,
+//                 status: true,
+//                 agentUserId: true,
+//                 organizationId: true,
+//                 assignedBy: true,
+//               },
+//             },
+//             successCalls: true,
+//             droppedCalls: true,
+//             // assignments: {
+//             //   where: {
+//             //     status: {
+//             //       not: "REJECTED",
+//             //     },
+//             //   },
+//             //   select: {
+//             //     id: true,
+//             //     status: true,
+//             //     agentUserId: true,
+//             //     organizationId: true,
+//             //     assignedBy: true,
+//             //   },
+//             // },
+//             organization: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 industry: true,
+//               },
+//             },
+//           },
+//         },
+//       },
+//       orderBy: {
+//         [sortBy as string]: sortOrder,
+//       },
+//       skip: Number(skip),
+//       take: Number(limit),
+//     }),
+//     prisma.user.count({
+//       where: whereClause,
+//     }),
+//   ]);
+
+//   // console.log(users);
+
+//   // Calculate average rating for each agent using the fetched feedbacks
+//   const usersWithAvgRating = users.map((user) => {
+//     if (user.Agent && user.Agent.AgentFeedbacks) {
+//       const feedbacks = user.Agent.AgentFeedbacks;
+//       const totalRating = feedbacks.reduce(
+//         (sum, feedback) => sum + feedback.rating,
+//         0
+//       );
+//       const avgRating =
+//         feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+
+//       return {
+//         ...user,
+//         Agent: {
+//           ...user.Agent,
+//           totalCalls:
+//             (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
+//           avgRating: parseFloat(avgRating.toFixed(1)), // Round to 1 decimal place
+//           totalFeedbacks: feedbacks.length,
+//         },
+//       };
+//     }
+
+//     return {
+//       ...user,
+//       Agent: {
+//         ...user.Agent,
+//         avgRating: 0,
+//         totalFeedbacks: 0,
+//         totalCalls: 0,
+//       },
+//     };
+//   });
+
+//   return {
+//     meta: {
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       totalPages: Math.ceil(total / Number(limit)),
+//     },
+//     users: usersWithAvgRating,
+//   };
+// };
+// const getAllAgentIds = async (user: User) => {
+//   let agents;
+
+//   if (user?.role === UserRole.super_admin) {
+//     agents = await prisma.agent.findMany({
+//       select: {
+//         id: true,
+//         user: {
+//           select: {
+//             id: true,
+//             name: true,
+//             email: true,
+//           },
+//         },
+//       },
+//     });
+//   } else if (user?.role === UserRole.organization_admin) {
+//     const org = await prisma.organization.findFirst({
+//       where: { ownerId: user.id },
+//       select: { id: true },
+//     });
+
+//     if (!org) {
+//       throw new Error("Organization not found for this admin!");
+//     }
+
+//     agents = await prisma.agent.findMany({
+//       where: {
+//         assignments: {
+//           some: {
+//             organizationId: org.id,
+//             status:
+//               AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED,
+//           },
+//         },
+//       },
+//       select: {
+//         id: true,
+//         user: {
+//           select: {
+//             id: true,
+//             name: true,
+//             email: true,
+//           },
+//         },
+//       },
+//     });
+//   }
+
+//   return agents;
+// };
+
+// const getAgentsManagementInfo = async (
+//   options: IPaginationOptions,
+//   filters: any = {}
+// ) => {
+//   const searchTerm = filters?.searchTerm as string;
+
+//   const { page, limit, skip, sortBy, sortOrder } =
+//     paginationHelper.calculatePagination(options);
+
+//   let whereClause: any = {
+//     isDeleted: false,
+//     role: UserRole.agent,
+//   };
+
+//   // Search functionality
+//   if (searchTerm) {
+//     whereClause.OR = [
+//       { name: { contains: searchTerm, mode: "insensitive" } },
+//       { email: { contains: searchTerm, mode: "insensitive" } },
+//       { phone: { contains: searchTerm, mode: "insensitive" } },
+//       { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
+//     ];
+//   }
+
+//   if (searchTerm === "employeeId") {
+//     whereClause.Agent = {};
+//   }
+
+//   // console.log(whereClause);
+
+//   const [users, total] = await Promise.all([
+//     prisma.user.findMany({
+//       where: whereClause,
+//       select: {
+//         id: true,
+//         name: true,
+//         email: true,
+//         phone: true,
+//         // "id": "68c307fe072c5a263a704f89",
+//         //             "userId": "68c307fd072c5a263a704f88",
+//         //             "status": "offline",
+//         //             "sip_address": "sip:agentsanim65934@test-uprank.sip.twilio.com",
+//         //             "sip_username": "agentsanim65934",
+//         //             "sip_password": "Securepassword123",
+//         //             "dateOfBirth": "2000-01-01T00:00:00.000Z",
+//         //             "gender": "male",
+//         //             "address": "Updated Address Street",
+//         //             "emergencyPhone": "01743034999",
+//         //             "ssn": "12347-455-43789",
+//         //             "skills": [
+//         //                 "customer service",
+//         //                 "sales",
+//         //                 "technical support",
+//         //                 "communication"
+//         //             ],
+//         //             "employeeId": null,
+//         //             "isAvailable": true,
+//         //             "assignTo": "68c211cc6864cb0ea1959230",
+//         //             "jobTitle": "Senior Customer Service Agent",
+//         //             "employmentType": "full_time",
+//         //             "department": "Customer Success",
+//         //             "workEndTime": "17:00:00",
+//         //             "workStartTime": "09:00:00",
+//         Agent: true,
+//         // bio: true,
+//         // image: true,
+//         // Agent: true,
+//       },
+//       orderBy: {
+//         [sortBy as string]: sortOrder,
+//       },
+//       skip: Number(skip),
+//       take: Number(limit),
+//     }),
+//     prisma.user.count({
+//       where: whereClause,
+//     }),
+//   ]);
+
+//   return {
+//     meta: {
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       totalPages: Math.ceil(total / Number(limit)),
+//     },
+//     data: users,
+//   };
+// };
+
+// const getAllAgentForAdmin = async (
+//   options: IPaginationOptions,
+//   filters: any = {}
+// ) => {
+//   const searchTerm = filters?.searchTerm as string;
+//   const assignmentStatus = filters?.viewType as string;
+//   const isAvailable = filters?.isAvailable as boolean | string;
+//   const startDate = filters?.startDate as string; // New: start date filter
+//   const endDate = filters?.endDate as string; // New: end date filter
+
+//   const { page, limit, skip, sortBy, sortOrder } =
+//     paginationHelper.calculatePagination(options);
+
+//   let whereClause: any = {
+//     isDeleted: false,
+//     role: UserRole.agent,
+//   };
+
+//   // Search functionality
+//   if (searchTerm) {
+//     whereClause.OR = [
+//       { name: { contains: searchTerm, mode: "insensitive" } },
+//       { email: { contains: searchTerm, mode: "insensitive" } },
+//       { phone: { contains: searchTerm, mode: "insensitive" } },
+//     ];
+//   }
+
+//   // Date filtering - filter by user creation date
+//   if (startDate || endDate) {
+//     const dateFilter = createDateFilter(startDate, endDate, "createdAt");
+//     whereClause = { ...whereClause, ...dateFilter };
+//   }
+
+//   // Assignment status filter for PENDING or REMOVAL_REQUESTED
+//   if (assignmentStatus) {
+//     whereClause.Agent = {
+//       ...whereClause.Agent,
+//       assignments: {
+//         some: {
+//           status: assignmentStatus,
+//         },
+//       },
+//     };
+//   }
+
+//   // Availability filter
+//   if (isAvailable !== undefined) {
+//     whereClause.Agent = {
+//       ...whereClause.Agent,
+//       isAvailable: isAvailable === "true" || isAvailable === true,
+//     };
+//   }
+
+//   const [users, total] = await Promise.all([
+//     prisma.user.findMany({
+//       where: whereClause,
+//       select: {
+//         id: true,
+//         name: true,
+//         email: true,
+//         phone: true,
+//         image: true,
+//         bio: true,
+//         createdAt: true,
+//         Agent: {
+//           select: {
+//             id: true,
+//             skills: true,
+//             successCalls: true,
+//             droppedCalls: true,
+//             isAvailable: true,
+//             status: true,
+//             AgentFeedbacks: {
+//               select: {
+//                 id: true,
+//                 rating: true,
+//               },
+//             },
+//             assignTo: true,
+//             assignments: {
+//               where: {
+//                 NOT: {
+//                   status: AssignmentStatus.REJECTED,
+//                 },
+//               },
+//               select: {
+//                 id: true,
+//                 organization: {
+//                   select: {
+//                     id: true,
+//                     name: true,
+//                   },
+//                 },
+//                 agentUserId: true,
+//                 status: true,
+//                 assignedBy: true,
+//               },
+//             },
+//             organization: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 industry: true,
+//               },
+//             },
+//             // assignments: {
+//             //   select: {
+//             //     id: true,
+//             //     status: true,
+//             //     assignedAt: true,
+//             //     organization: {
+//             //       select: {
+//             //         id: true,
+//             //         name: true,
+//             //         industry: true,
+//             //       },
+//             //     },
+//             //   },
+//             //   orderBy: {
+//             //     assignedAt: "desc",
+//             //   },
+//             // },
+//           },
+//         },
+//       },
+//       orderBy: {
+//         [sortBy as string]: sortOrder,
+//       },
+//       skip: Number(skip),
+//       take: Number(limit),
+//     }),
+//     prisma.user.count({
+//       where: whereClause,
+//     }),
+//   ]);
+
+//   // Calculate average rating for each agent using the fetched feedbacks
+//   const usersWithAvgRating = users.map((user) => {
+//     // Safe access to nested properties with optional chaining and fallbacks
+//     const agent = user?.Agent;
+//     const feedbacks = agent?.AgentFeedbacks || [];
+
+//     // Calculate average rating
+//     const totalRating = feedbacks.reduce(
+//       (sum, feedback) => sum + feedback.rating,
+//       0
+//     );
+//     const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+
+//     // Get the latest assignment
+
+//     return {
+//       ...user,
+//       Agent: {
+//         id: agent?.id || null,
+//         skills: agent?.skills || [],
+//         totalCalls: (agent?.successCalls || 0) + (agent?.droppedCalls || 0),
+//         successCalls: agent?.successCalls || 0,
+//         droppedCalls: agent?.droppedCalls || 0,
+//         isAvailable: agent?.isAvailable ?? false,
+//         status: agent?.status || null,
+//         AgentFeedbacks: feedbacks,
+//         organization: agent?.organization || null,
+//         assignments: agent?.assignments || [],
+//         assignTo: agent?.assignTo || null,
+
+//         avgRating: parseFloat(avgRating.toFixed(1)),
+//         totalFeedbacks: feedbacks.length,
+//       },
+//     };
+//   });
+
+//   return {
+//     meta: {
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       totalPages: Math.ceil(total / Number(limit)),
+//     },
+//     data: usersWithAvgRating,
+//   };
+// };
+
+
+
+// ========== GET ALL AGENT FROM DB (Updated) ==========
 const getAllAgentFromDB = async (
   options: IPaginationOptions,
   filters: any = {},
@@ -25,13 +549,16 @@ const getAllAgentFromDB = async (
 ) => {
   const searchTerm = filters?.searchTerm as string;
   const isAvailable = filters?.isAvailable as boolean | string;
-  const viewType = filters?.viewType as "all" | "my-agents" | "unassigned";
+  const viewType = filters?.viewType as "all" | "my-agents" | "unassigned" | "created-by-me";
+  const privacy = filters?.privacy as agentPrivacy;
 
+  //  UPDATED: Added "created-by-me" view type
   if (
     viewType !== undefined &&
     viewType !== "all" &&
     viewType !== "my-agents" &&
-    viewType !== "unassigned"
+    viewType !== "unassigned" &&
+    viewType !== "created-by-me"
   ) {
     throw new AppError(status.BAD_REQUEST, "Invalid view type!");
   }
@@ -45,7 +572,7 @@ const getAllAgentFromDB = async (
   };
 
   // Handle view type filtering
-  if (user?.role === UserRole.organization_admin && viewType === "my-agents") {
+  if (user?.role === UserRole.organization_admin) {
     const userOrganization = await prisma.organization.findUnique({
       where: { ownerId: user?.id },
     });
@@ -57,21 +584,45 @@ const getAllAgentFromDB = async (
       );
     }
 
-    whereClause.Agent = {
-      assignTo: userOrganization?.id,
-    };
-  } else if (viewType === "unassigned") {
-    // console.log("unassigned");
-    // Unassigned = assignTo is null OR field missing
-    whereClause.Agent = {
-      OR: [
-        { assignTo: null },
-        {
-          assignTo: {
-            isSet: false,
-          },
+    if (viewType === "my-agents") {
+      // ✅ UPDATED: Check if org ID is in assignTo array
+      whereClause.Agent = {
+        assignTo: {
+          has: userOrganization?.id,
         },
-      ],
+      };
+    } else if (viewType === "created-by-me") {
+      // ✅ NEW: View agents created by this organization
+      whereClause.Agent = {
+        creatorId: user.id,
+      };
+    } else if (viewType === "unassigned") {
+      // ✅ FIXED: Unassigned agents (empty assignTo array)
+      whereClause.Agent = {
+        OR: [
+          // { assignTo: { isSet: false } },
+          { assignTo: { equals: null } },
+          { assignTo: { isEmpty: true } },
+          // {assignTo: { isSet: false}}
+        ],
+        privacy: agentPrivacy.public,
+      };
+    } else if (viewType === "all") {
+      // ✅ NEW: All public agents + my created agents
+      whereClause.Agent = {
+        OR: [
+          { privacy: agentPrivacy.public },
+          { creatorId: user.id },
+        ],
+      };
+    }
+  }
+
+  //  NEW: Privacy filter
+  if (privacy) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      privacy: privacy,
     };
   }
 
@@ -81,6 +632,7 @@ const getAllAgentFromDB = async (
       { name: { contains: searchTerm, mode: "insensitive" } },
       { email: { contains: searchTerm, mode: "insensitive" } },
       { phone: { contains: searchTerm, mode: "insensitive" } },
+      { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
     ];
   }
 
@@ -92,8 +644,6 @@ const getAllAgentFromDB = async (
     };
   }
 
-  // console.log(whereClause);
-
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where: whereClause,
@@ -104,54 +654,56 @@ const getAllAgentFromDB = async (
         phone: true,
         bio: true,
         image: true,
+        createdAt: true, // ✅ NEW: Include creation date
         Agent: {
           select: {
+            id: true,
+            employeeId: true, // ✅ NEW
+            skills: true,
+            isAvailable: true,
+            status: true,
+            assignTo: true, // ✅ Now returns array
+            privacy: true, // ✅ NEW
+            jobTitle: true, // ✅ NEW
+            department: true, // ✅ NEW
+            employmentType: true, // ✅ NEW
+            successCalls: true,
+            droppedCalls: true,
+            creatorId: true, // ✅ NEW
+            creator: { // ✅ NEW: Include creator info
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
             AgentFeedbacks: {
               select: {
                 id: true,
                 rating: true,
               },
             },
-
-            skills: true,
-            isAvailable: true,
-            status: true,
-            assignTo: true,
             assignments: {
-              where: {
-                NOT: {
-                  status: AssignmentStatus.REJECTED,
-                },
-              },
+              // where: {
+              //   NOT: {
+              //     status: AssignmentStatus.REJECTED,
+              //   },
+              // },
               select: {
                 id: true,
                 status: true,
                 agentUserId: true,
                 organizationId: true,
                 assignedBy: true,
-              },
-            },
-            successCalls: true,
-            droppedCalls: true,
-            // assignments: {
-            //   where: {
-            //     status: {
-            //       not: "REJECTED",
-            //     },
-            //   },
-            //   select: {
-            //     id: true,
-            //     status: true,
-            //     agentUserId: true,
-            //     organizationId: true,
-            //     assignedBy: true,
-            //   },
-            // },
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                industry: true,
+                assignedAt: true, // ✅ NEW
+                approvedAt: true, // ✅ NEW
+                organization: { // ✅ NEW: Include org details
+                  select: {
+                    id: true,
+                    name: true,
+                    industry: true,
+                  },
+                },
               },
             },
           },
@@ -168,41 +720,43 @@ const getAllAgentFromDB = async (
     }),
   ]);
 
-  // console.log(users);
+  console.log(users)
 
   // Calculate average rating for each agent using the fetched feedbacks
-  const usersWithAvgRating = users.map((user) => {
-    if (user.Agent && user.Agent.AgentFeedbacks) {
-      const feedbacks = user.Agent.AgentFeedbacks;
-      const totalRating = feedbacks.reduce(
-        (sum, feedback) => sum + feedback.rating,
-        0
-      );
-      const avgRating =
-        feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+  // const usersWithAvgRating = users.map((user) => {
+  //   if (user.Agent && user.Agent.AgentFeedbacks) {
+  //     const feedbacks = user.Agent.AgentFeedbacks;
+  //     const totalRating = feedbacks.reduce(
+  //       (sum, feedback) => sum + feedback.rating,
+  //       0
+  //     );
+  //     const avgRating =
+  //       feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
 
-      return {
-        ...user,
-        Agent: {
-          ...user.Agent,
-          totalCalls:
-            (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
-          avgRating: parseFloat(avgRating.toFixed(1)), // Round to 1 decimal place
-          totalFeedbacks: feedbacks.length,
-        },
-      };
-    }
+  //     return {
+  //       ...user,
+  //       Agent: {
+  //         ...user.Agent,
+  //         totalCalls:
+  //           (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
+  //         avgRating: parseFloat(avgRating.toFixed(1)),
+  //         totalFeedbacks: feedbacks.length,
+  //         assignedOrganizationsCount: user.Agent?.assignTo?.length || 0, // ✅ FIXED: Safe array length check
+  //       },
+  //     };
+  //   }
 
-    return {
-      ...user,
-      Agent: {
-        ...user.Agent,
-        avgRating: 0,
-        totalFeedbacks: 0,
-        totalCalls: 0,
-      },
-    };
-  });
+  //   return {
+  //     ...user,
+  //     Agent: {
+  //       ...user.Agent,
+  //       avgRating: 0,
+  //       totalFeedbacks: 0,
+  //       totalCalls: 0,
+  //       assignedOrganizationsCount: user.Agent?.assignTo?.length || 0, // ✅ FIXED: Safe array length check
+  //     },
+  //   };
+  // });
 
   return {
     meta: {
@@ -211,9 +765,11 @@ const getAllAgentFromDB = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
     },
-    users: usersWithAvgRating,
+    users: users,
+    // users: usersWithAvgRating,
   };
 };
+// ========== GET ALL AGENT IDS (Updated) ==========
 const getAllAgentIds = async (user: User) => {
   let agents;
 
@@ -221,6 +777,10 @@ const getAllAgentIds = async (user: User) => {
     agents = await prisma.agent.findMany({
       select: {
         id: true,
+        userId: true, // ✅ NEW: Include userId
+        employeeId: true, // ✅ NEW
+        privacy: true, // ✅ NEW
+        assignTo: true, // ✅ NEW: Array of org IDs
         user: {
           select: {
             id: true,
@@ -240,18 +800,19 @@ const getAllAgentIds = async (user: User) => {
       throw new Error("Organization not found for this admin!");
     }
 
+    // ✅ UPDATED: Use assignTo array check
     agents = await prisma.agent.findMany({
       where: {
-        assignments: {
-          some: {
-            organizationId: org.id,
-            status:
-              AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED,
-          },
+        assignTo: {
+          has: org.id, // Check if array contains org ID
         },
       },
       select: {
         id: true,
+        userId: true,
+        employeeId: true,
+        privacy: true,
+        assignTo: true,
         user: {
           select: {
             id: true,
@@ -261,11 +822,40 @@ const getAllAgentIds = async (user: User) => {
         },
       },
     });
+
+    // ✅ ALTERNATIVE: Filter by approved assignments
+    // agents = await prisma.agent.findMany({
+    //   where: {
+    //     assignments: {
+    //       some: {
+    //         organizationId: org.id,
+    //         status: {
+    //           in: [AssignmentStatus.APPROVED, AssignmentStatus.REMOVAL_REQUESTED],
+    //         },
+    //       },
+    //     },
+    //   },
+    //   select: {
+    //     id: true,
+    //     userId: true,
+    //     employeeId: true,
+    //     privacy: true,
+    //     assignTo: true,
+    //     user: {
+    //       select: {
+    //         id: true,
+    //         name: true,
+    //         email: true,
+    //       },
+    //     },
+    //   },
+    // });
   }
 
   return agents;
 };
 
+// ========== GET AGENTS MANAGEMENT INFO (Updated) ==========
 const getAgentsManagementInfo = async (
   options: IPaginationOptions,
   filters: any = {}
@@ -290,12 +880,6 @@ const getAgentsManagementInfo = async (
     ];
   }
 
-  if (searchTerm === "employeeId") {
-    whereClause.Agent = {};
-  }
-
-  // console.log(whereClause);
-
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where: whereClause,
@@ -304,35 +888,42 @@ const getAgentsManagementInfo = async (
         name: true,
         email: true,
         phone: true,
-        // "id": "68c307fe072c5a263a704f89",
-        //             "userId": "68c307fd072c5a263a704f88",
-        //             "status": "offline",
-        //             "sip_address": "sip:agentsanim65934@test-uprank.sip.twilio.com",
-        //             "sip_username": "agentsanim65934",
-        //             "sip_password": "Securepassword123",
-        //             "dateOfBirth": "2000-01-01T00:00:00.000Z",
-        //             "gender": "male",
-        //             "address": "Updated Address Street",
-        //             "emergencyPhone": "01743034999",
-        //             "ssn": "12347-455-43789",
-        //             "skills": [
-        //                 "customer service",
-        //                 "sales",
-        //                 "technical support",
-        //                 "communication"
-        //             ],
-        //             "employeeId": null,
-        //             "isAvailable": true,
-        //             "assignTo": "68c211cc6864cb0ea1959230",
-        //             "jobTitle": "Senior Customer Service Agent",
-        //             "employmentType": "full_time",
-        //             "department": "Customer Success",
-        //             "workEndTime": "17:00:00",
-        //             "workStartTime": "09:00:00",
-        Agent: true,
-        // bio: true,
-        // image: true,
-        // Agent: true,
+        image: true, // ✅ NEW
+        bio: true, // ✅ NEW
+        createdAt: true, // ✅ NEW
+        Agent: {
+          select: {
+            id: true,
+            userId: true,
+            status: true,
+            employeeId: true,
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+            emergencyPhone: true,
+            ssn: true,
+            skills: true,
+            isAvailable: true,
+            assignTo: true, // ✅ Now array
+            privacy: true, // ✅ NEW
+            jobTitle: true,
+            employmentType: true,
+            department: true,
+            successCalls: true,
+            droppedCalls: true,
+            creatorId: true, // ✅ NEW
+            otherInfo: true,
+            createdAt: true,
+            updatedAt: true,
+            creator: { // ✅ NEW
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         [sortBy as string]: sortOrder,
@@ -345,6 +936,16 @@ const getAgentsManagementInfo = async (
     }),
   ]);
 
+  // ✅ NEW: Add computed fields
+  const enrichedUsers = users.map((user) => ({
+    ...user,
+    Agent: user.Agent ? {
+      ...user.Agent,
+      assignedOrganizationsCount: user.Agent.assignTo.length,
+      totalCalls: (user.Agent.successCalls || 0) + (user.Agent.droppedCalls || 0),
+    } : null,
+  }));
+
   return {
     meta: {
       page: Number(page),
@@ -352,9 +953,195 @@ const getAgentsManagementInfo = async (
       total,
       totalPages: Math.ceil(total / Number(limit)),
     },
-    data: users,
+    data: enrichedUsers,
   };
 };
+
+// ========== GET ALL AGENT FOR ADMIN (Updated) ==========
+const getAllAgentForAdmin = async (
+  options: IPaginationOptions,
+  filters: any = {}
+) => {
+  const searchTerm = filters?.searchTerm as string;
+  const assignmentStatus = filters?.viewType as string;
+  const isAvailable = filters?.isAvailable as boolean | string;
+  const startDate = filters?.startDate as string;
+  const endDate = filters?.endDate as string;
+  const privacy = filters?.privacy as agentPrivacy; // ✅ NEW
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  let whereClause: any = {
+    isDeleted: false,
+    role: UserRole.agent,
+  };
+
+  // Search functionality
+  if (searchTerm) {
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { phone: { contains: searchTerm, mode: "insensitive" } },
+      { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
+    ];
+  }
+
+  // Date filtering - filter by user creation date
+  if (startDate || endDate) {
+    const dateFilter = createDateFilter(startDate, endDate, "createdAt");
+    whereClause = { ...whereClause, ...dateFilter };
+  }
+
+  // Assignment status filter for PENDING or REMOVAL_REQUESTED
+  if (assignmentStatus) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      assignments: {
+        some: {
+          status: assignmentStatus,
+        },
+      },
+    };
+  }
+
+  // Availability filter
+  if (isAvailable !== undefined) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      isAvailable: isAvailable === "true" || isAvailable === true,
+    };
+  }
+
+  // ✅ NEW: Privacy filter
+  if (privacy) {
+    whereClause.Agent = {
+      ...whereClause.Agent,
+      privacy: privacy,
+    };
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        image: true,
+        bio: true,
+        createdAt: true,
+        Agent: {
+          select: {
+            id: true,
+            employeeId: true, // ✅ NEW
+            skills: true,
+            successCalls: true,
+            droppedCalls: true,
+            isAvailable: true,
+            status: true,
+            privacy: true, // ✅ NEW
+            assignTo: true, // ✅ Now array
+            creatorId: true, // ✅ NEW
+            creator: { // ✅ NEW
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            AgentFeedbacks: {
+              select: {
+                id: true,
+                rating: true,
+              },
+            },
+            assignments: {
+              where: {
+                NOT: {
+                  status: AssignmentStatus.REJECTED,
+                },
+              },
+              select: {
+                id: true,
+                organization: {
+                  select: {
+                    id: true,
+                    name: true,
+                    industry: true, // ✅ NEW
+                  },
+                },
+                agentUserId: true,
+                status: true,
+                assignedBy: true,
+                assignedAt: true, // ✅ NEW
+                approvedAt: true, // ✅ NEW
+              },
+            },
+            // ✅ REMOVED: Direct organization relation
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.user.count({
+      where: whereClause,
+    }),
+  ]);
+
+  // Calculate average rating for each agent using the fetched feedbacks
+  const usersWithAvgRating = users.map((user) => {
+    const agent = user?.Agent;
+    const feedbacks = agent?.AgentFeedbacks || [];
+
+    const totalRating = feedbacks.reduce(
+      (sum, feedback) => sum + feedback.rating,
+      0
+    );
+    const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+
+    return {
+      ...user,
+      Agent: {
+        id: agent?.id || null,
+        employeeId: agent?.employeeId || null, // ✅ NEW
+        skills: agent?.skills || [],
+        totalCalls: (agent?.successCalls || 0) + (agent?.droppedCalls || 0),
+        successCalls: agent?.successCalls || 0,
+        droppedCalls: agent?.droppedCalls || 0,
+        isAvailable: agent?.isAvailable ?? false,
+        status: agent?.status || null,
+        privacy: agent?.privacy || null, // ✅ NEW
+        assignTo: agent?.assignTo || [], // ✅ UPDATED: Default to empty array
+        creatorId: agent?.creatorId || null, // ✅ NEW
+        creator: agent?.creator || null, // ✅ NEW
+        AgentFeedbacks: feedbacks,
+        assignments: agent?.assignments || [],
+        avgRating: parseFloat(avgRating.toFixed(1)),
+        totalFeedbacks: feedbacks.length,
+        assignedOrganizationsCount: agent?.assignTo?.length || 0, // ✅ NEW
+      },
+    };
+  });
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: usersWithAvgRating,
+  };
+};
+
+
+
 
 const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
   try {
@@ -438,188 +1225,7 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
     throw error;
   }
 };
-const getAllAgentForAdmin = async (
-  options: IPaginationOptions,
-  filters: any = {}
-) => {
-  const searchTerm = filters?.searchTerm as string;
-  const assignmentStatus = filters?.viewType as string;
-  const isAvailable = filters?.isAvailable as boolean | string;
-  const startDate = filters?.startDate as string; // New: start date filter
-  const endDate = filters?.endDate as string; // New: end date filter
 
-  const { page, limit, skip, sortBy, sortOrder } =
-    paginationHelper.calculatePagination(options);
-
-  let whereClause: any = {
-    isDeleted: false,
-    role: UserRole.agent,
-  };
-
-  // Search functionality
-  if (searchTerm) {
-    whereClause.OR = [
-      { name: { contains: searchTerm, mode: "insensitive" } },
-      { email: { contains: searchTerm, mode: "insensitive" } },
-      { phone: { contains: searchTerm, mode: "insensitive" } },
-    ];
-  }
-
-  // Date filtering - filter by user creation date
-  if (startDate || endDate) {
-    const dateFilter = createDateFilter(startDate, endDate, "createdAt");
-    whereClause = { ...whereClause, ...dateFilter };
-  }
-
-  // Assignment status filter for PENDING or REMOVAL_REQUESTED
-  if (assignmentStatus) {
-    whereClause.Agent = {
-      ...whereClause.Agent,
-      assignments: {
-        some: {
-          status: assignmentStatus,
-        },
-      },
-    };
-  }
-
-  // Availability filter
-  if (isAvailable !== undefined) {
-    whereClause.Agent = {
-      ...whereClause.Agent,
-      isAvailable: isAvailable === "true" || isAvailable === true,
-    };
-  }
-
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        image: true,
-        bio: true,
-        createdAt: true,
-        Agent: {
-          select: {
-            id: true,
-            skills: true,
-            successCalls: true,
-            droppedCalls: true,
-            isAvailable: true,
-            status: true,
-            AgentFeedbacks: {
-              select: {
-                id: true,
-                rating: true,
-              },
-            },
-            assignTo: true,
-            assignments: {
-              where: {
-                NOT: {
-                  status: AssignmentStatus.REJECTED,
-                },
-              },
-              select: {
-                id: true,
-                organization: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                agentUserId: true,
-                status: true,
-                assignedBy: true,
-              },
-            },
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                industry: true,
-              },
-            },
-            // assignments: {
-            //   select: {
-            //     id: true,
-            //     status: true,
-            //     assignedAt: true,
-            //     organization: {
-            //       select: {
-            //         id: true,
-            //         name: true,
-            //         industry: true,
-            //       },
-            //     },
-            //   },
-            //   orderBy: {
-            //     assignedAt: "desc",
-            //   },
-            // },
-          },
-        },
-      },
-      orderBy: {
-        [sortBy as string]: sortOrder,
-      },
-      skip: Number(skip),
-      take: Number(limit),
-    }),
-    prisma.user.count({
-      where: whereClause,
-    }),
-  ]);
-
-  // Calculate average rating for each agent using the fetched feedbacks
-  const usersWithAvgRating = users.map((user) => {
-    // Safe access to nested properties with optional chaining and fallbacks
-    const agent = user?.Agent;
-    const feedbacks = agent?.AgentFeedbacks || [];
-
-    // Calculate average rating
-    const totalRating = feedbacks.reduce(
-      (sum, feedback) => sum + feedback.rating,
-      0
-    );
-    const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
-
-    // Get the latest assignment
-
-    return {
-      ...user,
-      Agent: {
-        id: agent?.id || null,
-        skills: agent?.skills || [],
-        totalCalls: (agent?.successCalls || 0) + (agent?.droppedCalls || 0),
-        successCalls: agent?.successCalls || 0,
-        droppedCalls: agent?.droppedCalls || 0,
-        isAvailable: agent?.isAvailable ?? false,
-        status: agent?.status || null,
-        AgentFeedbacks: feedbacks,
-        organization: agent?.organization || null,
-        assignments: agent?.assignments || [],
-        assignTo: agent?.assignTo || null,
-
-        avgRating: parseFloat(avgRating.toFixed(1)),
-        totalFeedbacks: feedbacks.length,
-      },
-    };
-  });
-
-  return {
-    meta: {
-      page: Number(page),
-      limit: Number(limit),
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-    },
-    data: usersWithAvgRating,
-  };
-};
 
 const getAgentCallsManagementInfo = async (
   options: IPaginationOptions,
@@ -1358,7 +1964,427 @@ const rejectAssignment = async (
 };
 
 
-// Organization admin requests agent removal to super admin
+// // Organization admin requests agent removal to super admin
+// const requestAgentRemoval = async (agentUserId: string, user: User) => {
+//   // Validate input
+//   if (!agentUserId || !user?.id) {
+//     throw new ApiError(
+//       status.BAD_REQUEST,
+//       "Agent user ID and user information are required!"
+//     );
+//   }
+
+//   return await prisma.$transaction(async (tx) => {
+//     // Validate agent exists
+//     const agent = await tx.agent.findUnique({
+//       where: { userId: agentUserId },
+//       include: { user: true },
+//     });
+
+//     if (!agent) {
+//       throw new ApiError(status.NOT_FOUND, "Agent not found!");
+//     }
+
+//     // Validate organization exists and user owns it
+//     const organization = await tx.organization.findUnique({
+//       where: { ownerId: user.id },
+//     });
+
+//     if (!organization) {
+//       throw new ApiError(status.NOT_FOUND, "Organization not found!");
+//     }
+
+//     // Check if agent is actually assigned to this organization
+//     if (agent.assignTo !== organization.id) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "Agent is not assigned to your organization!"
+//       );
+//     }
+
+//     // Find the existing approved assignment
+//     const existingAssignment = await tx.agentAssignment.findFirst({
+//       where: {
+//         agentUserId: agentUserId,
+//         organizationId: organization.id,
+//         status: AssignmentStatus.APPROVED,
+//       },
+//     });
+
+//     if (!existingAssignment) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "No approved assignment found for this agent!"
+//       );
+//     }
+
+//     // Update assignment status to REMOVAL_REQUESTED
+//     const updatedAssignment = await tx.agentAssignment.update({
+//       where: { id: existingAssignment.id },
+//       data: {
+//         status: AssignmentStatus.REMOVAL_REQUESTED,
+//       },
+//       include: {
+//         agent: {
+//           include: {
+//             user: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 email: true,
+//               },
+//             },
+//           },
+//         },
+//         organization: true,
+//         assignedByUser: {
+//           select: {
+//             id: true,
+//             name: true,
+//             email: true,
+//           },
+//         },
+//       },
+//     });
+
+//     return updatedAssignment;
+//   });
+// };
+
+// // Super admin approves removal request
+// const approveAgentRemoval = async (userId: string, organizationId: string) => {
+//   return await prisma.$transaction(async (tx) => {
+//     // Find the removal request by userId (agentUserId) and organizationId
+//     const assignment = await tx.agentAssignment.findFirst({
+//       where: {
+//         agentUserId: userId,
+//         organizationId: organizationId,
+//         status: AssignmentStatus.REMOVAL_REQUESTED,
+//       },
+//       include: {
+//         agent: true,
+//       },
+//     });
+
+//     if (!assignment) {
+//       throw new ApiError(status.NOT_FOUND, "Removal request not found!");
+//     }
+
+//     if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "Assignment is not in removal requested status!"
+//       );
+//     }
+
+//     // Update assignment status to REJECTED (final removal)
+//     const updatedAssignment = await tx.agentAssignment.update({
+//       where: { id: assignment.id },
+//       data: {
+//         status: AssignmentStatus.REJECTED,
+//         rejectedAt: new Date(),
+//       },
+//       include: {
+//         agent: {
+//           include: {
+//             user: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 email: true,
+//               },
+//             },
+//           },
+//         },
+//         organization: true,
+//         assignedByUser: {
+//           select: {
+//             id: true,
+//             name: true,
+//             email: true,
+//           },
+//         },
+//       },
+//     });
+
+//     // Remove agent from organization
+//     await tx.agent.update({
+//       where: { userId: assignment.agentUserId },
+//       data: {
+//         assignTo: null,
+//         isAvailable: true,
+//       },
+//     });
+
+//     return updatedAssignment;
+//   });
+// };
+
+// // Super admin rejects removal request
+// const rejectAgentRemoval = async (
+//   userId: string,
+//   organizationId: string,
+//   reason?: string
+// ) => {
+//   return await prisma.$transaction(async (tx) => {
+//     // Find the removal request by userId (agentUserId) and organizationId
+//     const assignment = await tx.agentAssignment.findFirst({
+//       where: {
+//         agentUserId: userId,
+//         organizationId: organizationId,
+//         status: AssignmentStatus.REMOVAL_REQUESTED,
+//       },
+//       include: {
+//         agent: true,
+//       },
+//     });
+
+//     if (!assignment) {
+//       throw new ApiError(status.NOT_FOUND, "Removal request not found!");
+//     }
+
+//     if (assignment.status !== AssignmentStatus.REMOVAL_REQUESTED) {
+//       throw new ApiError(
+//         status.BAD_REQUEST,
+//         "Assignment is not in removal requested status!"
+//       );
+//     }
+
+//     // Revert back to APPROVED status
+//     const updatedAssignment = await tx.agentAssignment.update({
+//       where: { id: assignment.id },
+//       data: {
+//         status: AssignmentStatus.APPROVED,
+//         rejectedAt: null,
+//         reason:
+//           reason ||
+//           "Removal request rejected by admin. Please contact super admin.",
+//       },
+//       include: {
+//         agent: {
+//           include: {
+//             user: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 email: true,
+//               },
+//             },
+//           },
+//         },
+//         organization: true,
+//         assignedByUser: {
+//           select: {
+//             id: true,
+//             name: true,
+//             email: true,
+//           },
+//         },
+//       },
+//     });
+
+//     return updatedAssignment;
+//   });
+// };
+
+// // Get all removal requests for super admin
+// const getApprovalRemovalRequestsForSuperAdmin = async (
+//   options: IPaginationOptions,
+//   filters: any = {}
+// ) => {
+//   const searchTerm = filters?.searchTerm as string;
+//   const statusFilter = filters?.status as AssignmentStatus;
+//   const organizationName = filters?.organizationName as string;
+//   const agentName = filters?.agentName as string;
+
+//   const { page, limit, skip, sortBy, sortOrder } =
+//     paginationHelper.calculatePagination(options);
+
+//   let whereClause: any = {
+//     // status: AssignmentStatus.REMOVAL_REQUESTED,
+//   };
+
+//   // Status filter
+//   if (statusFilter && Object.values(AssignmentStatus).includes(statusFilter)) {
+//     whereClause.status = statusFilter;
+//   }
+
+//   // Search functionality
+//   if (searchTerm) {
+//     whereClause.OR = [
+//       {
+//         agent: {
+//           user: {
+//             name: { contains: searchTerm, mode: "insensitive" },
+//           },
+//         },
+//       },
+//       {
+//         agent: {
+//           user: {
+//             email: { contains: searchTerm, mode: "insensitive" },
+//           },
+//         },
+//       },
+//       {
+//         agent: {
+//           user: {
+//             phone: { contains: searchTerm, mode: "insensitive" },
+//           },
+//         },
+//       },
+//       {
+//         organization: {
+//           name: { contains: searchTerm, mode: "insensitive" },
+//         },
+//       },
+//       {
+//         reason: { contains: searchTerm, mode: "insensitive" },
+//       },
+//     ];
+//   }
+
+//   // Organization name filter
+//   if (organizationName) {
+//     whereClause.organization = {
+//       name: { contains: organizationName, mode: "insensitive" },
+//     };
+//   }
+
+//   // Agent name filter
+//   if (agentName) {
+//     whereClause.agent = {
+//       user: {
+//         name: { contains: agentName, mode: "insensitive" },
+//       },
+//     };
+//   }
+
+//   const [removalRequests, total] = await Promise.all([
+//     prisma.agentAssignment.findMany({
+//       where: whereClause,
+//       include: {
+//         agent: {
+//           include: {
+//             user: {
+//               select: {
+//                 id: true,
+//                 name: true,
+//                 email: true,
+//                 phone: true,
+//                 image: true,
+//                 bio: true,
+//                 role: true,
+//                 status: true,
+//               },
+//             },
+//             AgentFeedbacks: {
+//               select: {
+//                 id: true,
+//                 rating: true,
+//               },
+//             },
+//           },
+//         },
+//         organization: {
+//           select: {
+//             id: true,
+//             name: true,
+//             industry: true,
+//             address: true,
+//             websiteLink: true,
+//           },
+//         },
+//       },
+//       orderBy: {
+//         [sortBy as string]: sortOrder,
+//       },
+//       skip: Number(skip),
+//       take: Number(limit),
+//     }),
+//     prisma.agentAssignment.count({
+//       where: whereClause,
+//     }),
+//   ]);
+
+//   // Transform to match getAllAgentFromDB structure with average rating
+//   const formattedData = removalRequests?.map((request) => {
+//     // Calculate average rating for the agent
+//     const feedbacks = request.agent.AgentFeedbacks || [];
+//     const totalRating = feedbacks.reduce(
+//       (sum, feedback) => sum + feedback.rating,
+//       0
+//     );
+//     const avgRating = feedbacks.length > 0 ? totalRating / feedbacks.length : 0;
+
+//     // Main user data structure (same as getAllAgentFromDB)
+//     const userData = {
+//       id: request.agent.user.id,
+//       name: request.agent.user.name,
+//       email: request.agent.user.email,
+//       phone: request.agent.user.phone,
+//       bio: request.agent.user.bio,
+//       image: request.agent.user.image,
+//       role: request.agent.user.role,
+//       status: request.agent.user.status,
+
+//       // Agent-specific data (matching your Agent model structure)
+//       Agent: {
+//         id: request.agent.id,
+//         skills: request.agent.skills || [],
+//         isAvailable: request.agent.isAvailable,
+//         status: request.agent.status,
+//         assignTo: request.agent.assignTo,
+
+//         // Organization data
+//         organization: request.organization
+//           ? {
+//             id: request.organization.id,
+//             name: request.organization.name,
+//             industry: request.organization.industry,
+//             address: request.organization.address,
+//             websiteLink: request.organization.websiteLink,
+//           }
+//           : null,
+
+//         // Assignments data
+//         assignments: [
+//           {
+//             id: request.id,
+//             status: request.status,
+//             assignedAt: request.assignedAt,
+//             approvedAt: request.approvedAt,
+//             rejectedAt: request.rejectedAt,
+//             reason: request.reason,
+//             organizationId: request.organizationId,
+//           },
+//         ],
+
+//         // AgentFeedbacks with average rating
+//         AgentFeedbacks: feedbacks,
+//         avgRating: parseFloat(avgRating.toFixed(1)),
+//         totalFeedbacks: feedbacks.length,
+//       },
+//     };
+
+//     return userData;
+//   });
+
+//   return {
+//     meta: {
+//       page: Number(page),
+//       limit: Number(limit),
+//       total,
+//       totalPages: Math.ceil(total / Number(limit)),
+//     },
+//     users: formattedData, // Using 'users' key to match getAllAgentFromDB
+//   };
+// };
+
+
+// Updated Service Functions for Multi-Organization Assignment
+
+// ========== REQUEST AGENT REMOVAL (Updated) ==========
 const requestAgentRemoval = async (agentUserId: string, user: User) => {
   // Validate input
   if (!agentUserId || !user?.id) {
@@ -1372,7 +2398,10 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
     // Validate agent exists
     const agent = await tx.agent.findUnique({
       where: { userId: agentUserId },
-      include: { user: true },
+      include: {
+        user: true,
+        creator: true, // Include creator to check ownership
+      },
     });
 
     if (!agent) {
@@ -1388,20 +2417,28 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
       throw new ApiError(status.NOT_FOUND, "Organization not found!");
     }
 
-    // Check if agent is actually assigned to this organization
-    if (agent.assignTo !== organization.id) {
+    //  UPDATED: Check if organization is in assignTo array
+    if (!agent.assignTo.includes(organization.id)) {
       throw new ApiError(
         status.BAD_REQUEST,
         "Agent is not assigned to your organization!"
       );
     }
 
+    //  NEW: Check if it's a private agent created by this org
+    // if (agent.privacy === agentPrivacy.private && agent.creatorId === user.id) {
+    //   throw new ApiError(
+    //     status.BAD_REQUEST,
+    //     "⚠️ You cannot request removal of your own private agent. Private agents are permanently assigned to the creator organization."
+    //   );
+    // }
+
     // Find the existing approved assignment
     const existingAssignment = await tx.agentAssignment.findFirst({
       where: {
         agentUserId: agentUserId,
         organizationId: organization.id,
-        status: AssignmentStatus.APPROVED,
+        status: AssignmentStatus.APPROVED || AssignmentStatus.REMOVAL_REQUESTED,
       },
     });
 
@@ -1410,6 +2447,21 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
         status.BAD_REQUEST,
         "No approved assignment found for this agent!"
       );
+    }
+
+    if (existingAssignment) {
+      if (existingAssignment.status === AssignmentStatus.REMOVAL_REQUESTED) {
+        throw new ApiError(
+          status.BAD_REQUEST,
+          "⚠️ Agent removal is already requested. Please wait for admin approval."
+        );
+      }
+      // else if(existingAssignment.status === AssignmentStatus.APPROVED){
+      //   throw new ApiError(
+      //     status.BAD_REQUEST,
+      //     "✅ Agent is already assigned to your organization!"
+      //   );
+      // }
     }
 
     // Update assignment status to REMOVAL_REQUESTED
@@ -1422,6 +2474,13 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
         agent: {
           include: {
             user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            creator: {
               select: {
                 id: true,
                 name: true,
@@ -1445,8 +2504,9 @@ const requestAgentRemoval = async (agentUserId: string, user: User) => {
   });
 };
 
-// Super admin approves removal request
+// ========== APPROVE AGENT REMOVAL (Updated) ==========
 const approveAgentRemoval = async (userId: string, organizationId: string) => {
+  // console.log(userId, organizationId)
   return await prisma.$transaction(async (tx) => {
     // Find the removal request by userId (agentUserId) and organizationId
     const assignment = await tx.agentAssignment.findFirst({
@@ -1471,6 +2531,26 @@ const approveAgentRemoval = async (userId: string, organizationId: string) => {
       );
     }
 
+    //  NEW: Check if it's a private agent being removed from creator's org
+    // if (
+    //   assignment.agent.privacy === agentPrivacy.private &&
+    //   assignment.agent.creatorId === assignment.assignedBy
+    // ) {
+    //   throw new ApiError(
+    //     status.BAD_REQUEST,
+    //     "⚠️ Cannot remove a private agent from its creator organization!"
+    //   );
+    // }
+    if (
+      assignment.agent.creatorId !== assignment.assignedBy
+    ) {
+      throw new ApiError(
+        status.BAD_REQUEST,
+        "⚠️ Only creator of the agent can remove it from your organization!"
+      );
+    }
+
+
     // Update assignment status to REJECTED (final removal)
     const updatedAssignment = await tx.agentAssignment.update({
       where: { id: assignment.id },
@@ -1482,6 +2562,13 @@ const approveAgentRemoval = async (userId: string, organizationId: string) => {
         agent: {
           include: {
             user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            creator: {
               select: {
                 id: true,
                 name: true,
@@ -1501,11 +2588,15 @@ const approveAgentRemoval = async (userId: string, organizationId: string) => {
       },
     });
 
-    // Remove agent from organization
+    //  UPDATED: Remove organization from assignTo array
+    const currentAssignTo = assignment.agent.assignTo.filter(
+      (orgId) => orgId !== organizationId
+    );
+
     await tx.agent.update({
       where: { userId: assignment.agentUserId },
       data: {
-        assignTo: null,
+        assignTo: currentAssignTo,
         isAvailable: true,
       },
     });
@@ -1514,7 +2605,7 @@ const approveAgentRemoval = async (userId: string, organizationId: string) => {
   });
 };
 
-// Super admin rejects removal request
+// ========== REJECT AGENT REMOVAL (Updated) ==========
 const rejectAgentRemoval = async (
   userId: string,
   organizationId: string,
@@ -1529,7 +2620,17 @@ const rejectAgentRemoval = async (
         status: AssignmentStatus.REMOVAL_REQUESTED,
       },
       include: {
-        agent: true,
+        agent: {
+          include: {
+            creator: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1564,6 +2665,13 @@ const rejectAgentRemoval = async (
                 email: true,
               },
             },
+            creator: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
           },
         },
         organization: true,
@@ -1577,11 +2685,14 @@ const rejectAgentRemoval = async (
       },
     });
 
+    //  NOTE: No need to update assignTo array since we're rejecting removal
+    // Agent remains assigned to the organization
+
     return updatedAssignment;
   });
 };
 
-// Get all removal requests for super admin
+// ========== GET APPROVAL REMOVAL REQUESTS FOR SUPER ADMIN (Updated) ==========
 const getApprovalRemovalRequestsForSuperAdmin = async (
   options: IPaginationOptions,
   filters: any = {}
@@ -1594,9 +2705,7 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
-  let whereClause: any = {
-    // status: AssignmentStatus.REMOVAL_REQUESTED,
-  };
+  let whereClause: any = {};
 
   // Status filter
   if (statusFilter && Object.values(AssignmentStatus).includes(statusFilter)) {
@@ -1628,13 +2737,18 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
         },
       },
       {
+        agent: {
+          employeeId: { contains: searchTerm, mode: "insensitive" },
+        },
+      },
+      {
         organization: {
           name: { contains: searchTerm, mode: "insensitive" },
         },
       },
-      {
-        reason: { contains: searchTerm, mode: "insensitive" },
-      },
+      // {
+      //   reason: { contains: searchTerm, mode: "insensitive" },
+      // },
     ];
   }
 
@@ -1672,6 +2786,13 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
                 status: true,
               },
             },
+            creator: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
             AgentFeedbacks: {
               select: {
                 id: true,
@@ -1687,6 +2808,13 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
             industry: true,
             address: true,
             websiteLink: true,
+          },
+        },
+        assignedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
       },
@@ -1725,12 +2853,16 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
       // Agent-specific data (matching your Agent model structure)
       Agent: {
         id: request.agent.id,
+        employeeId: request.agent.employeeId,
         skills: request.agent.skills || [],
         isAvailable: request.agent.isAvailable,
         status: request.agent.status,
-        assignTo: request.agent.assignTo,
+        privacy: request.agent.privacy, //  NEW: Include privacy
+        assignTo: request.agent.assignTo, //  UPDATED: Now an array
+        creatorId: request.agent.creatorId, //  NEW: Include creator ID
+        creator: request.agent.creator, //  NEW: Include creator info
 
-        // Organization data
+        // Organization data - current request's organization
         organization: request.organization
           ? {
             id: request.organization.id,
@@ -1741,7 +2873,7 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
           }
           : null,
 
-        // Assignments data
+        // Assignments data - current request details
         assignments: [
           {
             id: request.id,
@@ -1751,6 +2883,8 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
             rejectedAt: request.rejectedAt,
             reason: request.reason,
             organizationId: request.organizationId,
+            assignedBy: request.assignedBy,
+            assignedByUser: request.assignedByUser,
           },
         ],
 
@@ -1758,6 +2892,7 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
         AgentFeedbacks: feedbacks,
         avgRating: parseFloat(avgRating.toFixed(1)),
         totalFeedbacks: feedbacks.length,
+        assignedOrganizationsCount: request.agent.assignTo.length, //  NEW: Count of assigned orgs
       },
     };
 
@@ -1774,7 +2909,6 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
     users: formattedData, // Using 'users' key to match getAllAgentFromDB
   };
 };
-
 
 
 
