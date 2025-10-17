@@ -117,8 +117,6 @@ const getAllTwilioPhoneNumbersFromDB = async (
 };
 
 
-
-
 const getSingleTwilioPhoneNumberFromDB = async (id: string) => {
   const number = await prisma.availableTwilioNumber.findUnique({
     where: {
@@ -128,56 +126,6 @@ const getSingleTwilioPhoneNumberFromDB = async (id: string) => {
 
   return number;
 };
-
-const updateTwilioPhoneNumberIntoDB = async (sid: string, payload: any) => {
-  try {
-    const updateData: any = {};
-
-    if (payload.friendlyName) updateData.friendlyName = payload.friendlyName;
-    if (payload.voiceUrl !== undefined) updateData.voiceUrl = payload.voiceUrl;
-    if (payload.smsUrl !== undefined) updateData.smsUrl = payload.smsUrl;
-    if (payload.status) updateData.status = payload.status;
-
-    const updatedNumber = await twilioClient
-      .incomingPhoneNumbers(sid)
-      .update(updateData);
-
-    return {
-      sid: updatedNumber.sid,
-      accountSid: updatedNumber.accountSid,
-      phoneNumber: updatedNumber.phoneNumber,
-      friendlyName: updatedNumber.friendlyName,
-      voiceUrl: updatedNumber.voiceUrl,
-      smsUrl: updatedNumber.smsUrl,
-      status: updatedNumber.status,
-      capabilities: {
-        voice: updatedNumber.capabilities.voice,
-        sms: updatedNumber.capabilities.sms,
-        mms: updatedNumber.capabilities.mms,
-        fax: updatedNumber.capabilities.fax,
-      },
-      origin: updatedNumber.origin,
-    };
-  } catch (error: any) {
-    throw new AppError(
-      status.INTERNAL_SERVER_ERROR,
-      `Failed to update phone number: ${error.message}`
-    );
-  }
-};
-
-const deleteTwilioPhoneNumberFromDB = async (sid: string): Promise<void> => {
-  try {
-    await twilioClient.incomingPhoneNumbers(sid).remove();
-  } catch (error: any) {
-    throw new AppError(
-      status.INTERNAL_SERVER_ERROR,
-      `Failed to delete phone number: ${error.message}`
-    );
-  }
-};
-
-
 
 // ============ SUPER ADMIN SERVICES ============
 
@@ -433,7 +381,9 @@ const getAvailableNumbersForOrg = async (
   userId: string,
   query: Record<string, unknown>
 ) => {
-  // Get organization by userId
+
+  console.log("getAvailableNumbersForOrg", userId, query)
+  // 1️ Find organization by userId
   const organization = await prisma.organization.findFirst({
     where: { ownerId: userId },
   });
@@ -443,60 +393,68 @@ const getAvailableNumbersForOrg = async (
   }
 
   const searchTerm = query?.searchTerm as string;
-  const queryBuilder = new QueryBuilder(prisma.availableTwilioNumber, query);
+  const take = Number(query.limit) || 10;
+  const skip = Number(query.skip) || 0;
 
   const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
-  const customFilters: Record<string, any> = {
+
+  // 2️ Build Prisma `where` condition dynamically
+  const where: any = {
     OR: [
-      // All unpinned and unpurchased numbers
-      {
-        isPinned: false,
-        isPurchased: false,
-      },
-      // Numbers pinned for this organization
-      {
-        isPinned: true,
-        purchasedByOrganizationId: organization.id,
-      },
+      // Unpinned and unpurchased numbers
+      { isPinned: false, isPurchased: false },
+      // Pinned numbers of this organization
+      { isPinned: true, purchasedByOrganizationId: organization.id },
     ],
   };
 
-  // Filter by phone number pattern
+  // Filter by pattern
   if (query.phoneNumberPattern) {
-    customFilters.phoneNumber = {
+    where.phoneNumber = {
       contains: query.phoneNumberPattern as string,
+      mode: "insensitive",
     };
   }
 
   // Filter by country code
   if (query.countryCode) {
-    customFilters.countryCode = query.countryCode as string;
+    where.countryCode = query.countryCode as string;
   }
 
-  // Search functionality
+  // Search by text
   if (searchTerm) {
-    customFilters.AND = {
+    where.AND = {
       OR: searchableFields.map((field) => ({
         [field]: { contains: searchTerm, mode: "insensitive" },
       })),
     };
   }
 
-  const result = await queryBuilder
-    .filter()
-    .rawFilter(customFilters)
-    .sort()
-    .paginate()
-    .fields()
-    .execute();
+  // 3️ Fetch data from Prisma directly (pinned first)
+  const data = await prisma.availableTwilioNumber.findMany({
+    where,
+    orderBy: [
+      { isPinned: "desc" }, // Pinned numbers first
+      { createdAt: "desc" }, // Newest after pinned
+    ],
+    skip,
+    take,
+  });
 
-  const meta = await queryBuilder.countTotal();
+  // 4️ Count total for pagination
+  const total = await prisma.availableTwilioNumber.count({ where });
 
   return {
-    meta,
-    data: result,
+    meta: {
+      total,
+      page: Math.floor(skip / take) + 1,
+      limit: take,
+    },
+    data,
   };
 };
+
+
 
 const requestPhoneNumber = async (
   userId: string,
@@ -518,6 +476,10 @@ const requestPhoneNumber = async (
     throw new AppError(status.NOT_FOUND, "Organization not found!");
   }
 
+  if(organization && organization?.organizationNumber){
+   throw new AppError(status.BAD_REQUEST, "Organization already has a purchased phone number!");
+  }
+
   // Check if organization already has a pending request
   const existingRequest = await prisma.phoneNumberRequest.findFirst({
     where: {
@@ -529,7 +491,7 @@ const requestPhoneNumber = async (
   if (existingRequest) {
     throw new AppError(
       status.BAD_REQUEST,
-      "You already have a pending phone number request!"
+      "You already have a  phone number request!"
     );
   }
 
@@ -567,55 +529,6 @@ const requestPhoneNumber = async (
   return result;
 };
 
-const getOrgPhoneNumberRequests = async (
-  userId: string,
-  query: Record<string, unknown>
-) => {
-  // Get organization by userId
-  const organization = await prisma.organization.findFirst({
-    where: { ownerId: userId },
-  });
-
-  if (!organization) {
-    throw new AppError(status.NOT_FOUND, "Organization not found!");
-  }
-
-  const queryBuilder = new QueryBuilder(prisma.phoneNumberRequest, query);
-
-  const customFilters: Record<string, any> = {
-    organizationId: organization.id,
-  };
-
-  // Filter by status
-  if (query.status) {
-    customFilters.status = query.status as PhoneNumberRequestStatus;
-  }
-
-  const result = await queryBuilder
-    .filter()
-    .rawFilter(customFilters)
-    .include({
-      assignedNumber: {
-        select: {
-          id: true,
-          phoneNumber: true,
-          friendlyName: true,
-          isPinned: true,
-        },
-      },
-    })
-    .sort()
-    .paginate()
-    .fields()
-    .execute();
-
-  const meta = await queryBuilder.countTotal();
-
-  return {
-    meta,
-    data: result,
-  };
-};
 
 export const TwilioPhoneNumberService = {
   // Super Admin
@@ -627,11 +540,8 @@ export const TwilioPhoneNumberService = {
   // Organization Admin
   getAvailableNumbersForOrg,
   requestPhoneNumber,
-  getOrgPhoneNumberRequests,
 
   fetchAndStoreAvailableNumbers,
   getAllTwilioPhoneNumbersFromDB,
-  getSingleTwilioPhoneNumberFromDB,
-  updateTwilioPhoneNumberIntoDB,
-  deleteTwilioPhoneNumberFromDB,
+  getSingleTwilioPhoneNumberFromDB
 };

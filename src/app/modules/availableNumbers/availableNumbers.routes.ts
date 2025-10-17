@@ -46,14 +46,6 @@ router.post(
   TwilioPhoneNumberController.requestPhoneNumber
 );
 
-// Organization Admin: Get own requests
-router.get(
-  "/organization/my-requests",
-  auth(UserRole.organization_admin),
-  TwilioPhoneNumberController.getOrgPhoneNumberRequests
-);
-
-
 //  -------------
 router.get(
   "/",
@@ -79,18 +71,4 @@ router.post(
 //   validateRequest(TwilioPhoneNumberValidation.createTwilioPhoneNumberZodSchema),
   TwilioPhoneNumberController.createTwilioPhoneNumber
 );
-
-router.patch(
-  "/:sid",
-  auth(UserRole.super_admin, UserRole.organization_admin),
-//   validateRequest(TwilioPhoneNumberValidation.updateTwilioPhoneNumberZodSchema),
-  TwilioPhoneNumberController.updateTwilioPhoneNumber
-);
-
-router.delete(
-  "/:sid",
-  auth(UserRole.super_admin),
-  TwilioPhoneNumberController.deleteTwilioPhoneNumber
-);
-
 export const TwilioPhoneNumberRoutes = router;

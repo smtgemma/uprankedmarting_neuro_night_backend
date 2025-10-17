@@ -57,34 +57,6 @@ const getSingleTwilioPhoneNumber = catchAsync(
   }
 );
 
-const updateTwilioPhoneNumber = catchAsync(
-  async (req: Request, res: Response) => {
-    const { sid } = req.params;
-    const result = await TwilioPhoneNumberService.updateTwilioPhoneNumberIntoDB(
-      sid,
-      req.body
-    );
-
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Twilio phone number updated successfully!",
-      data: result,
-    });
-  }
-);
-
-const deleteTwilioPhoneNumber = catchAsync(
-  async (req: Request, res: Response) => {
-    const { sid } = req.params;
-    await TwilioPhoneNumberService.deleteTwilioPhoneNumberFromDB(sid);
-
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Twilio phone number deleted successfully!",
-    });
-  }
-);
-
 // ============ SUPER ADMIN CONTROLLERS ============
 
 const getAllNumbersForAdmin = catchAsync(async (req: Request, res: Response) => {
@@ -138,7 +110,7 @@ const togglePinNumber = catchAsync(async (req: Request, res: Response) => {
 // ============ ORGANIZATION ADMIN CONTROLLERS ============
 
 const getAvailableNumbersForOrg = catchAsync(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
+  const userId = req.user?.id;
   const result = await TwilioPhoneNumberService.getAvailableNumbersForOrg(
     userId,
     req.query
@@ -147,8 +119,7 @@ const getAvailableNumbersForOrg = catchAsync(async (req: Request, res: Response)
   sendResponse(res, {
     statusCode: status.OK,
     message: "Available phone numbers retrieved successfully!",
-    meta: result.meta,
-    data: result.data,
+    data: result,
   });
 });
 
@@ -166,20 +137,6 @@ const requestPhoneNumber = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-const getOrgPhoneNumberRequests = catchAsync(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  const result = await TwilioPhoneNumberService.getOrgPhoneNumberRequests(
-    userId,
-    req.query
-  );
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Your phone number requests retrieved successfully!",
-    meta: result.meta,
-    data: result.data,
-  });
-});
 
 export const TwilioPhoneNumberController = {
   // Super Admin
@@ -191,12 +148,9 @@ export const TwilioPhoneNumberController = {
   // Organization Admin
   getAvailableNumbersForOrg,
   requestPhoneNumber,
-  getOrgPhoneNumberRequests,
 
   createTwilioPhoneNumber,
   getAllTwilioPhoneNumbers,
   getSingleTwilioPhoneNumber,
-  updateTwilioPhoneNumber,
-  deleteTwilioPhoneNumber,
   fetchAndStoreAvailableNumbers,
 };
