@@ -14,11 +14,6 @@ enum UserRole {
   super_admin
 }
 
-enum UserStatus {
-  ACTIVE
-  BLOCKED
-  DELETED
-}
 
 enum PlanLevel {
   only_real_agent
@@ -71,6 +66,12 @@ enum Status {
   FAILED
 }
 
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
 // ============ MODELS ============
 model User {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
@@ -80,7 +81,6 @@ model User {
   image     String? @default("")
   bio       String? @default("")
   phone     String  @unique
-  isDeleted Boolean @default(false)
 
   passwordChangedAt DateTime?
   isVerified        Boolean   @default(false)
@@ -135,27 +135,25 @@ model Agent {
   sip_address  String?
   sip_username String?
   sip_password String?
-
-  dateOfBirth    DateTime
-  gender         String
-  address        String
-  emergencyPhone String?  @unique
-  ssn            String?  @unique
-
   skills String[] @default([])
-
   employeeId  String  @unique
-  isAvailable Boolean @default(true)
   assignTo    String? @db.ObjectId
-
-  jobTitle       String
-  employmentType employmentType
-  department     String
 
   workEndTime       String?
   workStartTime     String?
-  startWorkDateTime DateTime?
-  endWorkDateTime   DateTime?
+
+  // dateOfBirth    DateTime
+  // gender         String
+  // address        String
+  // emergencyPhone String?  @unique
+  // ssn            String?  @unique
+  // startWorkDateTime DateTime?
+  // endWorkDateTime   DateTime?
+  // jobTitle       String
+  // employmentType employmentType
+  // department     String
+  // isAvailable Boolean @default(true)
+
 
   successCalls Int @default(0)
   droppedCalls Int @default(0)
@@ -182,6 +180,24 @@ enum AssignmentStatus {
   REMOVAL_REQUESTED
 }
 
+// model AgentAssignment {
+//   id             String           @id @default(auto()) @map("_id") @db.ObjectId
+//   agentUserId    String           @db.ObjectId
+//   organizationId String           @db.ObjectId
+//   status         AssignmentStatus @default(PENDING)
+//   assignedBy     String?          @db.ObjectId
+//   assignedAt     DateTime         @default(now())
+//   // approvedAt     DateTime?
+//   // rejectedAt     DateTime?
+//   // reason         String?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
+//   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+//   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
+// }
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
   agentUserId    String           @db.ObjectId
@@ -199,6 +215,9 @@ model AgentAssignment {
   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
+
+  @@unique([agentUserId, organizationId])
+  @@map("agent_assignments")
 }
 
 model Organization {
@@ -227,6 +246,7 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  requestedPhoneNumber PhoneNumberRequest?
   agents                Agent[]
   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions         Subscription[]
@@ -462,15 +482,19 @@ model AvailableTwilioNumber {
   beta         Boolean   @default(false)
   countryCode  String    @default("US")
   isPurchased  Boolean   @default(false)
+  isPinned     Boolean   @default(false)
   purchasedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  purchasedByOrganizationId String?       @db.ObjectId
-  organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
+  PhoneNumberRequest        PhoneNumberRequest?
+  purchasedByOrganizationId String?             @db.ObjectId
+  requestedByUserId         String?             @db.ObjectId
+  organization              Organization?       @relation(fields: [purchasedByOrganizationId], references: [id])
 
   @@map("available_twilio_numbers")
 }
+
 
 model Question {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -486,7 +510,6 @@ model Question {
   @@map("questions")
 }
 
-
 model QaPair {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   org_id   String @db.ObjectId
@@ -500,4 +523,37 @@ model QaPair {
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")
+}
+
+enum PhoneNumberRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+}
+model PhoneNumberRequest {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String?       @unique @db.ObjectId
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  requesterName  String
+  requesterEmail String
+  requesterPhone String?
+  message        String?
+
+  requestedPhonePattern String?
+  status                PhoneNumberRequestStatus @default(PENDING)
+
+  assignedNumberId String?                @unique @db.ObjectId
+  assignedNumber   AvailableTwilioNumber? @relation(fields: [assignedNumberId], references: [id])
+
+  rejectionReason String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  assignedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("phone_number_requests")
 }
