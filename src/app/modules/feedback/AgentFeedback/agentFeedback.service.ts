@@ -140,10 +140,6 @@ const getSingleAgentFeedback = async (id: string) => {
       agent: {
         select: {
           id: true,
-          gender: true,
-          address: true,
-          emergencyPhone: true,
-          ssn: true,
           skills: true,
         },
       },

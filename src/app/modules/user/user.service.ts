@@ -342,24 +342,7 @@ const createAgentIntoDB = async (payload: any) => {
       throw new ApiError(status.BAD_REQUEST, "User with this email or phone already exists!");
     }
 
-    // Check for unique emergencyPhone and ssn
-    if (agentData.emergencyPhone) {
-      const existingEmergencyPhone = await prisma.agent.findFirst({
-        where: { emergencyPhone: agentData.emergencyPhone.trim() },
-      });
-      if (existingEmergencyPhone) {
-        throw new ApiError(status.BAD_REQUEST, "Emergency phone number already exists!");
-      }
-    }
 
-    if (agentData.ssn) {
-      const existingSSN = await prisma.agent.findFirst({
-        where: { ssn: agentData.ssn },
-      });
-      if (existingSSN) {
-        throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
-      }
-    }
 
     // Generate unique employee ID
     const employeeId = await generateUniqueEmployeeId();
@@ -389,24 +372,6 @@ const createAgentIntoDB = async (payload: any) => {
         throw new ApiError(status.BAD_REQUEST, "User with this email or phone already exists!");
       }
 
-      // Double-check for unique emergencyPhone and ssn INSIDE transaction
-      if (agentData.emergencyPhone) {
-        const existingEmergencyPhoneInTx = await tx.agent.findFirst({
-          where: { emergencyPhone: agentData.emergencyPhone.trim() },
-        });
-        if (existingEmergencyPhoneInTx) {
-          throw new ApiError(status.BAD_REQUEST, "Emergency phone number already exists!");
-        }
-      }
-
-      if (agentData.ssn) {
-        const existingSSNInTx = await tx.agent.findFirst({
-          where: { ssn: agentData.ssn },
-        });
-        if (existingSSNInTx) {
-          throw new ApiError(status.BAD_REQUEST, "SSN already exists!");
-        }
-      }
 
       // Create User
       const userPayload = {
@@ -421,28 +386,18 @@ const createAgentIntoDB = async (payload: any) => {
 
       const createdUser = await tx.user.create({ data: userPayload });
 
-       const agentPayload = {
-          userId: createdUser.id,
-          employeeId: employeeId,
-          dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
-          gender: agentData.gender,
-          address: agentData.address?.trim(),
-          emergencyPhone: agentData.emergencyPhone?.trim() || "",
-          ssn: agentData.ssn,
-          skills: agentData.skills || [],
-          sip_address: sipInfo?.fullSipUri,
-          sip_username: userName,
-          sip_password: password,
-          jobTitle: agentData.jobTitle?.trim() || "Customer Service Agent",
-          employmentType: agentData.employmentType || employmentType.full_time,
-          department: agentData.department?.trim() || "Customer Service",
-          workStartTime: agentData.workStartTime,
-          workEndTime: agentData.workEndTime,
-          startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
-          endWorkDateTime: null,
-          successCalls: 0,
-          droppedCalls: 0,
-        };
+      const agentPayload = {
+        userId: createdUser.id,
+        employeeId: employeeId,
+        skills: agentData.skills || [],
+        sip_address: sipInfo?.fullSipUri,
+        sip_username: userName,
+        sip_password: password,
+        workStartTime: agentData.workStartTime,
+        workEndTime: agentData.workEndTime,
+        successCalls: 0,
+        droppedCalls: 0,
+      };
 
       const createdAgent = await tx.agent.create({ data: agentPayload });
 
@@ -515,7 +470,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
   // Check if target user exists and is an agent
   const targetUser = await prisma.user.findUnique({
-    where: { id: agentId, isDeleted: false },
+    where: { id: agentId, status: UserStatus.ACTIVE },
     include: {
       Agent: true,
     },
@@ -529,38 +484,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "Target user is not an agent");
   }
 
-  // Validate emergencyPhone and ssn uniqueness before transaction
-  if (agentData?.emergencyPhone) {
-    const existingEmergencyPhone = await prisma.agent.findFirst({
-      where: {
-        emergencyPhone: agentData.emergencyPhone.trim(),
-        userId: { not: agentId }, // Exclude the current agent
-      },
-    });
-
-    if (existingEmergencyPhone) {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        "Emergency phone number already exists for another agent!"
-      );
-    }
-  }
-
-  if (agentData?.ssn) {
-    const existingSSN = await prisma.agent.findFirst({
-      where: {
-        ssn: agentData.ssn,
-        userId: { not: agentId }, // Exclude the current agent
-      },
-    });
-
-    if (existingSSN) {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        "SSN already exists for another agent!"
-      );
-    }
-  }
 
   const result = await prisma.$transaction(async (transactionClient) => {
     let updatedUser = targetUser;
@@ -605,40 +528,6 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
 
     // Update agent data if provided
     if (agentData) {
-      // Double-check emergencyPhone and ssn uniqueness inside transaction
-      if (agentData.emergencyPhone) {
-        const existingEmergencyPhoneInTx =
-          await transactionClient.agent.findFirst({
-            where: {
-              emergencyPhone: agentData.emergencyPhone.trim(),
-              userId: { not: agentId },
-            },
-          });
-
-        if (existingEmergencyPhoneInTx) {
-          throw new ApiError(
-            status.BAD_REQUEST,
-            "Emergency phone number already exists for another agent!"
-          );
-        }
-      }
-
-      if (agentData.ssn) {
-        const existingSSNInTx = await transactionClient.agent.findFirst({
-          where: {
-            ssn: agentData.ssn,
-            userId: { not: agentId },
-          },
-        });
-
-        if (existingSSNInTx) {
-          throw new ApiError(
-            status.BAD_REQUEST,
-            "SSN already exists for another agent!"
-          );
-        }
-      }
-
       updatedAgent = await transactionClient.agent.update({
         where: { userId: agentId },
         data: {
@@ -710,7 +599,7 @@ const verifyOTP = async (email: string, otp: number) => {
 
 const forgotPassword = async (email: string) => {
   const user = await prisma.user.findUnique({
-    where: { email, isDeleted: false },
+    where: { email, status: UserStatus.ACTIVE },
   });
 
   if (!user) {
@@ -737,7 +626,7 @@ const forgotPassword = async (email: string) => {
 
 const resetPassword = async (email: string, otp: number, newPassword: string) => {
   const user = await prisma.user.findUnique({
-    where: { email, isDeleted: false },
+    where: { email, status: UserStatus.ACTIVE },
   });
 
   if (!user) {
@@ -895,7 +784,7 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
   const targetUser = await prisma.user.findUnique({
     where: {
       id: user.id,
-      isDeleted: false,
+      status: UserStatus.ACTIVE,
       role: UserRole.agent, // Ensure the user is an agent
     },
     include: {
@@ -936,7 +825,6 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
           id: true,
           status: true,
           skills: true,
-          isAvailable: true,
           successCalls: true,
           droppedCalls: true,
         },
@@ -950,7 +838,7 @@ const getSingleUserByIdFromDB = async (userId: string) => {
   const user = await prisma.user.findFirst({
     where: {
       id: userId,
-      isDeleted: false,
+      status: UserStatus.ACTIVE
     },
     include: {
       Agent: {
@@ -959,21 +847,11 @@ const getSingleUserByIdFromDB = async (userId: string) => {
           userId: true,
           status: true,
           sip_address: true,
-          dateOfBirth: true,
-          gender: true,
-          address: true,
-          emergencyPhone: true,
-          ssn: true,
           skills: true,
           employeeId: true,
-          isAvailable: true,
           assignTo: true,
-          jobTitle: true,
-          employmentType: true,
-          department: true,
           workEndTime: true,
           workStartTime: true,
-          startWorkDateTime: true,
           successCalls: true,
           droppedCalls: true,
           createdAt: true,
@@ -993,7 +871,7 @@ const getSingleUserByIdFromDB = async (userId: string) => {
   return rest;
 };
 
-const updateUserRoleStatusByAdminIntoDB = async (
+const updateUserStatusByAdminIntoDB = async (
   authUser: User,
   user_id: string,
   payload: Partial<User>
@@ -1006,15 +884,12 @@ const updateUserRoleStatusByAdminIntoDB = async (
     throw new ApiError(status.NOT_FOUND, "User not found!");
   }
 
-  const { role, status: UserCurrentStatus, isDeleted } = payload;
+  const { status: UserCurrentStatus } = payload;
 
   const updatedData: Partial<User> = {};
 
   if (authUser.role === UserRole.super_admin) {
-    updatedData.role = role;
-    updatedData.status =
-      isDeleted === true ? UserStatus.DELETED : UserCurrentStatus;
-    updatedData.isDeleted = isDeleted;
+    updatedData.status = UserCurrentStatus
   }
 
   const updatedUser = await prisma.user.update({
@@ -1037,7 +912,7 @@ export const UserService = {
   updateUserIntoDB,
   updateAgentInfo,
   getSingleUserByIdFromDB,
-  updateUserRoleStatusByAdminIntoDB,
+  updateUserStatusByAdminIntoDB,
   forgotPassword,
   resetPassword,
 };

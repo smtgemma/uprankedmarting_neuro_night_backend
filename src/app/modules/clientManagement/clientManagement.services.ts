@@ -76,7 +76,6 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
                   }
                 },
                 employeeId: true,
-                emergencyPhone: true,
               }
             }
           },

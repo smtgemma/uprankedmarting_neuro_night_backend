@@ -135,79 +135,43 @@ model Agent {
   sip_address  String?
   sip_username String?
   sip_password String?
-  skills String[] @default([])
-  employeeId  String  @unique
-  assignTo    String? @db.ObjectId
+  skills       String[] @default([])
+  employeeId   String  @unique
+  // Remove: assignTo     String[]    @default([]) @db.ObjectId
 
-  workEndTime       String?
-  workStartTime     String?
-
-  // dateOfBirth    DateTime
-  // gender         String
-  // address        String
-  // emergencyPhone String?  @unique
-  // ssn            String?  @unique
-  // startWorkDateTime DateTime?
-  // endWorkDateTime   DateTime?
-  // jobTitle       String
-  // employmentType employmentType
-  // department     String
-  // isAvailable Boolean @default(true)
-
+  workEndTime   String?
+  workStartTime String?
 
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
-  // Timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt //later should be required
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user           User            @relation(fields: [userId], references: [id])
-  organization   Organization?   @relation(fields: [assignTo], references: [id])
+  user           User              @relation(fields: [userId], references: [id])
+  // Remove: organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
-
-  assignments AgentAssignment[]
+  assignments    AgentAssignment[] // This is all you need!
 
   @@map("agents")
 }
 
+
 enum AssignmentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REMOVAL_REQUESTED
+  ASSIGNED
+  REMOVED
 }
 
-// model AgentAssignment {
-//   id             String           @id @default(auto()) @map("_id") @db.ObjectId
-//   agentUserId    String           @db.ObjectId
-//   organizationId String           @db.ObjectId
-//   status         AssignmentStatus @default(PENDING)
-//   assignedBy     String?          @db.ObjectId
-//   assignedAt     DateTime         @default(now())
-//   // approvedAt     DateTime?
-//   // rejectedAt     DateTime?
-//   // reason         String?
-
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-
-//   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
-//   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-//   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
-// }
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
   agentUserId    String           @db.ObjectId
   organizationId String           @db.ObjectId
-  status         AssignmentStatus @default(PENDING)
+  status         AssignmentStatus @default(ASSIGNED)
   assignedBy     String?          @db.ObjectId
   assignedAt     DateTime         @default(now())
-  approvedAt     DateTime?
-  rejectedAt     DateTime?
-  reason         String?
+  removedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,7 +211,6 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   requestedPhoneNumber PhoneNumberRequest?
-  agents                Agent[]
   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions         Subscription[]
   documents             OrganizationDoc[]

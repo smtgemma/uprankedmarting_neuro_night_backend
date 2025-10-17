@@ -97,10 +97,10 @@ const updateAgentSpecificInfo = catchAsync(async (req, res) => {
   });
 });
 
-const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
+const updateUserStatusByAdminIntoDB = catchAsync(async (req, res) => {
   const authUser = req.user;
   const { userId } = req.params;
-  const result = await UserService.updateUserRoleStatusByAdminIntoDB(
+  const result = await UserService.updateUserStatusByAdminIntoDB(
     authUser as User,
     userId,
     req.body
@@ -108,7 +108,7 @@ const updateUserRoleStatusByAdminIntoDB = catchAsync(async (req, res) => {
 
   sendResponse(res, {
     statusCode: status.OK,
-    message: "User role/status updated successfully!",
+    message: "User status updated successfully!",
     data: result,
   });
 });
@@ -144,7 +144,7 @@ export const UserController = {
   updateUser,
   getSingleUserById,
   updateAgentInfo,
-  updateUserRoleStatusByAdminIntoDB,
+  updateUserStatusByAdminIntoDB,
   forgotPassword,
   resetPassword,
 };

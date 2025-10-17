@@ -30,7 +30,6 @@ const auth = (...requiredRoles: UserRole[]) => {
         status: UserStatus.ACTIVE,
       },
     });
-
     // Checking if the user is exist
     if (!user) {
       throw new ApiError(status.NOT_FOUND, "User not found!");

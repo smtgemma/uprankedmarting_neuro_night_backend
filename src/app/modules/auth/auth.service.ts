@@ -8,7 +8,7 @@ import { hashPassword } from "../../helpers/hashPassword";
 import { RefreshPayload } from "./auth.interface";
 import { sendEmail } from "../../utils/sendEmail";
 import { generateOTPData } from "../../utils/otp";
-import { User, UserRole } from "@prisma/client";
+import { AssignmentStatus, User, UserRole, UserStatus } from "@prisma/client";
 
 const loginUser = async (email: string, password: string) => {
   const user = await prisma.user.findUnique({
@@ -18,6 +18,10 @@ const loginUser = async (email: string, password: string) => {
 
   if (!user) {
     throw new ApiError(status.NOT_FOUND, "User not found!");
+  }
+
+  if (user.status !== UserStatus.ACTIVE) {
+    throw new ApiError(status.NOT_FOUND, "User is banned!");
   }
 
   const isPasswordMatched = await passwordCompare(password, user.password);
@@ -107,18 +111,18 @@ const verifyOTP = async (
 
   const updateData = isVerification
     ? {
-        isVerified: true,
-        otp: null,
-        otpExpiresAt: null,
-        isResentOtp: false,
-      }
+      isVerified: true,
+      otp: null,
+      otpExpiresAt: null,
+      isResentOtp: false,
+    }
     : {
-        otp: null,
-        otpExpiresAt: null,
-        isResentOtp: false,
-        isResetPassword: false,
-        canResetPassword: false,
-      };
+      otp: null,
+      otpExpiresAt: null,
+      isResentOtp: false,
+      isResetPassword: false,
+      canResetPassword: false,
+    };
 
   const updatedUser = await prisma.user.update({
     where: { email },
@@ -365,7 +369,6 @@ const getMe = async (email: string) => {
   const user = await prisma.user.findFirst({
     where: {
       email: email,
-      isDeleted: false,
     },
     include: {
       Agent: {
@@ -376,23 +379,10 @@ const getMe = async (email: string) => {
           sip_address: true,
           sip_username: true,
           sip_password: true,
-          dateOfBirth: true,
-          gender: true,
-          address: true,
-          emergencyPhone: true,
-          ssn: true,
           skills: true,
           employeeId: true,
-          isAvailable: true,
-          assignTo: true,
-          organization: true,
-          jobTitle: true,
-          employmentType: true,
-          department: true,
           workEndTime: true,
           workStartTime: true,
-          startWorkDateTime: true,
-          endWorkDateTime: true,
           successCalls: true,
           droppedCalls: true,
           createdAt: true,
@@ -563,10 +553,11 @@ const getSingleUser = async (id: string, AuthUser: User) => {
       },
     });
   }
+
   const user = await prisma.user.findFirst({
     where: {
       id,
-      isDeleted: false,
+      status: UserStatus.ACTIVE
     },
     include: {
       Agent: {
@@ -577,27 +568,29 @@ const getSingleUser = async (id: string, AuthUser: User) => {
           sip_address: true,
           sip_username: true,
           sip_password: true,
-          dateOfBirth: true,
-          gender: true,
-          address: true,
-          emergencyPhone: true,
-          ssn: true,
           skills: true,
           employeeId: true,
-          isAvailable: true,
-          assignTo: true,
-          organization: true,
-          jobTitle: true,
-          employmentType: true,
-          department: true,
           workEndTime: true,
           workStartTime: true,
-          startWorkDateTime: true,
-          endWorkDateTime: true,
           successCalls: true,
           droppedCalls: true,
           createdAt: true,
           updatedAt: true,
+          assignments: {
+            where: {
+              status: AssignmentStatus.ASSIGNED
+            },
+            select: {
+              organizationId: true,
+              assignedAt: true,
+              organization: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
+          }
         },
       },
       ownedOrganization: true,
@@ -610,16 +603,20 @@ const getSingleUser = async (id: string, AuthUser: User) => {
 
   let Agent = null;
   if (user.Agent) {
+    // Check if agent is assigned to the org admin's organization
+    const isOwnOrganization = user.Agent.assignments.some(
+      assignment => assignment.organizationId === org_admin_Info?.ownedOrganization?.id
+    );
+
     Agent = {
       ...user.Agent,
       sip_password: !user.Agent.sip_password
         ? "********"
         : AuthUser.role === UserRole.super_admin
-        ? user.Agent.sip_password
-        : AuthUser.role === UserRole.organization_admin &&
-          org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
-        ? user.Agent.sip_password
-        : "********",
+          ? user.Agent.sip_password
+          : AuthUser.role === UserRole.organization_admin && isOwnOrganization
+            ? user.Agent.sip_password
+            : "********",
     };
   }
 
@@ -654,10 +651,29 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
   const user = await prisma.user.findFirst({
     where: {
       id,
-      isDeleted: false,
+      status: UserStatus.ACTIVE
     },
     include: {
-      Agent: true,
+      Agent: {
+        include: {
+          assignments: {
+            where: {
+              status: AssignmentStatus.ASSIGNED
+            },
+            select: {
+              organizationId: true,
+              assignedAt: true,
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  industry: true
+                }
+              }
+            }
+          }
+        }
+      },
       ownedOrganization: true,
     },
   });
@@ -666,18 +682,26 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
     throw new ApiError(status.NOT_FOUND, "User not found");
   }
 
+  console.log("user", user);
+
   let Agent = null;
   if (user.Agent) {
+    // Check if agent is assigned to the org admin's organization
+    const isOwnOrganization = user.Agent.assignments.some(
+      assignment => assignment.organizationId === org_admin_Info?.ownedOrganization?.id
+    );
+
+    console.log("isOwnOrganization", isOwnOrganization);
+
     Agent = {
       ...user.Agent,
       sip_password: !user.Agent.sip_password
         ? "********"
         : AuthUser.role === UserRole.super_admin
-        ? user.Agent.sip_password
-        : AuthUser.role === UserRole.organization_admin &&
-          org_admin_Info?.ownedOrganization?.id === user.Agent.assignTo
-        ? user.Agent.sip_password
-        : "********",
+          ? user.Agent.sip_password
+          : AuthUser.role === UserRole.organization_admin && isOwnOrganization
+            ? user.Agent.sip_password
+            : "********",
     };
   }
 
@@ -685,7 +709,7 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
   let callStatistics = null;
   if (user?.Agent) {
     const [totalCallStats, totalSuccessStats, todayStats] = await Promise.all([
-      // Total  call statistics
+      // Total call statistics
       prisma.call.aggregate({
         where: {
           agentId: id,
@@ -721,13 +745,6 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
       }),
     ]);
 
-    // totalCalls: agent.callStatistics.totalCalls ?? 0,
-    // avgCallDuration: agent.callStatistics.avgCallDuration,
-    // todaySuccessCalls: agent.callStatistics.todaySuccessCalls,
-    // totalCallDuration: agent.callStatistics.totalCallDuration,
-    // totalSuccessCalls: agent.callStatistics.totalSuccessCalls,
-    // totalDropCalls: agent.callStatistics.droppedCalls ?? 0,
-
     callStatistics = {
       totalCalls: totalCallStats._count.id || 0,
       avgCallDuration: Math.round(
@@ -736,7 +753,6 @@ const getSingleAgentInfo = async (id: string, AuthUser: User) => {
       todaySuccessCalls: todayStats._count.id || 0,
       totalSuccessCalls: totalSuccessStats._count.id || 0,
       totalSuccessCallDuration: totalSuccessStats._sum.recording_duration || 0,
-      // todayAvgCallDuration: Math.round(todayStats._avg.recording_duration || 0),
     };
   }
 

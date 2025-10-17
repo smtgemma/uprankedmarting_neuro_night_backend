@@ -113,7 +113,6 @@ const getAllAgentFromDB = async (
             },
 
             skills: true,
-            isAvailable: true,
             status: true,
             assignTo: true,
             assignments: {
@@ -591,7 +590,7 @@ const getAllAgentForAdmin = async (
             skills: true,
             successCalls: true,
             droppedCalls: true,
-            isAvailable: true,
+           
             status: true,
             AgentFeedbacks: {
               select: {
@@ -680,7 +679,6 @@ const getAllAgentForAdmin = async (
         totalCalls: (agent?.successCalls || 0) + (agent?.droppedCalls || 0),
         successCalls: agent?.successCalls || 0,
         droppedCalls: agent?.droppedCalls || 0,
-        isAvailable: agent?.isAvailable ?? false,
         status: agent?.status || null,
         AgentFeedbacks: feedbacks,
         organization: agent?.organization || null,
@@ -1053,7 +1051,6 @@ const approveAssignment = async (
       where: { userId: agentUserId },
       data: {
         assignTo: organizationId,
-        isAvailable: true,
       },
     });
 
@@ -1128,7 +1125,6 @@ const rejectAssignment = async (
         where: { userId: assignment.agentUserId },
         data: {
           assignTo: null,
-          isAvailable: true,
         },
       });
     }
@@ -1285,7 +1281,6 @@ const approveAgentRemoval = async (userId: string, organizationId: string) => {
       where: { userId: assignment.agentUserId },
       data: {
         assignTo: null,
-        isAvailable: true,
       },
     });
 
@@ -1505,7 +1500,6 @@ const getApprovalRemovalRequestsForSuperAdmin = async (
       Agent: {
         id: request.agent.id,
         skills: request.agent.skills || [],
-        isAvailable: request.agent.isAvailable,
         status: request.agent.status,
         assignTo: request.agent.assignTo,
 
@@ -1630,7 +1624,6 @@ const getAgentAssignmentStatus = async (agentUserId: string) => {
     where: { userId: agentUserId },
     select: {
       assignTo: true,
-      isAvailable: true,
     },
   });
 
@@ -1640,7 +1633,6 @@ const getAgentAssignmentStatus = async (agentUserId: string) => {
 
   return {
     currentOrganization: agent.assignTo,
-    isAvailable: agent.isAvailable,
     assignmentHistory: assignments,
   };
 };
