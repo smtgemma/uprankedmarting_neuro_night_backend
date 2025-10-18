@@ -1,4 +1,4 @@
-import { SubscriptionStatus, UserRole } from "@prisma/client";
+import { AssignmentStatus, SubscriptionStatus, UserRole } from "@prisma/client";
 import prisma from "../../utils/prisma";
 const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
   const {
@@ -7,14 +7,14 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
     search,
     sortBy = "createdAt",
     sortOrder = "desc",
+    hasAgents, // "true" | "false" | undefined
   } = query;
 
   const where: any = {
     role: UserRole.organization_admin,
-    isDeleted: false,
   };
 
-  // Add search functionality
+  //  Add search filter
   if (search) {
     where.OR = [
       { name: { contains: search as string, mode: "insensitive" } },
@@ -23,6 +23,29 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
     ];
   }
 
+  //  STEP 1: Get all organization IDs that currently have ASSIGNED agents
+  const activeAssignedOrgIds = await prisma.agentAssignment.findMany({
+    where: { status: AssignmentStatus.ASSIGNED },
+    distinct: ["organizationId"],
+    select: { organizationId: true },
+  });
+
+  console.log("activeAssignedOrgIds", activeAssignedOrgIds);
+
+  const orgIdsWithAgents = activeAssignedOrgIds.map((a) => a.organizationId);
+
+  //  STEP 2: Filter users based on `hasAgents`
+  if (hasAgents === "true") {
+    where.ownedOrganization = {
+      id: { in: orgIdsWithAgents },
+    };
+  } else if (hasAgents === "false") {
+    where.ownedOrganization = {
+      id: { notIn: orgIdsWithAgents },
+    };
+  }
+
+  // STEP 3: Fetch users efficiently
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,
@@ -46,9 +69,7 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
             websiteLink: true,
             organizationNumber: true,
             subscriptions: {
-              where: {
-                status: SubscriptionStatus.ACTIVE,
-              },
+              where: { status: SubscriptionStatus.ACTIVE },
               select: {
                 id: true,
                 startDate: true,
@@ -60,36 +81,19 @@ const getAllOrganizationAdmin = async (query: Record<string, unknown>) => {
                 purchasedNumber: true,
                 numberOfAgents: true,
               },
-              orderBy: {
-                createdAt: "desc",
-              },
+              orderBy: { createdAt: "desc" },
             },
-            agents: {
-              select:{
-                id: true,
-                user:{
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    phone: true,
-                  }
-                },
-                employeeId: true,
-              }
-            }
           },
         },
       },
-      orderBy: {
-        [sortBy as string]: sortOrder,
-      },
+      orderBy: { [sortBy as string]: sortOrder },
       skip: (Number(page) - 1) * Number(limit),
       take: Number(limit),
     }),
     prisma.user.count({ where }),
   ]);
 
+  //  STEP 4: Return final structured response
   return {
     meta: {
       total,

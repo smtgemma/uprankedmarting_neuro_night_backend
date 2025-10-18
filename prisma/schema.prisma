@@ -335,7 +335,7 @@ model OrganizationDoc {
   docFor         DocFor  @default(AGENT)
   fileName       String? // cleaned name (without extension)
   cloudUrl       String? // Cloudinary secure URL
-  fileFormat     String? // pdf, docx, xlsx ইত্যাদি
+  fileFormat     String? // pdf, docx, xlsx 
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
