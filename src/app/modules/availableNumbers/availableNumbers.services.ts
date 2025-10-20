@@ -457,13 +457,14 @@ const updateRequestStatus = async (
 
 // ============ ORGANIZATION ADMIN SERVICES ============
 
+// ==========================================
+// 4. UPDATE: getAvailableNumbersForOrg
+// ==========================================
 const getAvailableNumbersForOrg = async (
   userId: string,
   query: Record<string, unknown>
 ) => {
-
-  console.log("getAvailableNumbersForOrg", userId, query)
-  // 1️ Find organization by userId
+  // 1️⃣ Find organization by userId
   const organization = await prisma.organization.findFirst({
     where: { ownerId: userId },
   });
@@ -478,13 +479,13 @@ const getAvailableNumbersForOrg = async (
 
   const searchableFields = ["phoneNumber", "friendlyName", "countryCode"];
 
-  // 2️ Build Prisma `where` condition dynamically
+  // 2️⃣ Build Prisma `where` condition
   const where: any = {
     OR: [
-      // Unpinned and unpurchased numbers
+      // Unpinned and unpurchased numbers (available for all)
       { isPinned: false, isPurchased: false },
-      // Pinned numbers of this organization
-      { isPinned: true, purchasedByOrganizationId: organization.id },
+      // Numbers pinned/requested by THIS organization
+      { isPinned: true, requestedByOrgId: organization.id },
     ],
   };
 
@@ -510,7 +511,7 @@ const getAvailableNumbersForOrg = async (
     };
   }
 
-  // 3️ Fetch data from Prisma directly (pinned first)
+  // 3️⃣ Fetch data with correct includes
   const data = await prisma.availableTwilioNumber.findMany({
     where,
     orderBy: [
@@ -519,9 +520,13 @@ const getAvailableNumbersForOrg = async (
     ],
     skip,
     take,
+    include: {
+      requestedByOrg: true, // Organization that requested/pinned
+      purchasedByOrg: true, // Organization that purchased (if any)
+    },
   });
 
-  // 4️ Count total for pagination
+  // 4️⃣ Count total
   const total = await prisma.availableTwilioNumber.count({ where });
 
   return {
