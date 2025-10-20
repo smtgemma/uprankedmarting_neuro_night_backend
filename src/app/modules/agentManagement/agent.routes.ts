@@ -155,4 +155,10 @@ router.delete(
   AgentAssignmentController.removeAgentFromOrganization
 );
 
+router.get(
+  '/ai-agents',
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AgentAssignmentController.getAIAgents
+);
+
 export const AssignmentRoutes = router;

@@ -1,4 +1,4 @@
-import { AgentFeedback, User, UserRole } from "@prisma/client";
+import { AgentFeedback, AssignmentStatus, User, UserRole } from "@prisma/client";
 import QueryBuilder from "../../../builder/QueryBuilder";
 import prisma from "../../../utils/prisma";
 import AppError from "../../../errors/AppError";
@@ -7,60 +7,54 @@ import status from "http-status";
 const createAgentFeedback = async (
   data: { rating: number; feedbackText?: string },
   userId: string,
-  agentId: string
-): Promise<AgentFeedback> => {
-  // console.log("Agent ID:", agentId , "clientId", userId)
-  const checkAgentFeedback = await prisma.agentFeedback.findFirst({
-    where: {
-      agentId: agentId,
+  agentUserId: string
+) => {
+  // Step 1: Prevent duplicate feedback
+  const existingFeedback = await prisma.agentFeedback.findFirst({
+    where: { agentUserId, clientId: userId },
+  });
+
+  if (existingFeedback) {
+    throw new AppError(status.BAD_REQUEST, "You have already given feedback for this agent.");
+  }
+
+  // Step 2: Check if the agent is assigned to the user's organization
+  const org = await prisma.organization.findFirst({
+    where: { ownerId: userId },
+    include: {
+      AgentAssignment: {
+        where: {
+          agentUserId,
+          status: AssignmentStatus.ASSIGNED,
+        },
+        select: { agentUserId: true },
+      },
+    },
+  });
+
+  if (!org) {
+    throw new AppError(status.BAD_REQUEST, "No organization found for this user.");
+  }
+
+  const isAgentAssigned = org.AgentAssignment.length > 0;
+
+  if (!isAgentAssigned) {
+    throw new AppError(status.BAD_REQUEST, "This agent is not assigned to your organization.");
+  }
+
+  // Step 3: Create feedback
+  const feedback = await prisma.agentFeedback.create({
+    data: {
+      rating: data.rating,
+      feedbackText: data.feedbackText,
+      agentUserId,
       clientId: userId,
     },
   });
 
-  if (checkAgentFeedback) {
-    throw new AppError(status.BAD_REQUEST, "Agent feedback already exists!");
-  }
-
-  const checkisAgentAssignToMyOrganization =
-    await prisma.organization.findFirst({
-      where: {
-        ownerId: userId,
-      },
-      include: {
-        agents: {
-          select: {
-            id: true,
-            userId: true
-          },
-        },
-      },
-    });
-
-  const isAgentInOrg = checkisAgentAssignToMyOrganization?.agents?.some(
-    (agent) => agent.userId.toString() === agentId
-  );
-
-  if (!isAgentInOrg) {
-    console.log("Agent not found in this organization:", agentId);
-    throw new AppError(
-      status.BAD_REQUEST,
-      "Agent is not assigned to your organization!"
-    );
-  }
-
-  const serviceData = {
-    rating: data.rating,
-    feedbackText: data.feedbackText,
-    agentId: agentId,
-    clientId: userId,
-  };
-  // console.log("serviceData", serviceData)
-
-  const result = await prisma.agentFeedback.create({
-    data: serviceData,
-  });
-  return result;
+  return feedback;
 };
+
 
 const getAllAgentFeedbacks = async (
   query: Record<string, unknown>,

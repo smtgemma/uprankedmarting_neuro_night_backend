@@ -489,7 +489,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     let updatedUser = targetUser;
     let updatedAgent = targetUser?.Agent;
 
-    console.log("userData", userData);
+    // console.log("userData", userData);
     // Update user data if provided
     if (userData) {
       // ===== Check for existing user =====
@@ -532,14 +532,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
         where: { userId: agentId },
         data: {
           ...agentData,
-          emergencyPhone: agentData.emergencyPhone,
-          ssn: agentData.ssn,
-          skills: agentData.skills,
-          dateOfBirth: parseAnyDate(agentData?.dateOfBirth),
-          startWorkDateTime: parseAnyDate(agentData?.startWorkDateTime),
-          endWorkDateTime: agentData?.endWorkDateTime
-            ? parseAnyDate(agentData.endWorkDateTime)
-            : null,
+          skills: agentData.skills
         },
       });
     }
@@ -849,7 +842,6 @@ const getSingleUserByIdFromDB = async (userId: string) => {
           sip_address: true,
           skills: true,
           employeeId: true,
-          assignTo: true,
           workEndTime: true,
           workStartTime: true,
           successCalls: true,

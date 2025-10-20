@@ -122,29 +122,6 @@
 //   });
 // });
 
-// const getAllAgentForAdmin = catchAsync(async (req, res) => {
-//   const options = pickOptions(req.query, [
-//     "limit",
-//     "page",
-//     "sortBy",
-//     "sortOrder",
-//   ]);
-//   const filters = pickOptions(req.query, [
-//     "searchTerm",
-//     "isAvailable",
-//     "status",
-//     "viewType",
-//     "startDate",
-//     "endDate",
-//   ]);
-//   const result = await AssignmentService.getAllAgentForAdmin(options, filters);
-
-//   sendResponse(res, {
-//     statusCode: status.OK,
-//     message: "Agents are retrieved successfully!",
-//     data: result,
-//   });
-// });
 // // removal request
 // const requestAgentRemoval = catchAsync(async (req: Request, res: Response) => {
 //   const { userId } = req.params;
@@ -310,6 +287,7 @@ import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { AgentAssignmentService } from "./agent.services";
 import pickOptions from "../../utils/pick";
+import { User } from "@prisma/client";
 
 // ============ 1. GET ALL AGENTS WITH FILTERS ============
 
@@ -386,8 +364,23 @@ const removeAgentFromOrganization = catchAsync(
   }
 );
 
+
+
+const getAIAgents = catchAsync(async (req: Request, res: Response) => {
+  const result = await AgentAssignmentService.getAIAgentIdsByOrganizationAdmin(
+    req.user as User
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "AI Agents retrieved successfully!",
+    data: result,
+  });
+});
+
 export const AgentAssignmentController = {
   getAllAgents,
+  getAIAgents,
   getAgentsByOrganization,
   assignAgentToOrganization,
   removeAgentFromOrganization,

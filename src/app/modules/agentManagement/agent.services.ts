@@ -1694,7 +1694,7 @@
 
 import AppError from "../../errors/AppError";
 import status from "http-status";
-import { AssignmentStatus } from "@prisma/client";
+import { AssignmentStatus, User } from "@prisma/client";
 import prisma from "../../utils/prisma";
 import { IPaginationOptions, paginationHelper } from "../../utils/paginationHelpers";
 
@@ -2097,8 +2097,93 @@ const removeAgentFromOrganization = async (payload: {
   return result;
 };
 
+
+const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
+  try {
+    const org = await prisma.organization.findFirst({
+      where: {
+        ownerId: user?.id,
+      },
+      select: { id: true, name: true },
+    });
+
+    // console.log("Organization:", org);
+
+    if (!org) {
+      throw new Error("Organization not found for this user!");
+    }
+
+    // 2. Use Prisma query (not raw) since we know the data exists
+    const aiAgent = await prisma.aiagents.findFirst({
+      where: {
+        organizationId: org.id,
+      },
+      select: {
+        agentId: true,
+        organizationId: true,
+      },
+    });
+
+    // console.log("AI Agent found with Prisma:", aiAgent);
+
+    // 3. If Prisma query doesn't work, fall back to raw query
+    if (!aiAgent) {
+      console.log("Prisma query failed, trying raw MongoDB query...");
+
+      const rawResult = await prisma.$runCommandRaw({
+        find: "aiagents",
+        filter: {
+          organizationId: org.id,
+        },
+      });
+
+      // console.log("Raw MongoDB result:", rawResult);
+
+      return {
+        organization: org,
+        aiAgents: rawResult.documents || [],
+        source: "raw",
+      };
+    }
+
+    return {
+      aiAgents: aiAgent ? [aiAgent] : [], // Return as array for consistency
+    };
+  } catch (error) {
+    console.error("Error in getAIAgentIdsByOrganizationAdmin:", error);
+
+    // Fallback to raw query if Prisma fails
+    try {
+      const org = await prisma.organization.findFirst({
+        where: {
+          ownerId: user?.id,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (org) {
+        const rawResult = await prisma.$runCommandRaw({
+          find: "aiagents",
+          filter: {
+            organizationId: org.id,
+          },
+        });
+
+        return {
+          aiAgents: rawResult.documents || [],
+        };
+      }
+    } catch (fallbackError) {
+      console.error("Fallback query also failed:", fallbackError);
+    }
+
+    throw error;
+  }
+};
+
 export const AgentAssignmentService = {
   getAllAgents,
+  getAIAgentIdsByOrganizationAdmin,
   getAgentsByOrganization,
   assignAgentToOrganization,
   removeAgentFromOrganization,
