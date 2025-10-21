@@ -150,6 +150,10 @@ const getSingleServiceFeedback = async (
       },
     },
   });
+
+  if (!result) {
+    throw new AppError(status.NOT_FOUND, "Service feedback not found!");
+  }
   return result;
 };
 

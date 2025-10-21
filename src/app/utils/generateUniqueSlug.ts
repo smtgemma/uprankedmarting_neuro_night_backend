@@ -1,10 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
-const cleanString = (text: string): string => {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
-};
 
 const extractUsernameFromEmail = (email: string): string => {
   const match = email.match(/^([^@]+)/); // @ এর আগের অংশ
@@ -19,7 +14,7 @@ export const generateUniqueUsernameFromEmail = async (
   const baseId = extractUsernameFromEmail(email); // first portion of email
   let uniqueId = baseId;
 
-  // ✅ random number (1000 - 9999)
+  //  random number (1000 - 9999)
   const randomNum = Math.floor(1000 + Math.random() * 90000);
 
   uniqueId = `${baseId}${randomNum}`;

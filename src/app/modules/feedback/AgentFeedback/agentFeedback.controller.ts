@@ -6,11 +6,11 @@ import { User } from "@prisma/client";
 
 const createAgentFeedback = catchAsync(async (req, res) => {
   const userId = req.user.id as string;
-  const { agentId } = req.params;
+  const { agentUserId } = req.params;
   const result = await AgentFeedbackServices.createAgentFeedback(
     req.body,
     userId, 
-    agentId as string
+    agentUserId as string
   );
   sendResponse(res, {
     statusCode: status.CREATED,

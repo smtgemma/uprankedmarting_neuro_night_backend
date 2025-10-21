@@ -3,8 +3,6 @@ import status from "http-status";
 import { ClientManagementServices } from "./clientManagement.services";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
-import pickOptions from "../../utils/pick";
-import { User } from "@prisma/client";
 
 const getAllOrganizationAdmins = catchAsync(
   async (req: Request, res: Response) => {

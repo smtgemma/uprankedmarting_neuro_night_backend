@@ -14,11 +14,6 @@ enum UserRole {
   super_admin
 }
 
-enum UserStatus {
-  ACTIVE
-  BLOCKED
-  DELETED
-}
 
 enum PlanLevel {
   only_real_agent
@@ -71,6 +66,12 @@ enum Status {
   FAILED
 }
 
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
 // ============ MODELS ============
 model User {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
@@ -80,7 +81,6 @@ model User {
   image     String? @default("")
   bio       String? @default("")
   phone     String  @unique
-  isDeleted Boolean @default(false)
 
   passwordChangedAt DateTime?
   isVerified        Boolean   @default(false)
@@ -135,63 +135,43 @@ model Agent {
   sip_address  String?
   sip_username String?
   sip_password String?
+  skills       String[] @default([])
+  employeeId   String  @unique
+  // Remove: assignTo     String[]    @default([]) @db.ObjectId
 
-  dateOfBirth    DateTime
-  gender         String
-  address        String
-  emergencyPhone String?  @unique
-  ssn            String?  @unique
-
-  skills String[] @default([])
-
-  employeeId  String  @unique
-  isAvailable Boolean @default(true)
-  assignTo    String? @db.ObjectId
-
-  jobTitle       String
-  employmentType employmentType
-  department     String
-
-  workEndTime       String?
-  workStartTime     String?
-  startWorkDateTime DateTime?
-  endWorkDateTime   DateTime?
+  workEndTime   String?
+  workStartTime String?
 
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
-  // Timestamps
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt //later should be required
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user           User            @relation(fields: [userId], references: [id])
-  organization   Organization?   @relation(fields: [assignTo], references: [id])
+  user           User              @relation(fields: [userId], references: [id])
+  // Remove: organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
-
-  assignments AgentAssignment[]
+  assignments    AgentAssignment[] // This is all you need!
 
   @@map("agents")
 }
 
+
 enum AssignmentStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  REMOVAL_REQUESTED
+  ASSIGNED
+  REMOVED
 }
 
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
   agentUserId    String           @db.ObjectId
   organizationId String           @db.ObjectId
-  status         AssignmentStatus @default(PENDING)
+  status         AssignmentStatus @default(ASSIGNED)
   assignedBy     String?          @db.ObjectId
   assignedAt     DateTime         @default(now())
-  approvedAt     DateTime?
-  rejectedAt     DateTime?
-  reason         String?
+  removedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -199,7 +179,54 @@ model AgentAssignment {
   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
+
+  @@unique([agentUserId, organizationId])
+  @@map("agent_assignments")
 }
+
+// model Organization {
+//   id String @id @default(auto()) @map("_id") @db.ObjectId
+
+//   name               String
+//   industry           String?
+//   address            String?
+//   websiteLink        String?
+//   organizationNumber String?
+//   ownerId            String? @unique @db.ObjectId
+
+//   agentVoiceUrl String?
+//   leadQuestions String[] @default([])
+
+//   googleSheetsSpreadsheetId String?
+//   googleSheetsCredentials   Json?
+//   lastSyncedAt              DateTime?
+
+//   // HubSpot integration fields
+//   hubspotAccessToken  String?
+//   hubspotRefreshToken String?
+//   hubspotExpiresAt    DateTime?
+//   lastHubSpotSyncedAt DateTime?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   requestedPhoneNumber PhoneNumberRequest?
+//   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
+//   subscriptions         Subscription[]
+//   documents             OrganizationDoc[]
+//   calls                 Call[]
+//   tools                 ToolIntegration[]
+//   availableTwilioNumber AvailableTwilioNumber[]
+//   voice                 UploadVoice?
+//   AiknowledgeBase       AiknowledgeBase[]
+//   AgentAssignment       AgentAssignment[]
+//   questions             Question[]
+//   qaPairs               QaPair[]
+
+//   aiagent aiagents?
+
+//   @@map("organizations")
+// }
 
 model Organization {
   id String @id @default(auto()) @map("_id") @db.ObjectId
@@ -208,7 +235,7 @@ model Organization {
   industry           String?
   address            String?
   websiteLink        String?
-  organizationNumber String?
+  organizationNumber String? @unique
   ownerId            String? @unique @db.ObjectId
 
   agentVoiceUrl String?
@@ -218,7 +245,6 @@ model Organization {
   googleSheetsCredentials   Json?
   lastSyncedAt              DateTime?
 
-  // HubSpot integration fields
   hubspotAccessToken  String?
   hubspotRefreshToken String?
   hubspotExpiresAt    DateTime?
@@ -227,23 +253,83 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agents                Agent[]
-  ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
-  subscriptions         Subscription[]
-  documents             OrganizationDoc[]
-  calls                 Call[]
-  tools                 ToolIntegration[]
-  availableTwilioNumber AvailableTwilioNumber[]
-  voice                 UploadVoice?
-  AiknowledgeBase       AiknowledgeBase[]
-  AgentAssignment       AgentAssignment[]
-  questions             Question[]
-  qaPairs               QaPair[]
-
-  aiagent aiagents?
+  // Relations
+  requestedPhoneNumber   PhoneNumberRequest?
+  ownedOrganization      User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
+  subscriptions          Subscription[]
+  documents              OrganizationDoc[]
+  calls                  Call[]
+  tools                  ToolIntegration[]
+  
+  // Twilio Numbers - split into requested (pinned) and purchased
+  requestedTwilioNumbers AvailableTwilioNumber[] @relation("RequestedNumbers")
+  purchasedTwilioNumbers AvailableTwilioNumber[] @relation("PurchasedNumbers")
+  
+  voice                  UploadVoice?
+  AiknowledgeBase        AiknowledgeBase[]
+  AgentAssignment        AgentAssignment[]
+  questions              Question[]
+  qaPairs                QaPair[]
+  aiagent                aiagents?
 
   @@map("organizations")
 }
+
+model AvailableTwilioNumber {
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  sid          String?
+  phoneNumber  String  @unique
+  friendlyName String
+
+  capabilities Json
+  beta         Boolean   @default(false)
+  countryCode  String    @default("US")
+  isPurchased  Boolean   @default(false)
+  isPinned     Boolean   @default(false)
+  purchasedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Organization that has pinned/requested this number (before purchase)
+  requestedByOrgId String?       @db.ObjectId
+  
+  // Organization that has purchased this number (after purchase)
+  purchasedByOrgId String?       @db.ObjectId
+  
+  // Relations
+  requestedByOrg   Organization? @relation(name: "RequestedNumbers", fields: [requestedByOrgId], references: [id])
+  purchasedByOrg   Organization? @relation(name: "PurchasedNumbers", fields: [purchasedByOrgId], references: [id])
+
+  @@map("available_twilio_numbers")
+}
+
+// model AvailableTwilioNumber {
+//   id           String  @id @default(auto()) @map("_id") @db.ObjectId
+//   sid          String?
+//   phoneNumber  String  @unique
+//   friendlyName String
+
+//   capabilities Json
+//   beta         Boolean   @default(false)
+//   countryCode  String    @default("US")
+//   isPurchased  Boolean   @default(false)
+//   isPinned     Boolean   @default(false)
+//   purchasedAt  DateTime?
+//   createdAt    DateTime  @default(now())
+//   updatedAt    DateTime  @updatedAt
+
+//   // PhoneNumberRequest        PhoneNumberRequest?
+//   // // requestedByUserId         String?             @db.ObjectId
+//   purchasedByOrganizationId String?             @db.ObjectId
+//   organization              Organization?       @relation(fields: [purchasedByOrganizationId], references: [id])
+
+//   // // Minimal field for organization request tracking
+//   // requestedByOrgId String?       @db.ObjectId
+//   // organization     Organization? @relation(fields: [requestedByOrgId], references: [id])
+
+
+//   @@map("available_twilio_numbers")
+// }
 
 model aiagents {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
@@ -352,7 +438,7 @@ model OrganizationDoc {
   docFor         DocFor  @default(AGENT)
   fileName       String? // cleaned name (without extension)
   cloudUrl       String? // Cloudinary secure URL
-  fileFormat     String? // pdf, docx, xlsx ইত্যাদি
+  fileFormat     String? // pdf, docx, xlsx 
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -422,7 +508,7 @@ model ServiceFeedback {
 model AgentFeedback {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  agentId      String  @db.ObjectId
+  agentUserId      String  @db.ObjectId
   clientId     String  @db.ObjectId
   rating       Int
   feedbackText String?
@@ -430,11 +516,11 @@ model AgentFeedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agent  Agent @relation(fields: [agentId], references: [userId], onDelete: Cascade)
+  agent  Agent @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   // Add composite unique constraint instead
-  @@unique([agentId, clientId])
+  @@unique([agentUserId, clientId])
   @@map("agent_feedbacks")
 }
 
@@ -452,25 +538,6 @@ model ToolIntegration {
   @@map("tool_integrations")
 }
 
-model AvailableTwilioNumber {
-  id           String  @id @default(auto()) @map("_id") @db.ObjectId
-  sid          String?
-  phoneNumber  String  @unique
-  friendlyName String
-
-  capabilities Json
-  beta         Boolean   @default(false)
-  countryCode  String    @default("US")
-  isPurchased  Boolean   @default(false)
-  purchasedAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  purchasedByOrganizationId String?       @db.ObjectId
-  organization              Organization? @relation(fields: [purchasedByOrganizationId], references: [id])
-
-  @@map("available_twilio_numbers")
-}
 
 model Question {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -486,7 +553,6 @@ model Question {
   @@map("questions")
 }
 
-
 model QaPair {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   org_id   String @db.ObjectId
@@ -500,4 +566,37 @@ model QaPair {
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")
+}
+
+enum PhoneNumberRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+}
+model PhoneNumberRequest {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String?       @unique @db.ObjectId
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  requesterName  String
+  message        String?
+
+  requestedPhonePattern String?
+  status                PhoneNumberRequestStatus @default(PENDING)
+
+  // assignedNumberId String?                @unique @db.ObjectId
+  // assignedNumber   AvailableTwilioNumber? @relation(fields: [assignedNumberId], references: [id])
+
+  // requesterEmail String
+  // requesterPhone String?
+  // rejectionReason String?
+  // approvedAt      DateTime?
+  // rejectedAt      DateTime?
+  // assignedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("phone_number_requests")
 }

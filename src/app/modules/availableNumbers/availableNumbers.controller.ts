@@ -57,39 +57,100 @@ const getSingleTwilioPhoneNumber = catchAsync(
   }
 );
 
-const updateTwilioPhoneNumber = catchAsync(
-  async (req: Request, res: Response) => {
-    const { sid } = req.params;
-    const result = await TwilioPhoneNumberService.updateTwilioPhoneNumberIntoDB(
-      sid,
-      req.body
-    );
+// ============ SUPER ADMIN CONTROLLERS ============
 
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Twilio phone number updated successfully!",
-      data: result,
-    });
-  }
-);
+const getAllNumbersForAdmin = catchAsync(async (req: Request, res: Response) => {
+  const result = await TwilioPhoneNumberService.getAllNumbersForAdmin(req.query);
 
-const deleteTwilioPhoneNumber = catchAsync(
-  async (req: Request, res: Response) => {
-    const { sid } = req.params;
-    await TwilioPhoneNumberService.deleteTwilioPhoneNumberFromDB(sid);
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "All phone numbers retrieved successfully!",
+    meta: result.meta,
+    data: result.data,
+  });
+});
 
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Twilio phone number deleted successfully!",
-    });
-  }
-);
+const getAllPhoneNumberRequests = catchAsync(async (req: Request, res: Response) => {
+  const result = await TwilioPhoneNumberService.getAllPhoneNumberRequests(req.query);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Phone number requests retrieved successfully!",
+    meta: result.meta,
+    data: result.data,
+  });
+});
+
+const updateRequestStatus = catchAsync(async (req: Request, res: Response) => {
+  const result = await TwilioPhoneNumberService.updateRequestStatus(
+    req.params.id,
+    req.body
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Request status updated successfully!",
+    data: result,
+  });
+});
+
+const togglePinNumber = catchAsync(async (req: Request, res: Response) => {
+  const result = await TwilioPhoneNumberService.togglePinNumber(
+    req.params.id,
+    req.body
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: `Phone number ${result.isPinned ? 'pinned' : 'unpinned'} successfully!`,
+    data: result,
+  });
+});
+
+// ============ ORGANIZATION ADMIN CONTROLLERS ============
+
+const getAvailableNumbersForOrg = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const result = await TwilioPhoneNumberService.getAvailableNumbersForOrg(
+    userId,
+    req.query
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Available phone numbers retrieved successfully!",
+    data: result,
+  });
+});
+
+const requestPhoneNumber = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const result = await TwilioPhoneNumberService.requestPhoneNumber(
+    userId,
+    req.body
+  );
+
+  sendResponse(res, {
+    statusCode: status.CREATED,
+    message: "Phone number request submitted successfully!",
+    data: result,
+  });
+});
+
 
 export const TwilioPhoneNumberController = {
+  // Super Admin
+  getAllNumbersForAdmin,
+  getAllPhoneNumberRequests,
+  updateRequestStatus,
+  togglePinNumber,
+  
+  // Organization Admin
+  getAvailableNumbersForOrg,
+  requestPhoneNumber,
+
   createTwilioPhoneNumber,
   getAllTwilioPhoneNumbers,
   getSingleTwilioPhoneNumber,
-  updateTwilioPhoneNumber,
-  deleteTwilioPhoneNumber,
   fetchAndStoreAvailableNumbers,
 };
