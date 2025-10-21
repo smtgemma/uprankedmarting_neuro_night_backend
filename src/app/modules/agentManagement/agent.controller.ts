@@ -378,7 +378,74 @@ const getAIAgents = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
+const getUserAssignedQuestions = catchAsync(async (req: Request, res: Response) => {
+   const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const result = await AgentAssignmentService.getQuestionsByUserAssignments(
+    req.user.id as string,
+    options,
+    req.query
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Questions retrieved successfully for your assigned organizations!",
+    data: result,
+  });
+});
+
+const getQuestionsByOrgNumber = catchAsync(async (req: Request, res: Response) => {
+  const { organizationNumber } = req.params;
+  const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const result = await AgentAssignmentService.getQuestionsByOrgNumber(
+    organizationNumber,
+    options,
+    req.query
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Questions retrieved successfully for organization!",
+    data: result,
+  });
+});
+
+const getAllOrgQuestions = catchAsync(async (req: Request, res: Response) => {
+  const { organizationId } = req.params;
+ const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const result = await AgentAssignmentService.getAllOrgQuestions(
+    organizationId,
+    req.user.id ,
+    options,
+    req.query
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "All organization questions retrieved successfully!",
+    data: result,
+  });
+});
+
 export const AgentAssignmentController = {
+  getUserAssignedQuestions,
+  getQuestionsByOrgNumber,
+  getAllOrgQuestions,
   getAllAgents,
   getAIAgents,
   getAgentsByOrganization,

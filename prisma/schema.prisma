@@ -235,7 +235,7 @@ model Organization {
   industry           String?
   address            String?
   websiteLink        String?
-  organizationNumber String?
+  organizationNumber String? @unique
   ownerId            String? @unique @db.ObjectId
 
   agentVoiceUrl String?

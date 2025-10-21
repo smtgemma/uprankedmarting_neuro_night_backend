@@ -161,4 +161,28 @@ router.get(
   AgentAssignmentController.getAIAgents
 );
 
+
+
+// ============ MAIN ROUTES ============
+
+// 1. Get questions for user's assigned organizations (Agent Dashboard)
+router.get(
+  "/my-questions",
+  auth(UserRole.agent),
+  AgentAssignmentController.getUserAssignedQuestions
+);
+
+// 2. Get questions by organization number
+router.get(
+  "/organization/:organizationNumber/questions",
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AgentAssignmentController.getQuestionsByOrgNumber
+);
+
+// 3. Get all questions for organization (Admin view)
+router.get(
+  "/organization/:organizationId/all",
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AgentAssignmentController.getAllOrgQuestions
+);
 export const AssignmentRoutes = router;

@@ -590,7 +590,7 @@
 //             skills: true,
 //             successCalls: true,
 //             droppedCalls: true,
-           
+
 //             status: true,
 //             AgentFeedbacks: {
 //               select: {
@@ -1703,7 +1703,7 @@ import { IPaginationOptions, paginationHelper } from "../../utils/paginationHelp
 const getAllAgents = async (query: Record<string, unknown>, options: IPaginationOptions) => {
   const searchTerm = query?.searchTerm as string;
 
-  const {page, limit, skip, sortBy, sortOrder} = paginationHelper.calculatePagination(options)
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options)
 
   const whereConditions: any = {};
 
@@ -2181,7 +2181,268 @@ const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
   }
 };
 
+
+// Get questions for all organizations agent is assigned to
+const getQuestionsByUserAssignments = async (
+  userId: string,
+  options: IPaginationOptions,
+  query: Record<string, unknown>
+) => {
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+
+  // Step 1: Get all organizations this agent is assigned to
+  const agentAssignments = await prisma.agentAssignment.findMany({
+    where: {
+      agentUserId: userId,
+      status: AssignmentStatus.ASSIGNED,
+    },
+    select: {
+      organizationId: true,
+    },
+  });
+
+  const organizationIds = agentAssignments.map(assignment => assignment.organizationId);
+
+  if (organizationIds.length === 0) {
+    return {
+      meta: { page, limit, total: 0, totalPages: 0 },
+      data: [],
+    };
+  }
+
+  // Step 2: Get questions from assigned organizations
+  const whereConditions: any = {
+    org_id: {
+      in: organizationIds,
+    },
+  };
+
+  // Search functionality
+  const searchTerm = query?.searchTerm as string;
+  if (searchTerm) {
+    whereConditions.OR = [
+      {
+        question_text: {
+          contains: searchTerm,
+          mode: "insensitive"
+        }
+      },
+      {
+        question_keywords: {
+          hasSome: [searchTerm]
+        }
+      },
+    ];
+  }
+
+  // Get total count
+  const total = await prisma.question.count({
+    where: whereConditions,
+  });
+
+  // Get questions with pagination
+  const questions = await prisma.question.findMany({
+    where: whereConditions,
+    include: {
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          organizationNumber: true,
+        },
+      },
+    },
+    skip,
+    take: limit,
+    orderBy: {
+      [sortBy]: sortOrder,
+    },
+  });
+
+  const meta = {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+
+  return {
+    meta,
+    data: questions,
+  };
+};
+
+// Get questions by organization number
+const getQuestionsByOrgNumber = async (
+  organizationNumber: string,
+  options: IPaginationOptions,
+  query: Record<string, unknown>
+) => {
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+
+  const organization = await prisma.organization.findFirst({
+    where: { organizationNumber: organizationNumber}
+  });
+
+
+  if (!organization) {
+    throw new AppError(status.NOT_FOUND, 'Organization not found');
+  }
+
+  // Step 2: Get questions for this organization
+  const whereConditions: any = {
+    org_id: organization.id,
+  };
+
+  // Search functionality
+  const searchTerm = query?.searchTerm as string;
+  if (searchTerm) {
+    whereConditions.OR = [
+      {
+        question_text: {
+          contains: searchTerm,
+          mode: "insensitive"
+        }
+      },
+      {
+        question_keywords: {
+          hasSome: [searchTerm]
+        }
+      },
+    ];
+  }
+
+  // Get total count
+  const total = await prisma.question.count({
+    where: whereConditions,
+  });
+
+  // Get questions with pagination
+  const questions = await prisma.question.findMany({
+    where: whereConditions,
+    include: {
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          organizationNumber: true,
+        },
+      },
+    },
+    skip,
+    take: limit,
+    orderBy: {
+      [sortBy]: sortOrder,
+    },
+  });
+
+  const meta = {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+
+  return {
+    meta,
+    data: questions,
+    organization: organization,
+  };
+};
+
+// Get all questions for specific organization ID (Admin view)
+const getAllOrgQuestions = async (
+  organizationId: string,
+  userId: string,
+  options: IPaginationOptions,
+  query: Record<string, unknown>
+) => {
+  const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
+
+  // Verify user has access to this organization (skip for super_admin)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+
+  if (user?.role !== 'super_admin') {
+    const hasAccess = await prisma.agentAssignment.findFirst({
+      where: {
+        agentUserId: userId,
+        organizationId: organizationId,
+        status: AssignmentStatus.ASSIGNED,
+      },
+    });
+
+    if (!hasAccess) {
+      throw new AppError(status.FORBIDDEN, 'Access denied to this organization');
+    }
+  }
+
+  // Build where conditions
+  const whereConditions: any = {
+    org_id: organizationId,
+  };
+
+  // Search functionality
+  const searchTerm = query?.searchTerm as string;
+  if (searchTerm) {
+    whereConditions.OR = [
+      {
+        question_text: {
+          contains: searchTerm,
+          mode: "insensitive"
+        }
+      },
+      {
+        question_keywords: {
+          hasSome: [searchTerm]
+        }
+      },
+    ];
+  }
+
+  // Get total count
+  const total = await prisma.question.count({
+    where: whereConditions,
+  });
+
+  // Get questions with pagination
+  const questions = await prisma.question.findMany({
+    where: whereConditions,
+    include: {
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          organizationNumber: true,
+        },
+      },
+    },
+    skip,
+    take: limit,
+    orderBy: {
+      [sortBy]: sortOrder,
+    },
+  });
+
+  const meta = {
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+  };
+
+  return {
+    meta,
+    data: questions,
+  };
+};
+
 export const AgentAssignmentService = {
+  getAllOrgQuestions,
+  getQuestionsByUserAssignments,
+  getQuestionsByOrgNumber,
   getAllAgents,
   getAIAgentIdsByOrganizationAdmin,
   getAgentsByOrganization,
