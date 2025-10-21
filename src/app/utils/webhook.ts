@@ -149,7 +149,7 @@ const handlePaymentIntentSucceeded = async (
         where: { phoneNumber: phoneNumber },
         data: {
           isPurchased: true,
-          purchasedByOrganizationId: payment.organizationId,
+          purchasedByOrgId: payment.organizationId,
           purchasedAt: new Date(),
         },
       });

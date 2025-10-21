@@ -58,7 +58,7 @@ const handleExpiredSubscriptions = async () => {
             where: { phoneNumber: subscription.purchasedNumber },
             data: {
               isPurchased: false,
-              purchasedByOrganizationId: null,
+              purchasedByOrgId: null,
               purchasedAt: null,
             },
           });
