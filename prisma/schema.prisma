@@ -150,7 +150,6 @@ model Agent {
 
   // Relations
   user           User              @relation(fields: [userId], references: [id])
-  // Remove: organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
   assignments    AgentAssignment[] // This is all you need!
