@@ -7,13 +7,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// ============ ENUMS ============
+// ============================================
+// ENUMS
+// ============================================
+
 enum UserRole {
   organization_admin
   agent
   super_admin
 }
-
 
 enum PlanLevel {
   only_real_agent
@@ -72,39 +74,6 @@ enum UserStatus {
   DELETED
 }
 
-// ============ MODELS ============
-model User {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  email     String  @unique
-  password  String
-  image     String? @default("")
-  bio       String? @default("")
-  phone     String  @unique
-
-  passwordChangedAt DateTime?
-  isVerified        Boolean   @default(false)
-  isResetPassword   Boolean   @default(false)
-  canResetPassword  Boolean   @default(false)
-  isResentOtp       Boolean   @default(false)
-  otp               Int?
-  otpExpiresAt      DateTime?
-
-  status UserStatus @default(ACTIVE)
-  role   UserRole   @default(organization_admin)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  Agent             Agent?
-  ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
-  ServiceFeedbacks  ServiceFeedback[]
-  AgentFeedbacks    AgentFeedback[]
-  assignedAgents    AgentAssignment[] @relation("AssignmentMadeBy")
-
-  @@map("users")
-}
-
 enum AgentStatus {
   free
   busy
@@ -127,6 +96,58 @@ enum employmentType {
   contract
 }
 
+enum AssignmentStatus {
+  ASSIGNED
+  REMOVED
+}
+
+enum PhoneNumberRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ASSIGNED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+/// User account with authentication and profile information
+model User {
+  id       String  @id @default(auto()) @map("_id") @db.ObjectId
+  name     String
+  email    String  @unique
+  password String
+  image    String? @default("")
+  bio      String? @default("")
+  phone    String  @unique
+
+  // Authentication fields
+  passwordChangedAt DateTime?
+  isVerified        Boolean   @default(false)
+  isResetPassword   Boolean   @default(false)
+  canResetPassword  Boolean   @default(false)
+  isResentOtp       Boolean   @default(false)
+  otp               Int?
+  otpExpiresAt      DateTime?
+
+  status UserStatus @default(ACTIVE)
+  role   UserRole   @default(organization_admin)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  Agent             Agent?
+  ownedOrganization Organization?     @relation(name: "UserOwnedOrganization")
+  ServiceFeedbacks  ServiceFeedback[]
+  AgentFeedbacks    AgentFeedback[]
+  assignedAgents    AgentAssignment[] @relation("AssignmentMadeBy")
+
+  @@map("users")
+}
+
+/// Agent profile with SIP configuration and availability
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
@@ -135,13 +156,14 @@ model Agent {
   sip_address  String?
   sip_username String?
   sip_password String?
-  skills       String[] @default([])
-  employeeId   String  @unique
-  // Remove: assignTo     String[]    @default([]) @db.ObjectId
+  skills       String[]    @default([])
+  employeeId   String      @unique
 
+  // Working hours
   workEndTime   String?
   workStartTime String?
 
+  // Performance metrics
   successCalls Int @default(0)
   droppedCalls Int @default(0)
 
@@ -150,20 +172,14 @@ model Agent {
 
   // Relations
   user           User              @relation(fields: [userId], references: [id])
-  // Remove: organization   Organization?   @relation(fields: [assignTo], references: [id])
   AgentFeedbacks AgentFeedback[]
   calls          Call[]
-  assignments    AgentAssignment[] // This is all you need!
+  assignments    AgentAssignment[]
 
   @@map("agents")
 }
 
-
-enum AssignmentStatus {
-  ASSIGNED
-  REMOVED
-}
-
+/// Assignment relationship between agents and organizations
 model AgentAssignment {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
   agentUserId    String           @db.ObjectId
@@ -176,6 +192,7 @@ model AgentAssignment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   agent          Agent        @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
@@ -184,53 +201,9 @@ model AgentAssignment {
   @@map("agent_assignments")
 }
 
-// model Organization {
-//   id String @id @default(auto()) @map("_id") @db.ObjectId
-
-//   name               String
-//   industry           String?
-//   address            String?
-//   websiteLink        String?
-//   organizationNumber String?
-//   ownerId            String? @unique @db.ObjectId
-
-//   agentVoiceUrl String?
-//   leadQuestions String[] @default([])
-
-//   googleSheetsSpreadsheetId String?
-//   googleSheetsCredentials   Json?
-//   lastSyncedAt              DateTime?
-
-//   // HubSpot integration fields
-//   hubspotAccessToken  String?
-//   hubspotRefreshToken String?
-//   hubspotExpiresAt    DateTime?
-//   lastHubSpotSyncedAt DateTime?
-
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-
-//   requestedPhoneNumber PhoneNumberRequest?
-//   ownedOrganization     User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
-//   subscriptions         Subscription[]
-//   documents             OrganizationDoc[]
-//   calls                 Call[]
-//   tools                 ToolIntegration[]
-//   availableTwilioNumber AvailableTwilioNumber[]
-//   voice                 UploadVoice?
-//   AiknowledgeBase       AiknowledgeBase[]
-//   AgentAssignment       AgentAssignment[]
-//   questions             Question[]
-//   qaPairs               QaPair[]
-
-//   aiagent aiagents?
-
-//   @@map("organizations")
-// }
-
+/// Organization with integrations and configuration
 model Organization {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
+  id                 String  @id @default(auto()) @map("_id") @db.ObjectId
   name               String
   industry           String?
   address            String?
@@ -238,13 +211,16 @@ model Organization {
   organizationNumber String? @unique
   ownerId            String? @unique @db.ObjectId
 
+  // Agent configuration
   agentVoiceUrl String?
   leadQuestions String[] @default([])
 
+  // Google Sheets integration
   googleSheetsSpreadsheetId String?
   googleSheetsCredentials   Json?
   lastSyncedAt              DateTime?
 
+  // HubSpot integration
   hubspotAccessToken  String?
   hubspotRefreshToken String?
   hubspotExpiresAt    DateTime?
@@ -260,11 +236,8 @@ model Organization {
   documents              OrganizationDoc[]
   calls                  Call[]
   tools                  ToolIntegration[]
-  
-  // Twilio Numbers - split into requested (pinned) and purchased
   requestedTwilioNumbers AvailableTwilioNumber[] @relation("RequestedNumbers")
   purchasedTwilioNumbers AvailableTwilioNumber[] @relation("PurchasedNumbers")
-  
   voice                  UploadVoice?
   AiknowledgeBase        AiknowledgeBase[]
   AgentAssignment        AgentAssignment[]
@@ -275,6 +248,7 @@ model Organization {
   @@map("organizations")
 }
 
+/// Available Twilio phone numbers for purchase or assignment
 model AvailableTwilioNumber {
   id           String  @id @default(auto()) @map("_id") @db.ObjectId
   sid          String?
@@ -290,69 +264,37 @@ model AvailableTwilioNumber {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  // Organization that has pinned/requested this number (before purchase)
+  // Organization relationships
   requestedByOrgId String?       @db.ObjectId
-  
-  // Organization that has purchased this number (after purchase)
   purchasedByOrgId String?       @db.ObjectId
-  
-  // Relations
   requestedByOrg   Organization? @relation(name: "RequestedNumbers", fields: [requestedByOrgId], references: [id])
   purchasedByOrg   Organization? @relation(name: "PurchasedNumbers", fields: [purchasedByOrgId], references: [id])
 
   @@map("available_twilio_numbers")
 }
 
-// model AvailableTwilioNumber {
-//   id           String  @id @default(auto()) @map("_id") @db.ObjectId
-//   sid          String?
-//   phoneNumber  String  @unique
-//   friendlyName String
-
-//   capabilities Json
-//   beta         Boolean   @default(false)
-//   countryCode  String    @default("US")
-//   isPurchased  Boolean   @default(false)
-//   isPinned     Boolean   @default(false)
-//   purchasedAt  DateTime?
-//   createdAt    DateTime  @default(now())
-//   updatedAt    DateTime  @updatedAt
-
-//   // PhoneNumberRequest        PhoneNumberRequest?
-//   // // requestedByUserId         String?             @db.ObjectId
-//   purchasedByOrganizationId String?             @db.ObjectId
-//   organization              Organization?       @relation(fields: [purchasedByOrganizationId], references: [id])
-
-//   // // Minimal field for organization request tracking
-//   // requestedByOrgId String?       @db.ObjectId
-//   // organization     Organization? @relation(fields: [requestedByOrgId], references: [id])
-
-
-//   @@map("available_twilio_numbers")
-// }
-
+/// AI agent configuration for ElevenLabs integration
 model aiagents {
   id             String @id @default(auto()) @map("_id") @db.ObjectId
-  agentId        String @unique // ElevenLabs agent ID
+  agentId        String @unique
   organizationId String @unique @db.ObjectId
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
-  callLogs     AICallLog[] // 1-to-many relation
+  callLogs     AICallLog[]
 
   @@map("aiagents")
 }
 
-
-
-
+/// Call logs for AI agents
 model AICallLog {
   id                 String    @id @default(auto()) @map("_id") @db.ObjectId
   call_sid           String?
   organizationId     String    @db.ObjectId
-  agent_id           String // links to aiagents.agentId
+  agent_id           String
   conversation_id    String?
   from_number        String?
   to_number          String?
@@ -368,38 +310,40 @@ model AICallLog {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   aiagents aiagents @relation(fields: [agent_id], references: [agentId])
 
   @@map("AICallLog")
 }
 
+/// Call records for human agents
 model Call {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
   organizationId String @db.ObjectId
   agentId        String @db.ObjectId
 
+  // Call details
   from_number       String?
   to_number         String?
   call_time         DateTime? @default(now())
-  callType          String? // direction
+  callType          String?
   call_status       String?
   call_duration     Int?
   call_started_at   DateTime?
   call_completed_at DateTime?
+  call_sid          String?
 
-  call_sid String?
-
+  // Recording details
   call_transcript    String?
   recording_duration Int?
   recording_sid      String?
   recording_status   String?
   recording_url      String?
 
+  // Processing flags
   processed               Boolean? @default(false)
   transcription_requested Boolean? @default(false)
 
-  // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -411,6 +355,7 @@ model Call {
   @@map("Call")
 }
 
+/// Custom voice uploads for organizations
 model UploadVoice {
   id                    String  @id @default(auto()) @map("_id") @db.ObjectId
   voiceId               String  @unique @db.ObjectId
@@ -421,43 +366,49 @@ model UploadVoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
+/// AI knowledge base configuration
 model AiknowledgeBase {
-  id                String       @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId    String       @db.ObjectId
-  knowledgeBaseId   String       @unique
+  id                String @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId    String @db.ObjectId
+  knowledgeBaseId   String @unique
   knowledgeBaseName String
-  Organization      Organization @relation(fields: [organizationId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations
+  Organization Organization @relation(fields: [organizationId], references: [id])
 }
 
+/// Documents uploaded by organizations
 model OrganizationDoc {
   id             String  @id @default(auto()) @map("_id") @db.ObjectId
   organizationId String  @db.ObjectId
   docFor         DocFor  @default(AGENT)
-  fileName       String? // cleaned name (without extension)
-  cloudUrl       String? // Cloudinary secure URL
-  fileFormat     String? // pdf, docx, xlsx 
+  fileName       String?
+  cloudUrl       String?
+  fileFormat     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("company_docs")
 }
 
+/// Subscription plans with pricing and features
 model Plan {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
   planName      String
   amount        Float
   currency      String
-  interval      Interval       @default(month)
+  interval      Interval  @default(month)
   intervalCount Int
   freeTrialDays Int?
   productId     String
@@ -466,13 +417,17 @@ model Plan {
   description   String?
   features      Json?
   planLevel     PlanLevel
-  Subscription  Subscription[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  Subscription Subscription[]
 
   @@map("plans")
 }
 
+/// Active subscriptions for organizations
 model Subscription {
   id              String             @id @default(auto()) @map("_id") @db.ObjectId
   organizationId  String             @db.ObjectId
@@ -483,21 +438,24 @@ model Subscription {
   stripePaymentId String             @unique
   paymentStatus   PaymentStatus      @default(PENDING)
   status          SubscriptionStatus @default(INCOMPLETE)
-  organization    Organization?      @relation(fields: [organizationId], references: [id])
-  plan            Plan?              @relation(fields: [planId], references: [id])
   planLevel       PlanLevel
   purchasedNumber String
   sid             String
   numberOfAgents  Int?               @default(0)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  plan         Plan?         @relation(fields: [planId], references: [id])
 
   @@map("subscriptions")
 }
 
+/// Service feedback from clients
 model ServiceFeedback {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
   clientId     String  @unique @db.ObjectId
   rating       Int
   feedbackText String?
@@ -505,13 +463,14 @@ model ServiceFeedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
+/// Agent-specific feedback from clients
 model AgentFeedback {
-  id String @id @default(auto()) @map("_id") @db.ObjectId
-
-  agentUserId      String  @db.ObjectId
+  id           String  @id @default(auto()) @map("_id") @db.ObjectId
+  agentUserId  String  @db.ObjectId
   clientId     String  @db.ObjectId
   rating       Int
   feedbackText String?
@@ -519,14 +478,15 @@ model AgentFeedback {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   agent  Agent @relation(fields: [agentUserId], references: [userId], onDelete: Cascade)
   client User  @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  // Add composite unique constraint instead
   @@unique([agentUserId, clientId])
   @@map("agent_feedbacks")
 }
 
+/// Third-party tool integrations
 model ToolIntegration {
   id        String @id @default(auto()) @map("_id") @db.ObjectId
   companyId String @unique @db.ObjectId
@@ -536,12 +496,13 @@ model ToolIntegration {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   company Organization @relation(fields: [companyId], references: [id])
 
   @@map("tool_integrations")
 }
 
-
+/// Frequently asked questions with keywords
 model Question {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   org_id            String   @db.ObjectId
@@ -551,11 +512,13 @@ model Question {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("questions")
 }
 
+/// Question and answer pairs for knowledge base
 model QaPair {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   org_id   String @db.ObjectId
@@ -566,40 +529,26 @@ model QaPair {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@map("qa_pairs")
 }
 
-enum PhoneNumberRequestStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  ASSIGNED
-}
+/// Phone number requests from organizations
 model PhoneNumberRequest {
-  id             String        @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String?       @unique @db.ObjectId
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-
-  requesterName  String
-  message        String?
-
+  id                    String                   @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId        String?                  @unique @db.ObjectId
+  requesterName         String
+  message               String?
   requestedPhonePattern String?
   status                PhoneNumberRequestStatus @default(PENDING)
 
-  // assignedNumberId String?                @unique @db.ObjectId
-  // assignedNumber   AvailableTwilioNumber? @relation(fields: [assignedNumberId], references: [id])
-
-  // requesterEmail String
-  // requesterPhone String?
-  // rejectionReason String?
-  // approvedAt      DateTime?
-  // rejectedAt      DateTime?
-  // assignedAt      DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   @@map("phone_number_requests")
 }
