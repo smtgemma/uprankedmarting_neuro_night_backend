@@ -345,6 +345,9 @@ model aiagents {
   @@map("aiagents")
 }
 
+
+
+
 model AICallLog {
   id                 String    @id @default(auto()) @map("_id") @db.ObjectId
   call_sid           String?
