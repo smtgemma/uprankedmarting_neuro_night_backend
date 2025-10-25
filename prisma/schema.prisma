@@ -404,24 +404,28 @@ model OrganizationDoc {
 
 /// Subscription plans with pricing and features
 model Plan {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
   planName      String
   amount        Float
-  currency      String
-  interval      Interval  @default(month)
-  intervalCount Int
-  freeTrialDays Int?
+  currency      String   @default("usd")
+  interval      Interval @default(month)
+  intervalCount Int      @default(1)
+  freeTrialDays Int?     @default(0)
   productId     String
   priceId       String
-  active        Boolean
+  active        Boolean  @default(true)
   description   String?
-  features      Json?
-  planLevel     PlanLevel
+  features      Json?    @default("{}")
+
+  // NEW FIELDS
+  planLevel         PlanLevel
+  defaultAgents     Int       @default(0)
+  extraAgentPricing Json?     @default("[]") // [{ agents: 1, price: 18900 }]
+  totalMinuteLimit  Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   Subscription Subscription[]
 
   @@map("plans")

@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
 import auth from "../../middlewares/auth";
-import { PlanController } from "./plan.controller";
-import { planValidationSchema } from "./plan.validation";
+import { UserRole } from "@prisma/client";
 import validateRequest from "../../middlewares/validateRequest";
+import {
+  planValidationSchema,
+  updatePlanValidationSchema,
+} from "./plan.validation";
+import { PlanController } from "./plan.controller";
 
 const router = Router();
 
@@ -17,6 +20,13 @@ router.post(
 router.get("/", PlanController.getAllPlans);
 
 router.get("/:planId", PlanController.getPlanById);
+
+router.patch(
+  "/:planId",
+  auth(UserRole.super_admin),
+  validateRequest(updatePlanValidationSchema),
+  PlanController.updatePlan
+);
 
 router.delete(
   "/:planId",
