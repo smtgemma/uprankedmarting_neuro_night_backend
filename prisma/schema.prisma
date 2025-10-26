@@ -226,6 +226,9 @@ model Organization {
   hubspotExpiresAt    DateTime?
   lastHubSpotSyncedAt DateTime?
 
+  hasUsedTrial     Boolean @default(false)
+  stripeCustomerId String? // need to make unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -433,19 +436,22 @@ model Plan {
 
 /// Active subscriptions for organizations
 model Subscription {
-  id              String             @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId  String             @db.ObjectId
-  planId          String             @db.ObjectId
-  startDate       DateTime
-  endDate         DateTime?
-  amount          Float
-  stripePaymentId String             @unique
-  paymentStatus   PaymentStatus      @default(PENDING)
-  status          SubscriptionStatus @default(INCOMPLETE)
-  planLevel       PlanLevel
-  purchasedNumber String
-  sid             String
-  numberOfAgents  Int?               @default(0)
+  id                   String             @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId       String             @db.ObjectId
+  planId               String             @db.ObjectId
+  startDate            DateTime
+  endDate              DateTime?
+  trialEndDate         DateTime? // NEW: Track when trial ends
+  amount               Float
+  stripePaymentId      String?            @unique // Make optional for trial
+  stripeSubscriptionId String?            @unique // NEW: For recurring subscriptions
+  paymentStatus        PaymentStatus      @default(PENDING)
+  status               SubscriptionStatus @default(TRIALING) // Start with TRIALING
+  planLevel            PlanLevel
+  purchasedNumber      String
+  sid                  String
+  numberOfAgents       Int?               @default(0)
+  isTrialUsed          Boolean            @default(false) // NEW: Track if trial was used
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

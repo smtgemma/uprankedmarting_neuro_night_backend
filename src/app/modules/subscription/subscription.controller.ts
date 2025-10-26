@@ -4,49 +4,43 @@ import sendResponse from "../../utils/sendResponse";
 import { SubscriptionServices } from "./subscription.service";
 
 const createSubscription = catchAsync(async (req, res) => {
-  const { planId, organizationId, planLevel, purchasedNumber, sid, numberOfAgents } = req.body;
-
-  // Enhanced logging for debugging
-  console.log("Creating subscription with data:", {
+  const {
     planId,
     organizationId,
     planLevel,
     purchasedNumber,
     sid,
     numberOfAgents,
-  });
+  } = req.body;
 
   // Validate required fields
   if (!planId || !organizationId || !planLevel || !purchasedNumber || !sid) {
     return sendResponse(res, {
       statusCode: status.BAD_REQUEST,
-      message: "Missing required fields: planId, organizationId, planLevel, purchasedNumber, sid are required",
+      message:
+        "Missing required fields: planId, organizationId, planLevel, purchasedNumber, sid are required",
       data: null,
     });
   }
 
   // Validate phone number format
   let normalizedPhone = purchasedNumber.trim();
-  if (!normalizedPhone.startsWith('+')) {
+  if (!normalizedPhone.startsWith("+")) {
     normalizedPhone = `+${normalizedPhone}`;
   }
-
-  console.log("Normalized phone number:", normalizedPhone);
 
   const result = await SubscriptionServices.createSubscription(
     organizationId,
     planId,
     planLevel,
-    normalizedPhone, // Use normalized phone number
+    normalizedPhone,
     sid,
     numberOfAgents || 0
   );
 
-  console.log("Subscription created successfully:", result.subscription.id);
-
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "Subscription created successfully.",
+    message: "Subscription created successfully. Trial period started.",
     data: result,
   });
 });
@@ -110,22 +104,81 @@ const deleteSubscription = catchAsync(async (req, res) => {
   });
 });
 
+const changePlan = catchAsync(async (req, res) => {
+  const { subscriptionId } = req.params;
+  const { newPlanId, numberOfAgents } = req.body;
+
+  // Validate required fields
+  if (!newPlanId) {
+    return sendResponse(res, {
+      statusCode: status.BAD_REQUEST,
+      message: "newPlanId is required",
+      data: null,
+    });
+  }
+
+  const result = await SubscriptionServices.changePlan(
+    subscriptionId,
+    newPlanId,
+    numberOfAgents
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message:
+      "Plan changed successfully. Prorated amount will be charged/credited.",
+    data: result,
+  });
+});
+
+const updateAgentCount = catchAsync(async (req, res) => {
+  const { subscriptionId } = req.params;
+  const { numberOfAgents } = req.body;
+
+  // Validate required fields
+  if (!numberOfAgents || numberOfAgents < 1) {
+    return sendResponse(res, {
+      statusCode: status.BAD_REQUEST,
+      message: "numberOfAgents is required and must be at least 1",
+      data: null,
+    });
+  }
+
+  const result = await SubscriptionServices.updateAgentCount(
+    subscriptionId,
+    numberOfAgents
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message:
+      "Agent count updated successfully. Prorated amount will be charged/credited.",
+    data: result,
+  });
+});
+
+const cancelSubscription = catchAsync(async (req, res) => {
+  const { subscriptionId } = req.params;
+
+  const result = await SubscriptionServices.cancelSubscription(subscriptionId);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Subscription canceled successfully.",
+    data: result,
+  });
+});
+
 const handleStripeWebhook = catchAsync(async (req, res) => {
-  console.log("Webhook received:", req.body.type);
-  
   try {
     const result = await SubscriptionServices.HandleStripeWebhook(req.body);
-    
-    console.log("Webhook processed successfully");
-    
+
     sendResponse(res, {
       statusCode: status.OK,
       message: "Webhook event triggered successfully",
       data: result,
     });
   } catch (error) {
-    console.error("Webhook processing failed:", error);
-    
     // Still return success to Stripe to avoid retries, but log the error
     sendResponse(res, {
       statusCode: status.OK,
@@ -143,4 +196,7 @@ export const SubscriptionController = {
   getSingleSubscription,
   updateSubscription,
   deleteSubscription,
+  changePlan,
+  updateAgentCount,
+  cancelSubscription,
 };

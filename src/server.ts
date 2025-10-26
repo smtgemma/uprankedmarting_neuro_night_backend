@@ -5,7 +5,7 @@ import { seedSuperAdmin } from "./seedSuperAdmin";
 import cron from "node-cron";
 import prisma from "./app/utils/prisma";
 import { ToolsService } from "./app/modules/tools/tools.service";
-import { expirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
+// import { expirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
 
 // Simple rate limiter to avoid Google Sheets API quota issues
 const rateLimit = async (ms: number) =>
@@ -83,10 +83,10 @@ const main = async () => {
 const shutdown = () => {
   console.log("🛑 Shutting down servers...");
 
-  if (expirationJob) {
-    expirationJob.stop();
-    console.log("Subscription expiration job stopped.");
-  }
+  // if (expirationJob) {
+  //   expirationJob.stop();
+  //   console.log("Subscription expiration job stopped.");
+  // }
 
   if (server) {
     server.close(() => {
