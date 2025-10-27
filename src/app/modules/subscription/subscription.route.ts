@@ -15,6 +15,12 @@ router.post(
   SubscriptionController.createSubscription
 );
 
+router.post(
+  "/create-setup-intent",
+  auth(UserRole.organization_admin),
+  SubscriptionController.createSetupIntent
+);
+
 // Get my subscription
 router.get(
   "/my-subscription",

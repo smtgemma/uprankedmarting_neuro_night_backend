@@ -4,12 +4,12 @@ import { z } from "zod";
 const SubscriptionValidationSchema = z.object({
   body: z.object({
     planId: z.string().min(1, "Plan ID is required"),
-    organizationId: z.string().min(1, "Organization ID is required"),
+    // organizationId removed - get from authenticated user
     planLevel: z.enum(Object.values(PlanLevel) as [string, ...string[]]),
-    purchasedNumber: z.string().min(1, "Purchased number is required"),
+    purchasedNumber: z.string().min(1, "Phone number is required"),
     sid: z.string().min(1, "SID is required"),
     numberOfAgents: z.number().int().min(0).optional(),
-    paymentMethodId: z.string().min(1, "Payment method ID is required"), // NEW
+    paymentMethodId: z.string().min(1, "Payment method is required"),
   }),
 });
 

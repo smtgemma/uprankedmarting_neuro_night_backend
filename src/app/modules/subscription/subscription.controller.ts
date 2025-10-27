@@ -2,30 +2,59 @@ import status from "http-status";
 import catchAsync from "../../utils/catchAsync";
 import sendResponse from "../../utils/sendResponse";
 import { SubscriptionServices } from "./subscription.service";
+import prisma from "../../utils/prisma";
+
+const createSetupIntent = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+
+  const result = await SubscriptionServices.createSetupIntent(userId);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Setup intent created successfully",
+    data: result,
+  });
+});
 
 const createSubscription = catchAsync(async (req, res) => {
-  const { 
-    planId, 
-    organizationId, 
-    planLevel, 
-    purchasedNumber, 
-    sid, 
+  const userId = req.user.id;
+  const {
+    planId,
+    planLevel,
+    purchasedNumber,
+    sid,
     numberOfAgents,
-    paymentMethodId // NEW FIELD
+    paymentMethodId,
   } = req.body;
 
+  // Get user's organization
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { ownedOrganization: true },
+  });
+
+  if (!user?.ownedOrganization) {
+    return sendResponse(res, {
+      statusCode: status.NOT_FOUND,
+      message: "Organization not found",
+      data: null,
+    });
+  }
+
+  const organizationId = user.ownedOrganization.id;
+
   // Validate required fields
-  if (!planId || !organizationId || !planLevel || !purchasedNumber || !sid || !paymentMethodId) {
+  if (!planId || !planLevel || !purchasedNumber || !sid || !paymentMethodId) {
     return sendResponse(res, {
       statusCode: status.BAD_REQUEST,
-      message: "Missing required fields: planId, organizationId, planLevel, purchasedNumber, sid, paymentMethodId are required",
+      message: "Missing required fields",
       data: null,
     });
   }
 
   // Normalize phone number
   let normalizedPhone = purchasedNumber.trim();
-  if (!normalizedPhone.startsWith('+')) {
+  if (!normalizedPhone.startsWith("+")) {
     normalizedPhone = `+${normalizedPhone}`;
   }
 
@@ -36,12 +65,14 @@ const createSubscription = catchAsync(async (req, res) => {
     normalizedPhone,
     sid,
     numberOfAgents || 0,
-    paymentMethodId // Pass payment method
+    paymentMethodId
   );
 
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: `Subscription created successfully. Trial period started. You will be charged $${result.subscription.amount} on ${new Date(result.trialEndDate).toLocaleDateString()}.`,
+    message: `Trial started. You'll be charged $${
+      result.subscription.amount
+    } on ${new Date(result.trialEndDate).toLocaleDateString()}.`,
     data: result,
   });
 });
@@ -190,6 +221,7 @@ const handleStripeWebhook = catchAsync(async (req, res) => {
 });
 
 export const SubscriptionController = {
+  createSetupIntent,
   createSubscription,
   getAllSubscription,
   getMySubscription,

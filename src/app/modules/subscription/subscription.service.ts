@@ -330,6 +330,55 @@ const getOrCreateStripeCustomer = async (
 // CREATE SUBSCRIPTION (TRIAL + CARD REQUIRED)
 // =============================
 
+const createSetupIntent = async (userId: string) => {
+  // Get user's organization
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { ownedOrganization: true },
+  });
+
+  if (!user || !user.ownedOrganization) {
+    throw new AppError(status.NOT_FOUND, "User organization not found");
+  }
+
+  const organization = user.ownedOrganization;
+
+  // Get or create Stripe customer
+  let stripeCustomerId = organization.stripeCustomerId;
+
+  if (!stripeCustomerId) {
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: user.name,
+      metadata: {
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    });
+    stripeCustomerId = customer.id;
+
+    await prisma.organization.update({
+      where: { id: organization.id },
+      data: { stripeCustomerId },
+    });
+  }
+
+  // Create Setup Intent
+  const setupIntent = await stripe.setupIntents.create({
+    customer: stripeCustomerId,
+    payment_method_types: ["card"],
+    usage: "off_session",
+    metadata: {
+      organizationId: organization.id,
+    },
+  });
+
+  return {
+    clientSecret: setupIntent.client_secret,
+    customerId: stripeCustomerId,
+  };
+};
+
 const createSubscription = async (
   organizationId: string,
   planId: string,
@@ -342,7 +391,7 @@ const createSubscription = async (
   // ============================================
   // STEP 1: Pre-transaction validations and Stripe operations
   // ============================================
-  
+
   // 1. Verify organization (outside transaction)
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -385,7 +434,7 @@ const createSubscription = async (
 
   // 4. Validate number of agents
   const agentCount = numberOfAgents || plan.defaultAgents;
-  
+
   if (planLevel === PlanLevel.only_ai && agentCount > 0) {
     throw new AppError(
       status.BAD_REQUEST,
@@ -442,7 +491,7 @@ const createSubscription = async (
 
   // 7. Get or create Stripe customer
   let stripeCustomerId = organization.stripeCustomerId;
-  
+
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
       email: organization.ownedOrganization?.email,
@@ -471,7 +520,7 @@ const createSubscription = async (
     });
     console.log("Payment method attached to customer");
   } catch (error: any) {
-    if (error.code === 'resource_already_exists') {
+    if (error.code === "resource_already_exists") {
       console.log("Payment method already attached");
     } else {
       throw new AppError(
@@ -493,10 +542,10 @@ const createSubscription = async (
   const stripeSubscription = await stripe.subscriptions.create({
     customer: stripeCustomerId,
     items: [
-      { 
+      {
         price: plan.priceId,
         quantity: planLevel === PlanLevel.only_ai ? 1 : agentCount,
-      }
+      },
     ],
     trial_end: Math.floor(trialEndDate.getTime() / 1000),
     default_payment_method: paymentMethodId,
@@ -531,7 +580,11 @@ const createSubscription = async (
         planId,
         startDate,
         trialEndDate,
-        endDate: calculateEndDate(trialEndDate, plan.interval, plan.intervalCount),
+        endDate: calculateEndDate(
+          trialEndDate,
+          plan.interval,
+          plan.intervalCount
+        ),
         amount: finalAmount,
         stripePaymentId: null,
         stripeSubscriptionId: stripeSubscription.id,
@@ -1135,4 +1188,6 @@ export const SubscriptionServices = {
   changePlan,
   updateAgentCount,
   cancelSubscription,
+  getOrCreateStripeCustomer,
+  createSetupIntent,
 };
