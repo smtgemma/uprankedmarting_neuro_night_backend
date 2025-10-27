@@ -226,8 +226,11 @@ model Organization {
   hubspotExpiresAt    DateTime?
   lastHubSpotSyncedAt DateTime?
 
-  hasUsedTrial     Boolean @default(false)
-  stripeCustomerId String? // need to make unique
+  // Stripe integration
+  stripeCustomerId String? // NEW FIELD
+
+  // Trial management
+  hasUsedTrial Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -9,6 +9,7 @@ const SubscriptionValidationSchema = z.object({
     purchasedNumber: z.string().min(1, "Purchased number is required"),
     sid: z.string().min(1, "SID is required"),
     numberOfAgents: z.number().int().min(0).optional(),
+    paymentMethodId: z.string().min(1, "Payment method ID is required"), // NEW
   }),
 });
 

@@ -4,28 +4,28 @@ import sendResponse from "../../utils/sendResponse";
 import { SubscriptionServices } from "./subscription.service";
 
 const createSubscription = catchAsync(async (req, res) => {
-  const {
-    planId,
-    organizationId,
-    planLevel,
-    purchasedNumber,
-    sid,
+  const { 
+    planId, 
+    organizationId, 
+    planLevel, 
+    purchasedNumber, 
+    sid, 
     numberOfAgents,
+    paymentMethodId // NEW FIELD
   } = req.body;
 
   // Validate required fields
-  if (!planId || !organizationId || !planLevel || !purchasedNumber || !sid) {
+  if (!planId || !organizationId || !planLevel || !purchasedNumber || !sid || !paymentMethodId) {
     return sendResponse(res, {
       statusCode: status.BAD_REQUEST,
-      message:
-        "Missing required fields: planId, organizationId, planLevel, purchasedNumber, sid are required",
+      message: "Missing required fields: planId, organizationId, planLevel, purchasedNumber, sid, paymentMethodId are required",
       data: null,
     });
   }
 
-  // Validate phone number format
+  // Normalize phone number
   let normalizedPhone = purchasedNumber.trim();
-  if (!normalizedPhone.startsWith("+")) {
+  if (!normalizedPhone.startsWith('+')) {
     normalizedPhone = `+${normalizedPhone}`;
   }
 
@@ -35,12 +35,13 @@ const createSubscription = catchAsync(async (req, res) => {
     planLevel,
     normalizedPhone,
     sid,
-    numberOfAgents || 0
+    numberOfAgents || 0,
+    paymentMethodId // Pass payment method
   );
 
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: "Subscription created successfully. Trial period started.",
+    message: `Subscription created successfully. Trial period started. You will be charged $${result.subscription.amount} on ${new Date(result.trialEndDate).toLocaleDateString()}.`,
     data: result,
   });
 });

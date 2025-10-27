@@ -336,114 +336,249 @@ const createSubscription = async (
   planLevel: PlanLevel,
   purchasedNumber: string,
   sid: string,
-  numberOfAgents: number
+  numberOfAgents: number,
+  paymentMethodId: string
 ) => {
-  // === 1. VALIDATE & FETCH DATA (OUTSIDE TX) ===
+  // ============================================
+  // STEP 1: Pre-transaction validations and Stripe operations
+  // ============================================
+  
+  // 1. Verify organization (outside transaction)
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    include: { ownedOrganization: true },
-  });
-  if (!organization) throw new AppError(status.NOT_FOUND, "Organization not found");
-
-  const existingSub = await prisma.subscription.findFirst({
-    where: {
-      organizationId,
-      status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE] },
+    include: {
+      ownedOrganization: true,
     },
   });
-  if (existingSub) throw new AppError(status.BAD_REQUEST, "Active subscription exists");
 
-  const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  if (!plan) throw new AppError(status.NOT_FOUND, "Plan not found");
-
-  const agentCount = numberOfAgents || plan.defaultAgents;
-  if (planLevel === PlanLevel.only_ai && agentCount > 0) {
-    throw new AppError(status.BAD_REQUEST, "AI-only plans do not support agents");
+  if (!organization) {
+    throw new AppError(status.NOT_FOUND, "Organization not found");
   }
 
-  const normalizedPhone = purchasedNumber.startsWith("+") ? purchasedNumber : `+${purchasedNumber}`;
-  const twilioNumber = await prisma.availableTwilioNumber.findFirst({
-    where: { phoneNumber: normalizedPhone },
+  // 2. Check for existing active subscriptions
+  const existingActiveSubscription = await prisma.subscription.findFirst({
+    where: {
+      organizationId,
+      status: {
+        in: [
+          SubscriptionStatus.ACTIVE,
+          SubscriptionStatus.TRIALING,
+          SubscriptionStatus.PAST_DUE,
+          SubscriptionStatus.INCOMPLETE,
+        ],
+      },
+    },
   });
-  if (!twilioNumber) throw new AppError(status.NOT_FOUND, "Phone number not available");
-  if (twilioNumber.isPurchased) throw new AppError(status.BAD_REQUEST, "Phone number already purchased");
 
+  if (existingActiveSubscription) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      "Organization already has an active subscription"
+    );
+  }
+
+  // 3. Verify plan
+  const plan = await prisma.plan.findUnique({ where: { id: planId } });
+  if (!plan) {
+    throw new AppError(status.NOT_FOUND, "Plan not found");
+  }
+
+  // 4. Validate number of agents
+  const agentCount = numberOfAgents || plan.defaultAgents;
+  
+  if (planLevel === PlanLevel.only_ai && agentCount > 0) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      "AI-only plans do not support agents"
+    );
+  }
+
+  // 5. Validate phone number
+  let normalizedPhone = purchasedNumber.startsWith("+")
+    ? purchasedNumber
+    : `+${purchasedNumber}`;
+
+  const availableNumber = await prisma.availableTwilioNumber.findFirst({
+    where: {
+      OR: [
+        { phoneNumber: normalizedPhone },
+        { phoneNumber: normalizedPhone.replace("+", "") },
+      ],
+    },
+  });
+
+  if (!availableNumber) {
+    throw new AppError(
+      status.NOT_FOUND,
+      `Phone number ${purchasedNumber} is not available`
+    );
+  }
+
+  if (availableNumber.isPurchased) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      `Phone number ${purchasedNumber} is already purchased`
+    );
+  }
+
+  // 6. Calculate amounts and dates
+  const startDate = new Date();
   const trialEndDate = calculateTrialEndDate();
-  const amount = calculateSubscriptionAmount(plan, planLevel, agentCount);
+  const finalAmount = calculateSubscriptionAmount(plan, planLevel, agentCount);
 
-  // === 2. CREATE STRIPE SUBSCRIPTION + SETUP INTENT (OUTSIDE TX) ===
-  const stripeCustomerId = await getOrCreateStripeCustomer(organization);
+  console.log("Creating subscription with:", {
+    organizationId,
+    planId,
+    planLevel,
+    agentCount,
+    finalAmount,
+    trialEndDate,
+    paymentMethodId,
+  });
 
+  // ============================================
+  // STEP 2: Stripe operations (OUTSIDE transaction)
+  // ============================================
+
+  // 7. Get or create Stripe customer
+  let stripeCustomerId = organization.stripeCustomerId;
+  
+  if (!stripeCustomerId) {
+    const customer = await stripe.customers.create({
+      email: organization.ownedOrganization?.email,
+      name: organization.name,
+      metadata: {
+        organizationId: organization.id,
+      },
+    });
+    stripeCustomerId = customer.id;
+
+    // Update organization with customer ID (separate update, not in transaction)
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { stripeCustomerId: stripeCustomerId },
+    });
+
+    console.log("Created new Stripe customer:", stripeCustomerId);
+  } else {
+    console.log("Using existing Stripe customer:", stripeCustomerId);
+  }
+
+  // 8. Attach payment method to customer
+  try {
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: stripeCustomerId,
+    });
+    console.log("Payment method attached to customer");
+  } catch (error: any) {
+    if (error.code === 'resource_already_exists') {
+      console.log("Payment method already attached");
+    } else {
+      throw new AppError(
+        status.BAD_REQUEST,
+        `Failed to attach payment method: ${error.message}`
+      );
+    }
+  }
+
+  // 9. Set as default payment method
+  await stripe.customers.update(stripeCustomerId, {
+    invoice_settings: {
+      default_payment_method: paymentMethodId,
+    },
+  });
+  console.log("Payment method set as default");
+
+  // 10. Create Stripe subscription with trial
   const stripeSubscription = await stripe.subscriptions.create({
     customer: stripeCustomerId,
-    items: [{
-      price: plan.priceId,
-      quantity: planLevel === PlanLevel.only_ai ? 1 : agentCount,
-    }],
+    items: [
+      { 
+        price: plan.priceId,
+        quantity: planLevel === PlanLevel.only_ai ? 1 : agentCount,
+      }
+    ],
     trial_end: Math.floor(trialEndDate.getTime() / 1000),
-    payment_behavior: "default_incomplete",
-    payment_settings: {
-      payment_method_types: ["card"],
-      save_default_payment_method: "on_subscription",
-    },
-    expand: ["pending_setup_intent"],
+    default_payment_method: paymentMethodId,
     metadata: {
       organizationId,
       planId,
-      planLevel,
-      purchasedNumber: normalizedPhone,
-      sid,
       numberOfAgents: agentCount.toString(),
+      purchasedNumber: availableNumber.phoneNumber,
+      planLevel,
+      sid,
     },
   });
 
-  const setupIntent = stripeSubscription.pending_setup_intent as Stripe.SetupIntent;
-  if (!setupIntent?.client_secret) {
-    throw new AppError(status.INTERNAL_SERVER_ERROR, "Failed to create SetupIntent");
-  }
+  console.log("Stripe subscription created:", {
+    subscriptionId: stripeSubscription.id,
+    customerId: stripeCustomerId,
+    status: stripeSubscription.status,
+  });
 
-  // === 3. WRITE TO DB (FAST TRANSACTION) ===
+  // 11. Get payment method details
+  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+
+  // ============================================
+  // STEP 3: Database transaction (fast operations only)
+  // ============================================
+
   return await prisma.$transaction(async (tx) => {
+    // Create subscription record
     const subscription = await tx.subscription.create({
       data: {
         organizationId,
         planId,
-        startDate: new Date(),
+        startDate,
         trialEndDate,
         endDate: calculateEndDate(trialEndDate, plan.interval, plan.intervalCount),
-        amount,
-        stripeSubscriptionId: stripeSubscription.id,
+        amount: finalAmount,
         stripePaymentId: null,
+        stripeSubscriptionId: stripeSubscription.id,
         paymentStatus: PaymentStatus.PENDING,
         status: SubscriptionStatus.TRIALING,
         planLevel,
-        purchasedNumber: normalizedPhone,
+        purchasedNumber: availableNumber.phoneNumber,
         sid,
         numberOfAgents: agentCount,
         isTrialUsed: true,
       },
     });
 
+    console.log("Database subscription created:", subscription.id);
+
+    // Update organization
     await tx.organization.update({
       where: { id: organizationId },
       data: {
         hasUsedTrial: true,
-        organizationNumber: normalizedPhone,
+        organizationNumber: availableNumber.phoneNumber,
       },
     });
 
+    // Reserve the phone number during trial
     await tx.availableTwilioNumber.update({
-      where: { phoneNumber: normalizedPhone },
-      data: { requestedByOrgId: organizationId },
+      where: { phoneNumber: availableNumber.phoneNumber },
+      data: {
+        requestedByOrgId: organizationId,
+      },
     });
+
+    console.log("Phone number reserved:", availableNumber.phoneNumber);
 
     return {
       subscription,
-      clientSecret: setupIntent.client_secret,
-      subscriptionId: stripeSubscription.id,
       trialEndDate,
+      nextBillingDate: trialEndDate,
+      stripeCustomerId,
+      paymentMethod: {
+        brand: paymentMethod.card?.brand,
+        last4: paymentMethod.card?.last4,
+        exp_month: paymentMethod.card?.exp_month,
+        exp_year: paymentMethod.card?.exp_year,
+      },
     };
-  }, { timeout: 10000 });
+  });
 };
 
 const changePlan = async (
