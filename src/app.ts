@@ -7,22 +7,35 @@ import express, { Application, Request, Response } from "express";
 import globalErrorHandler from "./app/middlewares/globalErrorHandler";
 import { requestLogger } from "./app/middlewares/requestLogger";
 import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
-// import { scheduleExpirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
+import { SubscriptionController } from "./app/modules/subscription/subscription.controller";
+
 
 const app: Application = express();
 app.set("trust proxy", 1);
 
-app.use(express.json());
+// ====================
+// 1. RAW BODY FOR WEBHOOK (MUST BE FIRST)
+// ====================
+app.use(
+  express.json({
+    verify: (req: any, res, buf) => {
+      if (req.originalUrl === "/stripe/webhook") {
+        req.rawBody = buf.toString();
+      }
+    },
+  })
+);
+
 app.use(cookieParser());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+// ====================
+// 2. CORS
+// ====================
 const allowedOrigins = [
-  // "http://localhost:3001",
-  // "http://localhost:3000",
   "https://answersmart.ai",
-  "answersmart.ai",
-  "https://aibackend.answersmart.ai",
   "https://www.answersmart.ai",
+  "https://aibackend.answersmart.ai",
   "https://backend.answersmart.ai",
   "https://lead.answersmart.ai",
   "http://localhost:3000",
@@ -31,51 +44,45 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true, // cookie/session allow করবে
+    credentials: true,
   })
 );
 
-// app.use(
-//   cors({
-//     origin: function (origin, callback) {
-//       // allow requests with no origin (like mobile apps or curl requests)
-//       if (!origin) return callback(null, true);
-//       if (allowedOrigins.indexOf(origin) === -1) {
-//         const msg =
-//           "The CORS policy for this site does not allow access from the specified Origin.";
-//         return callback(new Error(msg), false);
-//       }
-//       return callback(null, true);
-//     },
-//     credentials: true,
-//   })
-// );
-
-// Request Logger Middleware (Add this)
+// ====================
+// 3. REQUEST LOGGER
+// ====================
 app.use(requestLogger);
 
-// Apply to all routes
-app.use("/api/v1", apiLimiter);
+// ====================
+// 4. STRIPE WEBHOOK ROUTE (DIRECT, NO PREFIX, NO LIMITER)
+// ====================
+app.post(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" }), // ← Ensures raw body
+  SubscriptionController.handleWebhook
+);
 
+// ====================
+// 5. API ROUTES (WITH LIMITER)
+// ====================
+app.use("/api/v1", apiLimiter);
 app.use("/api/v1/auth/login", authLimiter);
 app.use("/api/v1/users/register-user", authLimiter);
-
-// app routes
 app.use("/api/v1", router);
 
+// ====================
+// 6. HEALTH CHECK
+// ====================
 app.get("/", (req: Request, res: Response) => {
   res.send({
-    Message: "Uprank server is running...",
+    Message: "AnswerSmart server is running...",
+    webhook: "POST /stripe/webhook",
   });
 });
 
-// Initialize subscription expiration job
-// try {
-//   scheduleExpirationJob();
-// } catch (error) {
-//   console.error("Failed to schedule expiration job:", error);
-// }
-
+// ====================
+// 7. ERROR HANDLERS
+// ====================
 app.use(globalErrorHandler);
 app.use(notFound);
 

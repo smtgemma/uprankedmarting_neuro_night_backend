@@ -217,7 +217,7 @@ model Organization {
   hubspotExpiresAt    DateTime?
   lastHubSpotSyncedAt DateTime?
 
-  stripeCustomerId String? @unique
+  stripeCustomerId String? 
 
   // Trial management
   hasUsedTrial Boolean @default(false)
