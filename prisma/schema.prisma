@@ -208,7 +208,7 @@ model Organization {
   industry           String?
   address            String?
   websiteLink        String?
-  organizationNumber String? @unique
+  organizationNumber String? 
   ownerId            String? @unique @db.ObjectId
 
   // Agent configuration
