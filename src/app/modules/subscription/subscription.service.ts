@@ -7,6 +7,7 @@ import {
 } from "./subscription.interface";
 import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
+import config from "../../config";
 
 const createSubscription = async (
   orgId: string,
@@ -261,7 +262,65 @@ const resumeSubscription = async (orgId: string, subscriptionId: string) => {
 };
 
 // Webhook (idempotent)
+// const handleWebhook = async (rawBody: Buffer, signature: string) => {
+//   let event;
+//   try {
+//     event = stripe.webhooks.constructEvent(
+//       rawBody,
+//       signature,
+//       process.env.STRIPE_WEBHOOK_SECRET!
+//     );
+//   } catch (err: any) {
+//     throw new AppError(400, `Webhook Error: ${err.message}`);
+//   }
+
+//   const existing = await prisma.webhookEvent.findUnique({
+//     where: { id: event.id },
+//   });
+//   if (existing) return { received: true };
+
+//   const STATUS_MAP: Record<string, SubscriptionStatus> = {
+//     active: SubscriptionStatus.ACTIVE,
+//     trialing: SubscriptionStatus.TRIALING,
+//     past_due: SubscriptionStatus.PAST_DUE,
+//     canceled: SubscriptionStatus.CANCELED,
+//     unpaid: SubscriptionStatus.UNPAID,
+//     incomplete: SubscriptionStatus.INCOMPLETE,
+//     incomplete_expired: SubscriptionStatus.INCOMPLETE_EXPIRED,
+//   };
+
+//   if (
+//     [
+//       "customer.subscription.created",
+//       "customer.subscription.updated",
+//       "customer.subscription.deleted",
+//     ].includes(event.type)
+//   ) {
+//     const sub = event.data.object as any;
+//     await prisma.subscription.updateMany({
+//       where: { stripeSubscriptionId: sub.id },
+//       data: {
+//         status: STATUS_MAP[sub.status] || SubscriptionStatus.INCOMPLETE,
+//         currentPeriodStart: new Date(sub.current_period_start * 1000),
+//         currentPeriodEnd: new Date(sub.current_period_end * 1000),
+//         trialStart: sub.trial_start ? new Date(sub.trial_start * 1000) : null,
+//         trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
+//         cancelAtPeriodEnd: sub.cancel_at_period_end,
+//         canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+//       },
+//     });
+//   }
+
+//   await prisma.webhookEvent.create({
+//     data: { id: event.id, type: event.type },
+//   });
+//   return { received: true };
+// };
+
+
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
+  // console.log('Webhook received - starting processing');
+  
   let event;
   try {
     event = stripe.webhooks.constructEvent(
@@ -269,14 +328,20 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
+    // console.log('Webhook signature verified:', event.type, event.id);
   } catch (err: any) {
+    // console.error('Webhook signature verification failed:', err.message);
     throw new AppError(400, `Webhook Error: ${err.message}`);
   }
 
+  // Check if already processed
   const existing = await prisma.webhookEvent.findUnique({
     where: { id: event.id },
   });
-  if (existing) return { received: true };
+  if (existing) {
+    // console.log(`Webhook ${event.id} already processed, skipping`);
+    return { received: true };
+  }
 
   const STATUS_MAP: Record<string, SubscriptionStatus> = {
     active: SubscriptionStatus.ACTIVE,
@@ -288,32 +353,95 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
     incomplete_expired: SubscriptionStatus.INCOMPLETE_EXPIRED,
   };
 
-  if (
-    [
-      "customer.subscription.created",
-      "customer.subscription.updated",
-      "customer.subscription.deleted",
-    ].includes(event.type)
-  ) {
-    const sub = event.data.object as any;
-    await prisma.subscription.updateMany({
-      where: { stripeSubscriptionId: sub.id },
-      data: {
-        status: STATUS_MAP[sub.status] || SubscriptionStatus.INCOMPLETE,
-        currentPeriodStart: new Date(sub.current_period_start * 1000),
-        currentPeriodEnd: new Date(sub.current_period_end * 1000),
-        trialStart: sub.trial_start ? new Date(sub.trial_start * 1000) : null,
-        trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-        cancelAtPeriodEnd: sub.cancel_at_period_end,
-        canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+  try {
+    if (
+      [
+        "customer.subscription.created",
+        "customer.subscription.updated", 
+        "customer.subscription.deleted",
+      ].includes(event.type)
+    ) {
+      const stripeSubscription = event.data.object as any;
+      // console.log(`Processing subscription: ${stripeSubscription.id}, Status: ${stripeSubscription.status}`);
+      
+      // DEBUG: Log the subscription data to see what fields are available
+      // console.log('Stripe subscription data:', {
+      //   current_period_start: stripeSubscription.current_period_start,
+      //   current_period_end: stripeSubscription.current_period_end,
+      //   trial_start: stripeSubscription.trial_start,
+      //   trial_end: stripeSubscription.trial_end,
+      //   status: stripeSubscription.status
+      // });
+
+      // FIX: Create safe date conversion function
+      const createSafeDate = (timestamp: number | null | undefined): Date | null => {
+        if (!timestamp || typeof timestamp !== 'number') return null;
+        try {
+          return new Date(timestamp * 1000);
+        } catch (error) {
+          // console.error('Invalid timestamp:', timestamp);
+          return null;
+        }
+      };
+
+      // Prepare update data with safe date handling
+      const updateData: any = {
+        status: STATUS_MAP[stripeSubscription.status] || SubscriptionStatus.INCOMPLETE,
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end || false,
+        canceledAt: createSafeDate(stripeSubscription.canceled_at),
+      };
+
+      // Only add date fields if they are valid
+      const currentPeriodStart = createSafeDate(stripeSubscription.current_period_start);
+      const currentPeriodEnd = createSafeDate(stripeSubscription.current_period_end);
+      const trialStart = createSafeDate(stripeSubscription.trial_start);
+      const trialEnd = createSafeDate(stripeSubscription.trial_end);
+
+      if (currentPeriodStart) updateData.currentPeriodStart = currentPeriodStart;
+      if (currentPeriodEnd) updateData.currentPeriodEnd = currentPeriodEnd;
+      if (trialStart) updateData.trialStart = trialStart;
+      if (trialEnd) updateData.trialEnd = trialEnd;
+
+      // console.log('Update data prepared:', updateData);
+
+      // Update the subscription
+      const updatedSubscription = await prisma.subscription.update({
+        where: { 
+          stripeSubscriptionId: stripeSubscription.id 
+        },
+        data: updateData,
+      });
+
+      // console.log(`Successfully updated subscription: ${updatedSubscription.id}`);
+    }
+
+    // Store webhook event after successful processing
+    await prisma.webhookEvent.create({
+      data: { 
+        id: event.id, 
+        type: event.type, 
+        processed: true 
       },
     });
-  }
 
-  await prisma.webhookEvent.create({
-    data: { id: event.id, type: event.type },
-  });
-  return { received: true };
+    // console.log('Webhook processing completed successfully');
+    return { received: true };
+
+  } catch (error: any) {
+    // console.error('Error in webhook processing:', error);
+    
+    // Store the failed webhook for debugging
+    await prisma.webhookEvent.create({
+      data: { 
+        id: event.id, 
+        type: event.type, 
+        processed: false 
+      },
+    });
+
+    // console.error(`Webhook processing failed but returning 200: ${error.message}`);
+    return { received: true, error: error.message };
+  }
 };
 
 export const SubscriptionService = {
