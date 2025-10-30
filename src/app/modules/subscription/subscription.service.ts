@@ -37,6 +37,7 @@ const createSubscription = async (
   }
 
   // Validate extra agents for non-AI plans
+  let extraAgentPrice = 0;
   if (
     plan.planLevel !== "only_ai" &&
     payload.extraAgents &&
@@ -59,6 +60,7 @@ const createSubscription = async (
         "Invalid number of extra agents selected"
       );
     }
+    extraAgentPrice = selectedPricing.price;
   }
 
   // Validate phone number purchase
@@ -108,26 +110,11 @@ const createSubscription = async (
   }
 
   let stripeSubscriptionId: string | null = null;
+  let customPriceId: string | null = null;
 
   try {
     // Calculate total price
-    let totalPrice = plan.price;
-    let extraAgentPrice = 0;
-
-    if (
-      plan.planLevel !== "only_ai" &&
-      payload.extraAgents &&
-      payload.extraAgents > 0
-    ) {
-      const extraPricing = plan.extraAgentPricing as any[];
-      const selectedPricing = extraPricing.find(
-        (p) => p.agents === payload.extraAgents
-      );
-      if (selectedPricing) {
-        extraAgentPrice = selectedPricing.price;
-        totalPrice += extraAgentPrice;
-      }
-    }
+    const totalPrice = plan.price + extraAgentPrice;
 
     console.log("Price calculation:", {
       basePrice: plan.price,
@@ -162,10 +149,38 @@ const createSubscription = async (
       invoice_settings: { default_payment_method: payload.paymentMethodId },
     });
 
-    // Create subscription with calculated price
+    // Create custom price for total amount if extra agents are selected
+    let subscriptionItems: any[] = [];
+
+    if (extraAgentPrice > 0) {
+      // Create a custom price for the total amount
+      const customPrice = await stripe.prices.create({
+        unit_amount: totalPrice * 100, // Convert to cents
+        currency: plan.currency.toLowerCase(),
+        recurring: {
+          interval: plan.interval.toLowerCase() as any,
+        },
+        product: plan.stripeProductId,
+        metadata: {
+          planId: plan.id,
+          basePrice: plan.price.toString(),
+          extraAgents: payload.extraAgents?.toString() || "0",
+          extraAgentPrice: extraAgentPrice.toString(),
+          totalPrice: totalPrice.toString(),
+        },
+      });
+
+      customPriceId = customPrice.id;
+      subscriptionItems = [{ price: customPrice.id }];
+    } else {
+      // Use the base plan price if no extra agents
+      subscriptionItems = [{ price: plan.stripePriceId }];
+    }
+
+    // Create subscription with the correct price
     const stripeSub = await stripe.subscriptions.create({
       customer: stripeCustomerId,
-      items: [{ price: plan.stripePriceId }], // Base plan price
+      items: subscriptionItems,
       trial_period_days:
         plan.trialDays > 0 && !org.hasUsedTrial ? plan.trialDays : undefined,
       payment_behavior: "default_incomplete",
@@ -175,6 +190,7 @@ const createSubscription = async (
         extraAgentPrice: extraAgentPrice.toString(),
         purchasedNumber: payload.purchasedNumber || "",
         totalMinuteLimit: plan.totalMinuteLimit?.toString() || "0",
+        customPriceId: customPriceId || "",
       },
     });
 
@@ -213,6 +229,7 @@ const createSubscription = async (
       totalMinuteLimit: plan.totalMinuteLimit,
       purchasedNumber: payload.purchasedNumber,
       sid: payload.sid,
+      totalPriceCharged: totalPrice,
     });
 
     // Start transaction for multiple database operations
@@ -259,7 +276,7 @@ const createSubscription = async (
             : null,
           planLevel: plan.planLevel,
           numberOfAgents: totalAgents,
-          totalMinuteLimit: plan.totalMinuteLimit, // Include totalMinuteLimit
+          totalMinuteLimit: plan.totalMinuteLimit,
           purchasedNumber: payload.purchasedNumber,
           sid: payload.sid,
         },
@@ -282,12 +299,15 @@ const createSubscription = async (
     return {
       subscription: result,
       clientSecret,
+      totalPrice,
       message: `Subscription created. ${
         plan.trialDays > 0 && !org.hasUsedTrial
           ? `${plan.trialDays}-day trial started.`
           : ""
       }${
-        payload.extraAgents ? ` Added ${payload.extraAgents} extra agents.` : ""
+        payload.extraAgents
+          ? ` Added ${payload.extraAgents} extra agents ($${extraAgentPrice}/month).`
+          : ""
       }${
         payload.purchasedNumber
           ? ` Purchased phone number: ${payload.purchasedNumber}`
@@ -296,10 +316,20 @@ const createSubscription = async (
         plan.totalMinuteLimit
           ? ` Monthly minute limit: ${plan.totalMinuteLimit}`
           : ""
-      }`,
+      } Total monthly charge: $${totalPrice}`,
     };
   } catch (err: any) {
     console.error("Subscription creation error:", err);
+
+    // Cleanup: Delete custom price if created
+    if (customPriceId) {
+      try {
+        await stripe.prices.update(customPriceId, { active: false });
+        console.log("Deactivated custom price:", customPriceId);
+      } catch (priceErr) {
+        console.error("Failed to deactivate custom price:", priceErr);
+      }
+    }
 
     // Rollback Stripe subscription if DB save fails
     if (stripeSubscriptionId) {
