@@ -199,7 +199,7 @@ model Organization {
   industry           String?
   address            String?
   websiteLink        String?
-  organizationNumber String? 
+  organizationNumber String?
   ownerId            String? @unique @db.ObjectId
 
   // Agent configuration
@@ -217,7 +217,10 @@ model Organization {
   hubspotExpiresAt    DateTime?
   lastHubSpotSyncedAt DateTime?
 
-  stripeCustomerId String? 
+  stripeCustomerId String?
+
+  purchasedPhoneNumber String?
+  purchasedNumberSid   String?
 
   // Trial management
   hasUsedTrial Boolean @default(false)
