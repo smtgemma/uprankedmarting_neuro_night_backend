@@ -164,7 +164,6 @@ router.get(
 
 
 // ============ MAIN ROUTES ============
-
 // 1. Get questions for user's assigned organizations (Agent Dashboard)
 router.get(
   "/my-questions",
@@ -175,7 +174,7 @@ router.get(
 // 2. Get questions by organization number
 router.get(
   "/organization/:organizationNumber/questions",
-  auth(UserRole.organization_admin, UserRole.super_admin),
+  auth(UserRole.organization_admin, UserRole.super_admin, UserRole.agent),
   AgentAssignmentController.getQuestionsByOrgNumber
 );
 

@@ -70,7 +70,7 @@ const createUserIntoDB = async (payload: any) => {
         await tx.user.update({
           where: { id: createdUser.id },
           data: {
-            ownedOrganization: { connect: { id: createdOrganization.id } },
+            ownedOrganization: { connect: { id: createdOrganization?.id } },
           },
         });
       }
@@ -88,10 +88,10 @@ const createUserIntoDB = async (payload: any) => {
     };
   } catch (error: any) {
     if (error.code === "P2002") {
-      throw new ApiError(
-        status.BAD_REQUEST,
-        "Duplicate record exists in database."
-      );
+      if (error.code === "P2002") {
+        console.log("Duplicate field:", error.meta?.target);
+      }
+      throw error;
     }
     throw new ApiError(
       status.INTERNAL_SERVER_ERROR,

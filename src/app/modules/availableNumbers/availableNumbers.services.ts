@@ -151,18 +151,11 @@ const getAllNumbersForAdmin = async (query: Record<string, unknown>) => {
       customFilters.isPinned = false;
     }
   }
-
-  // Filter by phone number pattern
-  // if (query.phoneNumberPattern) {
-  //   customFilters.phoneNumber = {
-  //     contains: query.phoneNumberPattern as string,
-  //   };
-  // }
-
   // Filter by country code
   if (query.countryCode) {
     customFilters.countryCode = query.countryCode as string;
   }
+  
 
  if (searchTerm) {
     customFilters.OR = [
