@@ -455,6 +455,8 @@ model Subscription {
   sid             String?
   numberOfAgents  Int?      @default(0)
 
+  totalMinuteLimit Int? @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

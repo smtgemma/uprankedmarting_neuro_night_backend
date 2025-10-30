@@ -134,6 +134,7 @@ const createSubscription = async (
       extraAgents: payload.extraAgents,
       extraAgentPrice,
       totalPrice,
+      totalMinuteLimit: plan.totalMinuteLimit,
     });
 
     let stripeCustomerId = org.stripeCustomerId;
@@ -162,8 +163,6 @@ const createSubscription = async (
     });
 
     // Create subscription with calculated price
-    // Note: You might need to create a custom price in Stripe for the total amount
-    // or handle extra agent pricing separately
     const stripeSub = await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [{ price: plan.stripePriceId }], // Base plan price
@@ -175,6 +174,7 @@ const createSubscription = async (
         extraAgents: payload.extraAgents?.toString() || "0",
         extraAgentPrice: extraAgentPrice.toString(),
         purchasedNumber: payload.purchasedNumber || "",
+        totalMinuteLimit: plan.totalMinuteLimit?.toString() || "0",
       },
     });
 
@@ -196,6 +196,12 @@ const createSubscription = async (
     const dbStatus =
       statusMap[stripeSub.status] || SubscriptionStatus.INCOMPLETE;
 
+    // Calculate total agents (default + extra)
+    const totalAgents =
+      plan.planLevel === "only_ai"
+        ? 0
+        : plan.defaultAgents + (payload.extraAgents || 0);
+
     console.log("Creating subscription in DB with data:", {
       organizationId: orgId,
       planId: plan.id,
@@ -203,7 +209,8 @@ const createSubscription = async (
       stripeCustomerId,
       status: dbStatus,
       planLevel: plan.planLevel,
-      numberOfAgents: plan.defaultAgents + (payload.extraAgents || 0),
+      numberOfAgents: totalAgents,
+      totalMinuteLimit: plan.totalMinuteLimit,
       purchasedNumber: payload.purchasedNumber,
       sid: payload.sid,
     });
@@ -251,7 +258,8 @@ const createSubscription = async (
             ? new Date(stripeSub.trial_end * 1000)
             : null,
           planLevel: plan.planLevel,
-          numberOfAgents: plan.defaultAgents + (payload.extraAgents || 0),
+          numberOfAgents: totalAgents,
+          totalMinuteLimit: plan.totalMinuteLimit, // Include totalMinuteLimit
           purchasedNumber: payload.purchasedNumber,
           sid: payload.sid,
         },
@@ -283,6 +291,10 @@ const createSubscription = async (
       }${
         payload.purchasedNumber
           ? ` Purchased phone number: ${payload.purchasedNumber}`
+          : ""
+      }${
+        plan.totalMinuteLimit
+          ? ` Monthly minute limit: ${plan.totalMinuteLimit}`
           : ""
       }`,
     };
