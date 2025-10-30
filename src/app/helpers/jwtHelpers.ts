@@ -8,6 +8,8 @@ export type IJwtPayload = {
   profilePic?: string | null;
   role: UserRole;
   isVerified: boolean;
+  /** Only present for organization_admin */
+  organizationId?: string | null;
 };
 
 const createToken = (

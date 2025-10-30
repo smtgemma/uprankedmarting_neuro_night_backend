@@ -1,9 +1,11 @@
 import Stripe from "stripe";
 import config from "../config";
 
-export const stripe = new Stripe(config.stripe.secret_key!, {
-  apiVersion: "2025-08-27.basil",
+if (!config.stripe.secret_key) {
+  throw new Error("Stripe secret key is missing");
+}
+
+export const stripe = new Stripe(config.stripe.secret_key, {
+  apiVersion: "2024-06-20",
   typescript: true,
 });
-
-// 2025-08-27.basil

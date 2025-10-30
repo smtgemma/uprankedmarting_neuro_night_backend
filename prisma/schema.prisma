@@ -28,25 +28,16 @@ enum PlanType {
   YEARLY
 }
 
-enum Interval {
-  day
-  week
-  month
-  year
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  CANCELED
-  REFUNDED
+enum PlanInterval {
+  MONTH
+  YEAR
 }
 
 enum SubscriptionStatus {
   ACTIVE
-  TRIALING
-  PAST_DUE
   CANCELED
+  PAST_DUE
+  TRIALING
   INCOMPLETE
   INCOMPLETE_EXPIRED
   UNPAID
@@ -226,8 +217,7 @@ model Organization {
   hubspotExpiresAt    DateTime?
   lastHubSpotSyncedAt DateTime?
 
-  // Stripe integration
-  stripeCustomerId String? // NEW FIELD
+  stripeCustomerId String? @unique
 
   // Trial management
   hasUsedTrial Boolean @default(false)
@@ -410,29 +400,34 @@ model OrganizationDoc {
 
 /// Subscription plans with pricing and features
 model Plan {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  planName      String
-  amount        Float
-  currency      String   @default("usd")
-  interval      Interval @default(month)
-  intervalCount Int      @default(1)
-  freeTrialDays Int?     @default(0)
-  productId     String
-  priceId       String
-  active        Boolean  @default(true)
-  description   String?
-  features      Json?    @default("{}")
+  id       String       @id @default(auto()) @map("_id") @db.ObjectId
+  name     String
+  price    Float
+  currency String       @default("usd")
+  interval PlanInterval
+
+  trialDays       Int    @default(1)
+  stripePriceId   String @unique
+  stripeProductId String @unique
+
+  isActive    Boolean @default(true)
+  description String?
+  features    Json?   @default("{}")
 
   // NEW FIELDS
   planLevel         PlanLevel
   defaultAgents     Int       @default(0)
-  extraAgentPricing Json?     @default("[]") // [{ agents: 1, price: 18900 }]
+  extraAgentPricing Json?     @default("[]")
   totalMinuteLimit  Int       @default(0)
+
+  // Soft delete
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  Subscription Subscription[]
+  subscriptions Subscription[]
 
   @@map("plans")
 }
@@ -442,28 +437,37 @@ model Subscription {
   id                   String             @id @default(auto()) @map("_id") @db.ObjectId
   organizationId       String             @db.ObjectId
   planId               String             @db.ObjectId
-  startDate            DateTime
-  endDate              DateTime?
-  trialEndDate         DateTime? // NEW: Track when trial ends
-  amount               Float
-  stripePaymentId      String?            @unique // Make optional for trial
-  stripeSubscriptionId String?            @unique // NEW: For recurring subscriptions
-  paymentStatus        PaymentStatus      @default(PENDING)
-  status               SubscriptionStatus @default(TRIALING) // Start with TRIALING
-  planLevel            PlanLevel
-  purchasedNumber      String
-  sid                  String
-  numberOfAgents       Int?               @default(0)
-  isTrialUsed          Boolean            @default(false) // NEW: Track if trial was used
+  stripeSubscriptionId String             @unique
+  stripeCustomerId     String
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  canceledAt           DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+
+  planLevel       PlanLevel
+  purchasedNumber String?
+  sid             String?
+  numberOfAgents  Int?      @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   organization Organization? @relation(fields: [organizationId], references: [id])
   plan         Plan?         @relation(fields: [planId], references: [id])
 
   @@map("subscriptions")
+}
+
+model WebhookEvent {
+  id        String   @id @map("_id")
+  type      String
+  processed Boolean  @default(false) // optional: for retry safety
+  createdAt DateTime @default(now())
+
+  @@map("webhook_events")
 }
 
 /// Service feedback from clients

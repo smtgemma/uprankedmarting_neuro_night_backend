@@ -1,235 +1,65 @@
-import status from "http-status";
+// modules/subscription/subscription.controller.ts
+import { Request, Response } from "express";
 import catchAsync from "../../utils/catchAsync";
+import { SubscriptionService } from "./subscription.service";
 import sendResponse from "../../utils/sendResponse";
-import { SubscriptionServices } from "./subscription.service";
-import prisma from "../../utils/prisma";
+import status from "http-status";
 
-const createSetupIntent = catchAsync(async (req, res) => {
-  const userId = req.user.id;
-
-  const result = await SubscriptionServices.createSetupIntent(userId);
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Setup intent created successfully",
-    data: result,
-  });
-});
-
-const createSubscription = catchAsync(async (req, res) => {
-  const userId = req.user.id;
-  const {
-    planId,
-    planLevel,
-    purchasedNumber,
-    sid,
-    numberOfAgents,
-    paymentMethodId,
-  } = req.body;
-
-  // Get user's organization
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { ownedOrganization: true },
-  });
-
-  if (!user?.ownedOrganization) {
-    return sendResponse(res, {
-      statusCode: status.NOT_FOUND,
-      message: "Organization not found",
-      data: null,
-    });
-  }
-
-  const organizationId = user.ownedOrganization.id;
-
-  // Validate required fields
-  if (!planId || !planLevel || !purchasedNumber || !sid || !paymentMethodId) {
-    return sendResponse(res, {
-      statusCode: status.BAD_REQUEST,
-      message: "Missing required fields",
-      data: null,
-    });
-  }
-
-  // Normalize phone number
-  let normalizedPhone = purchasedNumber.trim();
-  if (!normalizedPhone.startsWith("+")) {
-    normalizedPhone = `+${normalizedPhone}`;
-  }
-
-  const result = await SubscriptionServices.createSubscription(
-    organizationId,
-    planId,
-    planLevel,
-    normalizedPhone,
-    sid,
-    numberOfAgents || 0,
-    paymentMethodId
-  );
-
+const createSubscription = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId;
+  const result = await SubscriptionService.createSubscription(orgId!, req.body);
   sendResponse(res, {
     statusCode: status.CREATED,
-    message: `Trial started. You'll be charged $${
-      result.subscription.amount
-    } on ${new Date(result.trialEndDate).toLocaleDateString()}.`,
+    message: result.message,
     data: result,
   });
 });
 
-const getAllSubscription = catchAsync(async (req, res) => {
-  const results = await SubscriptionServices.getAllSubscription(req.query);
+const getOrgSubscriptions = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId;
+  const result = await SubscriptionService.getOrgSubscriptions(orgId!);
   sendResponse(res, {
     statusCode: status.OK,
-    message: "Subscriptions retrieved successfully",
-    meta: results.meta,
-    data: results.data,
+    message: "Subscriptions retrieved",
+    data: result,
   });
 });
 
-const getSingleSubscription = catchAsync(async (req, res) => {
-  const result = await SubscriptionServices.getSingleSubscription(
-    req.params.subscriptionId
+const cancelSubscription = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId;
+  const result = await SubscriptionService.cancelSubscription(orgId!, req.body);
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Canceled",
+    data: result,
+  });
+});
+
+const resumeSubscription = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId;
+  const result = await SubscriptionService.resumeSubscription(
+    orgId!,
+    req.params.id
   );
   sendResponse(res, {
     statusCode: status.OK,
-    message: "Subscription retrieved successfully",
+    message: "Resumed",
     data: result,
   });
 });
 
-const getMySubscription = catchAsync(async (req, res) => {
-  const userId = req.user.id;
-
-  const result = await SubscriptionServices.getMySubscription(userId);
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Subscription retrieved successfully.",
-    data: result,
-  });
-});
-
-const updateSubscription = catchAsync(async (req, res) => {
-  const { subscriptionId } = req.params;
-
-  const result = await SubscriptionServices.updateSubscription(
-    subscriptionId,
-    req.body
+const handleWebhook = catchAsync(async (req: Request, res: Response) => {
+  const result = await SubscriptionService.handleWebhook(
+    (req as any).rawBody,
+    req.headers["stripe-signature"] as string
   );
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Subscription updated successfully.",
-    data: result,
-  });
-});
-
-const deleteSubscription = catchAsync(async (req, res) => {
-  const result = await SubscriptionServices.deleteSubscription(
-    req.params.subscriptionId
-  );
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Subscription deleted successfully.",
-    data: result,
-  });
-});
-
-const changePlan = catchAsync(async (req, res) => {
-  const { subscriptionId } = req.params;
-  const { newPlanId, numberOfAgents } = req.body;
-
-  // Validate required fields
-  if (!newPlanId) {
-    return sendResponse(res, {
-      statusCode: status.BAD_REQUEST,
-      message: "newPlanId is required",
-      data: null,
-    });
-  }
-
-  const result = await SubscriptionServices.changePlan(
-    subscriptionId,
-    newPlanId,
-    numberOfAgents
-  );
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message:
-      "Plan changed successfully. Prorated amount will be charged/credited.",
-    data: result,
-  });
-});
-
-const updateAgentCount = catchAsync(async (req, res) => {
-  const { subscriptionId } = req.params;
-  const { numberOfAgents } = req.body;
-
-  // Validate required fields
-  if (!numberOfAgents || numberOfAgents < 1) {
-    return sendResponse(res, {
-      statusCode: status.BAD_REQUEST,
-      message: "numberOfAgents is required and must be at least 1",
-      data: null,
-    });
-  }
-
-  const result = await SubscriptionServices.updateAgentCount(
-    subscriptionId,
-    numberOfAgents
-  );
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message:
-      "Agent count updated successfully. Prorated amount will be charged/credited.",
-    data: result,
-  });
-});
-
-const cancelSubscription = catchAsync(async (req, res) => {
-  const { subscriptionId } = req.params;
-
-  const result = await SubscriptionServices.cancelSubscription(subscriptionId);
-
-  sendResponse(res, {
-    statusCode: status.OK,
-    message: "Subscription canceled successfully.",
-    data: result,
-  });
-});
-
-const handleStripeWebhook = catchAsync(async (req, res) => {
-  try {
-    const result = await SubscriptionServices.HandleStripeWebhook(req.body);
-
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Webhook event triggered successfully",
-      data: result,
-    });
-  } catch (error) {
-    // Still return success to Stripe to avoid retries, but log the error
-    sendResponse(res, {
-      statusCode: status.OK,
-      message: "Webhook received but processing failed",
-      data: { received: true, error: error },
-    });
-  }
+  res.status(200).json(result);
 });
 
 export const SubscriptionController = {
-  createSetupIntent,
   createSubscription,
-  getAllSubscription,
-  getMySubscription,
-  handleStripeWebhook,
-  getSingleSubscription,
-  updateSubscription,
-  deleteSubscription,
-  changePlan,
-  updateAgentCount,
+  getOrgSubscriptions,
   cancelSubscription,
+  resumeSubscription,
+  handleWebhook,
 };

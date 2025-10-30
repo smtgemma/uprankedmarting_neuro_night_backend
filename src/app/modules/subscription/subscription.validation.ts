@@ -1,70 +1,18 @@
-import { PlanLevel } from "@prisma/client";
+// modules/subscription/subscription.validation.ts
 import { z } from "zod";
 
-const SubscriptionValidationSchema = z.object({
+export const createSubscriptionValidation = z.object({
   body: z.object({
-    planId: z.string().min(1, "Plan ID is required"),
-    // organizationId removed - get from authenticated user
-    planLevel: z.enum(Object.values(PlanLevel) as [string, ...string[]]),
-    purchasedNumber: z.string().min(1, "Phone number is required"),
-    sid: z.string().min(1, "SID is required"),
-    numberOfAgents: z.number().int().min(0).optional(),
-    paymentMethodId: z.string().min(1, "Payment method is required"),
+    planId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid plan ID"),
+    paymentMethodId: z.string().startsWith("pm_", "Invalid payment method"),
   }),
 });
 
-const UpdateSubscriptionValidationSchema = z.object({
+export const cancelSubscriptionValidation = z.object({
   body: z.object({
-    planId: z.string().min(1, "Plan ID is required").optional(),
-    paymentStatus: z
-      .enum(["PENDING", "COMPLETED", "CANCELED", "REFUNDED"])
-      .optional(),
-    status: z
-      .enum([
-        "ACTIVE",
-        "TRIALING",
-        "PAST_DUE",
-        "CANCELED",
-        "INCOMPLETE",
-        "INCOMPLETE_EXPIRED",
-        "UNPAID",
-      ])
-      .optional(),
-    startDate: z.string().datetime().optional(),
-    endDate: z.string().datetime().optional(),
-    trialEndDate: z.string().datetime().optional(),
-    amount: z.number().min(0, "Amount must be positive").optional(),
-    planLevel: z
-      .enum(Object.values(PlanLevel) as [string, ...string[]])
-      .optional(),
-    purchasedNumber: z
+    subscriptionId: z
       .string()
-      .min(1, "Purchased number is required")
-      .optional(),
-    sid: z.string().min(1, "SID is required").optional(),
-    numberOfAgents: z.number().int().min(0).optional(),
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid subscription ID"),
+    cancelAtPeriodEnd: z.boolean().optional(),
   }),
 });
-
-const ChangePlanValidationSchema = z.object({
-  body: z.object({
-    newPlanId: z.string().min(1, "New plan ID is required"),
-    numberOfAgents: z.number().int().min(1).optional(),
-  }),
-});
-
-const UpdateAgentCountValidationSchema = z.object({
-  body: z.object({
-    numberOfAgents: z
-      .number()
-      .int()
-      .min(1, "Number of agents must be at least 1"),
-  }),
-});
-
-export const SubscriptionValidation = {
-  SubscriptionValidationSchema,
-  UpdateSubscriptionValidationSchema,
-  ChangePlanValidationSchema,
-  UpdateAgentCountValidationSchema,
-};

@@ -1,1193 +1,325 @@
 import status from "http-status";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
+import {
+  ICancelSubscriptionRequest,
+  ICreateSubscriptionRequest,
+} from "./subscription.interface";
 import { stripe } from "../../utils/stripe";
-import QueryBuilder from "../../builder/QueryBuilder";
-import Stripe from "stripe";
-import {
-  handlePaymentIntentFailed,
-  handlePaymentIntentSucceeded,
-  handleSubscriptionTrialWillEnd,
-  handleSubscriptionUpdated,
-  handleInvoicePaymentSucceeded,
-  handleInvoicePaymentFailed,
-  handleSubscriptionDeleted,
-} from "../../utils/webhook";
-import {
-  PlanLevel,
-  Subscription,
-  SubscriptionStatus,
-  PaymentStatus,
-} from "@prisma/client";
-import axios from "axios";
-import config from "../../config";
-
-// Calculate trial end date (1 day from now)
-const calculateTrialEndDate = (): Date => {
-  const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + 1); // 1 day trial
-  return trialEnd;
-};
-
-// Calculate subscription end date based on plan interval
-const calculateEndDate = (
-  startDate: Date,
-  interval: string,
-  intervalCount: number
-): Date => {
-  const endDate = new Date(startDate);
-
-  switch (interval) {
-    case "day":
-      endDate.setDate(endDate.getDate() + intervalCount);
-      break;
-    case "week":
-      endDate.setDate(endDate.getDate() + 7 * intervalCount);
-      break;
-    case "month":
-      endDate.setMonth(endDate.getMonth() + intervalCount);
-      if (endDate.getDate() !== startDate.getDate()) {
-        endDate.setDate(0);
-      }
-      break;
-    case "year":
-      endDate.setFullYear(endDate.getFullYear() + intervalCount);
-      break;
-    default:
-      throw new AppError(
-        status.BAD_REQUEST,
-        `Unsupported interval: ${interval}`
-      );
-  }
-
-  return endDate;
-};
-
-// Calculate final amount based on plan and agents
-const calculateSubscriptionAmount = (
-  plan: any,
-  planLevel: PlanLevel,
-  numberOfAgents: number
-): number => {
-  if (planLevel === PlanLevel.only_ai) {
-    return plan.amount;
-  }
-
-  if (
-    planLevel === PlanLevel.only_real_agent ||
-    planLevel === PlanLevel.ai_then_real_agent
-  ) {
-    // If requesting more than default agents, calculate extra cost
-    if (numberOfAgents > plan.defaultAgents) {
-      const extraAgents = numberOfAgents - plan.defaultAgents;
-      const extraAgentPricing = plan.extraAgentPricing as any[];
-
-      // Find pricing tier for extra agents
-      const pricingTier = extraAgentPricing?.find(
-        (tier) => tier.agents === extraAgents
-      );
-
-      if (pricingTier) {
-        return plan.amount + pricingTier.price / 100; // Convert from cents
-      }
-
-      // If no exact tier, calculate proportionally
-      return plan.amount + extraAgents * (plan.amount / plan.defaultAgents);
-    }
-
-    return plan.amount;
-  }
-
-  throw new AppError(status.BAD_REQUEST, "Invalid plan level");
-};
-
-// Helper: Get or create Stripe customer
-const getOrCreateStripeCustomer = async (
-  organization: any
-): Promise<string> => {
-  // You may need to add stripeCustomerId field to Organization model
-  // For now, we'll create a new customer each time
-  // In production, you should store and reuse the customer ID
-
-  const customer = await stripe.customers.create({
-    email: organization.ownedOrganization?.email,
-    name: organization.name,
-    metadata: {
-      organizationId: organization.id,
-    },
-  });
-
-  return customer.id;
-};
-
-// const createSubscription = async (
-//   organizationId: string,
-//   planId: string,
-//   planLevel: PlanLevel,
-//   purchasedNumber: string,
-//   sid: string,
-//   numberOfAgents: number
-// ) => {
-//   return await prisma.$transaction(
-//     async (tx) => {
-//       // 1. Verify organization
-//       const organization = await tx.organization.findUnique({
-//         where: { id: organizationId },
-//         include: {
-//           ownedOrganization: true,
-//         },
-//       });
-
-//       if (!organization) {
-//         throw new AppError(status.NOT_FOUND, "Organization not found");
-//       }
-
-//       // 2. Check for existing active subscriptions
-//       const existingActiveSubscription = await tx.subscription.findFirst({
-//         where: {
-//           organizationId,
-//           status: {
-//             in: [
-//               SubscriptionStatus.ACTIVE,
-//               SubscriptionStatus.TRIALING,
-//               SubscriptionStatus.PAST_DUE,
-//               SubscriptionStatus.INCOMPLETE,
-//             ],
-//           },
-//         },
-//       });
-
-//       if (existingActiveSubscription) {
-//         throw new AppError(
-//           status.BAD_REQUEST,
-//           "Organization already has an active subscription"
-//         );
-//       }
-
-//       // 3. Verify plan
-//       const plan = await tx.plan.findUnique({ where: { id: planId } });
-//       if (!plan) {
-//         throw new AppError(status.NOT_FOUND, "Plan not found");
-//       }
-
-//       // 4. Validate number of agents
-//       const agentCount = numberOfAgents || plan.defaultAgents;
-
-//       if (planLevel === PlanLevel.only_ai && agentCount > 0) {
-//         throw new AppError(
-//           status.BAD_REQUEST,
-//           "AI-only plans do not support agents"
-//         );
-//       }
-
-//       // 5. Validate phone number
-//       let normalizedPhone = purchasedNumber.startsWith("+")
-//         ? purchasedNumber
-//         : `+${purchasedNumber}`;
-
-//       const availableNumber = await tx.availableTwilioNumber.findFirst({
-//         where: {
-//           OR: [
-//             { phoneNumber: normalizedPhone },
-//             { phoneNumber: normalizedPhone.replace("+", "") },
-//           ],
-//         },
-//       });
-
-//       if (!availableNumber) {
-//         throw new AppError(
-//           status.NOT_FOUND,
-//           `Phone number ${purchasedNumber} is not available`
-//         );
-//       }
-
-//       if (availableNumber.isPurchased) {
-//         throw new AppError(
-//           status.BAD_REQUEST,
-//           `Phone number ${purchasedNumber} is already purchased`
-//         );
-//       }
-
-//       // 6. Calculate amounts and dates
-//       const startDate = new Date();
-//       const trialEndDate = calculateTrialEndDate();
-//       const finalAmount = calculateSubscriptionAmount(
-//         plan,
-//         planLevel,
-//         agentCount
-//       );
-
-//       console.log("Creating subscription with:", {
-//         organizationId,
-//         planId,
-//         planLevel,
-//         agentCount,
-//         finalAmount,
-//         trialEndDate,
-//       });
-
-//       // 7. Create Stripe subscription with trial
-//       const stripeCustomerId = await getOrCreateStripeCustomer(organization);
-
-//       const stripeSubscription = await stripe.subscriptions.create({
-//         customer: stripeCustomerId,
-//         items: [
-//           {
-//             price: plan.priceId,
-//             quantity: planLevel === PlanLevel.only_ai ? 1 : agentCount,
-//           },
-//         ],
-//         trial_end: Math.floor(trialEndDate.getTime() / 1000),
-//         payment_behavior: "default_incomplete",
-//         payment_settings: {
-//           payment_method_types: ["card"],
-//           save_default_payment_method: "on_subscription",
-//         },
-//         expand: ["latest_invoice.payment_intent"], // This expands the payment_intent
-//         metadata: {
-//           organizationId,
-//           planId,
-//           numberOfAgents: agentCount.toString(),
-//           purchasedNumber: availableNumber.phoneNumber,
-//           planLevel,
-//           sid,
-//         },
-//       });
-
-//       // Type assertion to handle the expanded invoice
-//       const latestInvoice =
-//         stripeSubscription.latest_invoice as Stripe.Invoice & {
-//           payment_intent?: Stripe.PaymentIntent;
-//         };
-//       const paymentIntent = latestInvoice?.payment_intent;
-
-//       console.log("Stripe subscription created:", {
-//         subscriptionId: stripeSubscription.id,
-//         customerId: stripeCustomerId,
-//         paymentIntentId: paymentIntent?.id,
-//       });
-
-//       // 8. Create subscription record
-//       const subscription = await tx.subscription.create({
-//         data: {
-//           organizationId,
-//           planId,
-//           startDate,
-//           trialEndDate,
-//           endDate: calculateEndDate(
-//             trialEndDate,
-//             plan.interval,
-//             plan.intervalCount
-//           ),
-//           amount: finalAmount,
-//           stripePaymentId: paymentIntent?.id || null,
-//           stripeSubscriptionId: stripeSubscription.id,
-//           paymentStatus: PaymentStatus.PENDING,
-//           status: SubscriptionStatus.TRIALING,
-//           planLevel,
-//           purchasedNumber: availableNumber.phoneNumber,
-//           sid,
-//           numberOfAgents: agentCount,
-//           isTrialUsed: true,
-//         },
-//       });
-
-//       console.log("Database subscription created:", subscription.id);
-
-//       // 9. Update organization
-//       await tx.organization.update({
-//         where: { id: organizationId },
-//         data: {
-//           hasUsedTrial: true,
-//           organizationNumber: availableNumber.phoneNumber,
-//         },
-//       });
-
-//       // 10. Reserve the phone number during trial
-//       await tx.availableTwilioNumber.update({
-//         where: { phoneNumber: availableNumber.phoneNumber },
-//         data: {
-//           requestedByOrgId: organizationId,
-//         },
-//       });
-
-//       console.log("Phone number reserved:", availableNumber.phoneNumber);
-
-//       return {
-//         subscription,
-//         clientSecret: paymentIntent?.client_secret,
-//         subscriptionId: stripeSubscription.id,
-//         trialEndDate,
-//       };
-//     },
-//     { timeout: 10000 }
-//   );
-// };
-
-// Upgrade/Downgrade plan
-
-// =============================
-// CREATE SUBSCRIPTION (TRIAL + CARD REQUIRED)
-// =============================
-
-const createSetupIntent = async (userId: string) => {
-  // Get user's organization
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { ownedOrganization: true },
-  });
-
-  if (!user || !user.ownedOrganization) {
-    throw new AppError(status.NOT_FOUND, "User organization not found");
-  }
-
-  const organization = user.ownedOrganization;
-
-  // Get or create Stripe customer
-  let stripeCustomerId = organization.stripeCustomerId;
-
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      name: user.name,
-      metadata: {
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    });
-    stripeCustomerId = customer.id;
-
-    await prisma.organization.update({
-      where: { id: organization.id },
-      data: { stripeCustomerId },
-    });
-  }
-
-  // Create Setup Intent
-  const setupIntent = await stripe.setupIntents.create({
-    customer: stripeCustomerId,
-    payment_method_types: ["card"],
-    usage: "off_session",
-    metadata: {
-      organizationId: organization.id,
-    },
-  });
-
-  return {
-    clientSecret: setupIntent.client_secret,
-    customerId: stripeCustomerId,
-  };
-};
+import { SubscriptionStatus } from "@prisma/client";
 
 const createSubscription = async (
-  organizationId: string,
-  planId: string,
-  planLevel: PlanLevel,
-  purchasedNumber: string,
-  sid: string,
-  numberOfAgents: number,
-  paymentMethodId: string
+  orgId: string,
+  payload: ICreateSubscriptionRequest
 ) => {
-  // ============================================
-  // STEP 1: Pre-transaction validations and Stripe operations
-  // ============================================
+  console.log(
+    "Creating subscription for org:",
+    orgId,
+    "with plan:",
+    payload.planId
+  );
 
-  // 1. Verify organization (outside transaction)
-  const organization = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    include: {
-      ownedOrganization: true,
-    },
+  const plan = await prisma.plan.findUnique({
+    where: { id: payload.planId, isActive: true, isDeleted: false },
   });
 
-  if (!organization) {
-    throw new AppError(status.NOT_FOUND, "Organization not found");
-  }
+  console.log(
+    "Plan found:",
+    plan
+      ? {
+          id: plan.id,
+          name: plan.name,
+          planLevel: plan.planLevel,
+          defaultAgents: plan.defaultAgents,
+          stripePriceId: plan.stripePriceId,
+        }
+      : null
+  );
 
-  // 2. Check for existing active subscriptions
-  const existingActiveSubscription = await prisma.subscription.findFirst({
-    where: {
-      organizationId,
-      status: {
-        in: [
-          SubscriptionStatus.ACTIVE,
-          SubscriptionStatus.TRIALING,
-          SubscriptionStatus.PAST_DUE,
-          SubscriptionStatus.INCOMPLETE,
-        ],
-      },
-    },
-  });
-
-  if (existingActiveSubscription) {
+  if (!plan) throw new AppError(status.NOT_FOUND, "Plan not found or inactive");
+  if (!plan.planLevel) {
     throw new AppError(
       status.BAD_REQUEST,
+      "Plan is missing planLevel configuration"
+    );
+  }
+
+  // Include owner to get email
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    include: {
+      subscriptions: true,
+      ownedOrganization: true, // Include owner details
+    },
+  });
+  if (!org) throw new AppError(status.NOT_FOUND, "Organization not found");
+  if (!org.ownedOrganization) {
+    throw new AppError(status.BAD_REQUEST, "Organization owner not found");
+  }
+
+  // Prevent multiple active subs
+  const activeSub = org.subscriptions.find((s) =>
+    ["ACTIVE", "TRIALING"].includes(s.status)
+  );
+  if (activeSub) {
+    throw new AppError(
+      status.CONFLICT,
       "Organization already has an active subscription"
     );
   }
 
-  // 3. Verify plan
-  const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  if (!plan) {
-    throw new AppError(status.NOT_FOUND, "Plan not found");
+  // Trial check
+  if (org.hasUsedTrial && plan.trialDays > 0) {
+    throw new AppError(status.BAD_REQUEST, "Trial already used");
   }
 
-  // 4. Validate number of agents
-  const agentCount = numberOfAgents || plan.defaultAgents;
+  let stripeSubscriptionId: string | null = null;
 
-  if (planLevel === PlanLevel.only_ai && agentCount > 0) {
-    throw new AppError(
-      status.BAD_REQUEST,
-      "AI-only plans do not support agents"
-    );
-  }
-
-  // 5. Validate phone number
-  let normalizedPhone = purchasedNumber.startsWith("+")
-    ? purchasedNumber
-    : `+${purchasedNumber}`;
-
-  const availableNumber = await prisma.availableTwilioNumber.findFirst({
-    where: {
-      OR: [
-        { phoneNumber: normalizedPhone },
-        { phoneNumber: normalizedPhone.replace("+", "") },
-      ],
-    },
-  });
-
-  if (!availableNumber) {
-    throw new AppError(
-      status.NOT_FOUND,
-      `Phone number ${purchasedNumber} is not available`
-    );
-  }
-
-  if (availableNumber.isPurchased) {
-    throw new AppError(
-      status.BAD_REQUEST,
-      `Phone number ${purchasedNumber} is already purchased`
-    );
-  }
-
-  // 6. Calculate amounts and dates
-  const startDate = new Date();
-  const trialEndDate = calculateTrialEndDate();
-  const finalAmount = calculateSubscriptionAmount(plan, planLevel, agentCount);
-
-  console.log("Creating subscription with:", {
-    organizationId,
-    planId,
-    planLevel,
-    agentCount,
-    finalAmount,
-    trialEndDate,
-    paymentMethodId,
-  });
-
-  // ============================================
-  // STEP 2: Stripe operations (OUTSIDE transaction)
-  // ============================================
-
-  // 7. Get or create Stripe customer
-  let stripeCustomerId = organization.stripeCustomerId;
-
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: organization.ownedOrganization?.email,
-      name: organization.name,
-      metadata: {
-        organizationId: organization.id,
-      },
-    });
-    stripeCustomerId = customer.id;
-
-    // Update organization with customer ID (separate update, not in transaction)
-    await prisma.organization.update({
-      where: { id: organizationId },
-      data: { stripeCustomerId: stripeCustomerId },
-    });
-
-    console.log("Created new Stripe customer:", stripeCustomerId);
-  } else {
-    console.log("Using existing Stripe customer:", stripeCustomerId);
-  }
-
-  // 8. Attach payment method to customer
   try {
-    await stripe.paymentMethods.attach(paymentMethodId, {
+    let stripeCustomerId = org.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: org.ownedOrganization.email,
+        name: org.name,
+        metadata: {
+          orgId,
+          ownerId: org.ownerId,
+        },
+      });
+      stripeCustomerId = customer.id;
+      await prisma.organization.update({
+        where: { id: orgId },
+        data: { stripeCustomerId },
+      });
+    }
+
+    await stripe.paymentMethods.attach(payload.paymentMethodId, {
       customer: stripeCustomerId,
     });
-    console.log("Payment method attached to customer");
-  } catch (error: any) {
-    if (error.code === "resource_already_exists") {
-      console.log("Payment method already attached");
-    } else {
-      throw new AppError(
-        status.BAD_REQUEST,
-        `Failed to attach payment method: ${error.message}`
-      );
+
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: { default_payment_method: payload.paymentMethodId },
+    });
+
+    const stripeSub = await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [{ price: plan.stripePriceId }],
+      trial_period_days:
+        plan.trialDays > 0 && !org.hasUsedTrial ? plan.trialDays : undefined,
+      payment_behavior: "default_incomplete",
+      expand: ["latest_invoice.payment_intent"],
+    });
+
+    stripeSubscriptionId = stripeSub.id;
+
+    const invoice = stripeSub.latest_invoice as any;
+    const clientSecret = invoice?.payment_intent?.client_secret || null;
+
+    const statusMap: Record<string, SubscriptionStatus> = {
+      active: SubscriptionStatus.ACTIVE,
+      trialing: SubscriptionStatus.TRIALING,
+      past_due: SubscriptionStatus.PAST_DUE,
+      canceled: SubscriptionStatus.CANCELED,
+      unpaid: SubscriptionStatus.UNPAID,
+      incomplete: SubscriptionStatus.INCOMPLETE,
+      incomplete_expired: SubscriptionStatus.INCOMPLETE_EXPIRED,
+    };
+
+    const dbStatus =
+      statusMap[stripeSub.status] || SubscriptionStatus.INCOMPLETE;
+
+    console.log("Creating subscription in DB with data:", {
+      organizationId: orgId,
+      planId: plan.id,
+      stripeSubscriptionId: stripeSub.id,
+      stripeCustomerId,
+      status: dbStatus,
+      planLevel: plan.planLevel,
+      numberOfAgents: plan.defaultAgents,
+    });
+
+    const subscription = await prisma.subscription.create({
+      data: {
+        organizationId: orgId,
+        planId: plan.id,
+        stripeSubscriptionId: stripeSub.id,
+        stripeCustomerId,
+        status: dbStatus,
+        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        trialStart: stripeSub.trial_start
+          ? new Date(stripeSub.trial_start * 1000)
+          : null,
+        trialEnd: stripeSub.trial_end
+          ? new Date(stripeSub.trial_end * 1000)
+          : null,
+        planLevel: plan.planLevel,
+        numberOfAgents: plan.defaultAgents,
+      },
+      include: { plan: true, organization: true },
+    });
+
+    console.log("Subscription created successfully in DB:", subscription.id);
+
+    // Mark trial used
+    if (plan.trialDays > 0 && !org.hasUsedTrial) {
+      await prisma.organization.update({
+        where: { id: orgId },
+        data: { hasUsedTrial: true },
+      });
     }
-  }
-
-  // 9. Set as default payment method
-  await stripe.customers.update(stripeCustomerId, {
-    invoice_settings: {
-      default_payment_method: paymentMethodId,
-    },
-  });
-  console.log("Payment method set as default");
-
-  // 10. Create Stripe subscription with trial
-  const stripeSubscription = await stripe.subscriptions.create({
-    customer: stripeCustomerId,
-    items: [
-      {
-        price: plan.priceId,
-        quantity: planLevel === PlanLevel.only_ai ? 1 : agentCount,
-      },
-    ],
-    trial_end: Math.floor(trialEndDate.getTime() / 1000),
-    default_payment_method: paymentMethodId,
-    metadata: {
-      organizationId,
-      planId,
-      numberOfAgents: agentCount.toString(),
-      purchasedNumber: availableNumber.phoneNumber,
-      planLevel,
-      sid,
-    },
-  });
-
-  console.log("Stripe subscription created:", {
-    subscriptionId: stripeSubscription.id,
-    customerId: stripeCustomerId,
-    status: stripeSubscription.status,
-  });
-
-  // 11. Get payment method details
-  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-
-  // ============================================
-  // STEP 3: Database transaction (fast operations only)
-  // ============================================
-
-  return await prisma.$transaction(async (tx) => {
-    // Create subscription record
-    const subscription = await tx.subscription.create({
-      data: {
-        organizationId,
-        planId,
-        startDate,
-        trialEndDate,
-        endDate: calculateEndDate(
-          trialEndDate,
-          plan.interval,
-          plan.intervalCount
-        ),
-        amount: finalAmount,
-        stripePaymentId: null,
-        stripeSubscriptionId: stripeSubscription.id,
-        paymentStatus: PaymentStatus.PENDING,
-        status: SubscriptionStatus.TRIALING,
-        planLevel,
-        purchasedNumber: availableNumber.phoneNumber,
-        sid,
-        numberOfAgents: agentCount,
-        isTrialUsed: true,
-      },
-    });
-
-    console.log("Database subscription created:", subscription.id);
-
-    // Update organization
-    await tx.organization.update({
-      where: { id: organizationId },
-      data: {
-        hasUsedTrial: true,
-        organizationNumber: availableNumber.phoneNumber,
-      },
-    });
-
-    // Reserve the phone number during trial
-    await tx.availableTwilioNumber.update({
-      where: { phoneNumber: availableNumber.phoneNumber },
-      data: {
-        requestedByOrgId: organizationId,
-      },
-    });
-
-    console.log("Phone number reserved:", availableNumber.phoneNumber);
 
     return {
       subscription,
-      trialEndDate,
-      nextBillingDate: trialEndDate,
-      stripeCustomerId,
-      paymentMethod: {
-        brand: paymentMethod.card?.brand,
-        last4: paymentMethod.card?.last4,
-        exp_month: paymentMethod.card?.exp_month,
-        exp_year: paymentMethod.card?.exp_year,
-      },
+      clientSecret,
+      message: `Subscription created. ${
+        plan.trialDays > 0 && !org.hasUsedTrial
+          ? `${plan.trialDays}-day trial started.`
+          : ""
+      }`,
     };
-  });
-};
+  } catch (err: any) {
+    console.error("Subscription creation error:", err);
 
-const changePlan = async (
-  subscriptionId: string,
-  newPlanId: string,
-  numberOfAgents?: number
-) => {
-  return await prisma.$transaction(async (tx) => {
-    const subscription = await tx.subscription.findUnique({
-      where: { id: subscriptionId },
-      include: { plan: true },
-    });
-
-    if (!subscription) {
-      throw new AppError(status.NOT_FOUND, "Subscription not found");
-    }
-
-    if (subscription.status !== SubscriptionStatus.ACTIVE) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "Can only change active subscriptions"
-      );
-    }
-
-    const newPlan = await tx.plan.findUnique({ where: { id: newPlanId } });
-    if (!newPlan) {
-      throw new AppError(status.NOT_FOUND, "New plan not found");
-    }
-
-    // Validate plan level compatibility
-    if (subscription.planLevel !== newPlan.planLevel) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "Cannot change to a plan with different plan level. Please cancel and create a new subscription."
-      );
-    }
-
-    // Calculate new amount
-    const agentCount =
-      numberOfAgents || subscription.numberOfAgents || newPlan.defaultAgents;
-    const newAmount = calculateSubscriptionAmount(
-      newPlan,
-      subscription.planLevel,
-      agentCount
-    );
-
-    console.log("Changing plan:", {
-      oldPlanId: subscription.planId,
-      newPlanId,
-      oldAmount: subscription.amount,
-      newAmount,
-      agentCount,
-    });
-
-    // Get current Stripe subscription
-    const stripeSubscription = await stripe.subscriptions.retrieve(
-      subscription.stripeSubscriptionId!
-    );
-
-    // Update Stripe subscription
-    await stripe.subscriptions.update(subscription.stripeSubscriptionId!, {
-      items: [
-        {
-          id: stripeSubscription.items.data[0].id,
-          price: newPlan.priceId,
-          quantity:
-            subscription.planLevel === PlanLevel.only_ai ? 1 : agentCount,
-        },
-      ],
-      proration_behavior: "always_invoice", // Charge/credit difference immediately
-      metadata: {
-        ...stripeSubscription.metadata,
-        planId: newPlanId,
-        numberOfAgents: agentCount.toString(),
-      },
-    });
-
-    // Update database
-    const updatedSubscription = await tx.subscription.update({
-      where: { id: subscriptionId },
-      data: {
-        planId: newPlanId,
-        numberOfAgents: agentCount,
-        amount: newAmount,
-      },
-    });
-
-    console.log("Plan changed successfully");
-
-    return updatedSubscription;
-  });
-};
-
-// Change number of agents
-const updateAgentCount = async (
-  subscriptionId: string,
-  numberOfAgents: number
-) => {
-  return await prisma.$transaction(async (tx) => {
-    const subscription = await tx.subscription.findUnique({
-      where: { id: subscriptionId },
-      include: { plan: true },
-    });
-
-    if (!subscription) {
-      throw new AppError(status.NOT_FOUND, "Subscription not found");
-    }
-
-    if (subscription.status !== SubscriptionStatus.ACTIVE) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "Can only update agents for active subscriptions"
-      );
-    }
-
-    if (subscription.planLevel === PlanLevel.only_ai) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "AI-only plans don't support agents"
-      );
-    }
-
-    if (numberOfAgents < 1) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "Number of agents must be at least 1"
-      );
-    }
-
-    const newAmount = calculateSubscriptionAmount(
-      subscription.plan!,
-      subscription.planLevel,
-      numberOfAgents
-    );
-
-    console.log("Updating agent count:", {
-      subscriptionId,
-      oldAgentCount: subscription.numberOfAgents,
-      newAgentCount: numberOfAgents,
-      oldAmount: subscription.amount,
-      newAmount,
-    });
-
-    // Get current Stripe subscription
-    const stripeSubscription = await stripe.subscriptions.retrieve(
-      subscription.stripeSubscriptionId!
-    );
-
-    // Update Stripe subscription quantity
-    await stripe.subscriptions.update(subscription.stripeSubscriptionId!, {
-      items: [
-        {
-          id: stripeSubscription.items.data[0].id,
-          quantity: numberOfAgents,
-        },
-      ],
-      proration_behavior: "always_invoice",
-      metadata: {
-        ...stripeSubscription.metadata,
-        numberOfAgents: numberOfAgents.toString(),
-      },
-    });
-
-    // Update database
-    const updatedSubscription = await tx.subscription.update({
-      where: { id: subscriptionId },
-      data: {
-        numberOfAgents,
-        amount: newAmount,
-      },
-    });
-
-    console.log("Agent count updated successfully");
-
-    return updatedSubscription;
-  });
-};
-
-// Cancel subscription
-const cancelSubscription = async (subscriptionId: string) => {
-  return await prisma.$transaction(async (tx) => {
-    const subscription = await tx.subscription.findUnique({
-      where: { id: subscriptionId },
-    });
-
-    if (!subscription) {
-      throw new AppError(status.NOT_FOUND, "Subscription not found");
-    }
-
-    if (subscription.status === SubscriptionStatus.CANCELED) {
-      throw new AppError(
-        status.BAD_REQUEST,
-        "Subscription is already canceled"
-      );
-    }
-
-    console.log("Canceling subscription:", subscriptionId);
-
-    // Cancel in Stripe
-    if (subscription.stripeSubscriptionId) {
-      await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
-    }
-
-    // Update database
-    const updatedSubscription = await tx.subscription.update({
-      where: { id: subscriptionId },
-      data: {
-        status: SubscriptionStatus.CANCELED,
-        endDate: new Date(),
-      },
-    });
-
-    // If subscription was in trial, release the phone number
-    if (subscription.status === SubscriptionStatus.TRIALING) {
-      let phoneNumber = subscription.purchasedNumber;
-      if (!phoneNumber.startsWith("+")) {
-        phoneNumber = `+${phoneNumber}`;
+    // Rollback Stripe subscription if DB save fails
+    if (stripeSubscriptionId) {
+      try {
+        await stripe.subscriptions.cancel(stripeSubscriptionId);
+        console.log("Rolled back Stripe subscription:", stripeSubscriptionId);
+      } catch (cancelErr) {
+        console.error("Failed to cancel Stripe subscription:", cancelErr);
       }
-
-      await tx.availableTwilioNumber.update({
-        where: { phoneNumber: phoneNumber },
-        data: {
-          requestedByOrgId: null,
-        },
-      });
-
-      console.log("Released phone number from trial subscription");
     }
 
-    console.log("Subscription canceled successfully");
-
-    return updatedSubscription;
-  });
-};
-
-const getAllSubscription = async (query: Record<string, any>) => {
-  const queryBuilder = new QueryBuilder(prisma.subscription, query);
-  const subscription = await queryBuilder
-    .search([""])
-    .paginate()
-    .fields()
-    .include({
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          organizationNumber: true,
-          industry: true,
-          address: true,
-          websiteLink: true,
-          ownerId: true,
-          ownedOrganization: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-          subscriptions: {
-            select: {
-              id: true,
-              startDate: true,
-              endDate: true,
-              trialEndDate: true,
-              amount: true,
-              paymentStatus: true,
-              status: true,
-              planLevel: true,
-              purchasedNumber: true,
-              numberOfAgents: true,
-            },
-          },
-        },
-      },
-      plan: true,
-    })
-    .execute();
-
-  const meta = await queryBuilder.countTotal();
-  return { meta, data: subscription };
-};
-
-const getSingleSubscription = async (subscriptionId: string) => {
-  const result = await prisma.subscription.findUnique({
-    where: { id: subscriptionId },
-    include: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          organizationNumber: true,
-          hasUsedTrial: true,
-        },
-      },
-      plan: true,
-    },
-  });
-
-  if (!result) {
-    throw new AppError(status.NOT_FOUND, "Subscription not found!");
-  }
-
-  return result;
-};
-
-const getMySubscription = async (userId: string) => {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { ownedOrganization: true },
-  });
-
-  if (!user) {
-    throw new AppError(status.NOT_FOUND, "User not found");
-  }
-
-  const organizationId = user.ownedOrganization?.id;
-  if (!organizationId) {
     throw new AppError(
-      status.NOT_FOUND,
-      "User is not associated with an organization"
+      status.INTERNAL_SERVER_ERROR,
+      `Failed to create subscription: ${err.message}`
     );
   }
-
-  const result = await prisma.subscription.findFirst({
-    where: { organizationId },
-    include: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          organizationNumber: true,
-          industry: true,
-          address: true,
-          websiteLink: true,
-          ownerId: true,
-          hasUsedTrial: true,
-          ownedOrganization: true,
-          subscriptions: {
-            select: {
-              id: true,
-              startDate: true,
-              endDate: true,
-              trialEndDate: true,
-              amount: true,
-              paymentStatus: true,
-              status: true,
-              planLevel: true,
-              purchasedNumber: true,
-              numberOfAgents: true,
-            },
-          },
-        },
-      },
-      plan: true,
-    },
-  });
-
-  if (!result) {
-    throw new AppError(
-      status.NOT_FOUND,
-      "Subscription not found for this organization"
-    );
-  }
-
-  return result;
 };
 
-const updateSubscription = async (
-  subscriptionId: string,
-  data: Partial<Subscription>
+const getOrgSubscriptions = async (orgId: string) => {
+  return await prisma.subscription.findMany({
+    where: { organizationId: orgId },
+    include: { plan: true },
+    orderBy: { createdAt: "desc" },
+  });
+};
+
+const cancelSubscription = async (
+  orgId: string,
+  payload: ICancelSubscriptionRequest
 ) => {
-  const subscription = await prisma.subscription.findUnique({
-    where: { id: subscriptionId },
+  const sub = await prisma.subscription.findFirst({
+    where: { id: payload.subscriptionId, organizationId: orgId },
   });
+  if (!sub) throw new AppError(status.NOT_FOUND, "Subscription not found");
 
-  if (!subscription) {
-    throw new AppError(status.NOT_FOUND, "Subscription not found");
-  }
-
-  const result = await prisma.subscription.update({
-    where: { id: subscriptionId },
-    data,
-  });
-
-  return result;
-};
-
-const deleteSubscription = async (subscriptionId: string) => {
-  return cancelSubscription(subscriptionId);
-};
-
-// const HandleStripeWebhook = async (event: Stripe.Event) => {
-//   try {
-//     console.log(`Processing webhook event: ${event.type}`);
-
-//     switch (event.type) {
-//       // Subscription lifecycle events
-//       case "customer.subscription.trial_will_end":
-//         await handleSubscriptionTrialWillEnd(event.data.object as Stripe.Subscription);
-//         break;
-
-//       case "customer.subscription.updated":
-//         await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
-//         break;
-
-//       case "customer.subscription.deleted":
-//         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-//         break;
-
-//       // Invoice events (primary payment handlers)
-//       case "invoice.payment_succeeded":
-//         await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
-//         break;
-
-//       case "invoice.payment_failed":
-//         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-//         break;
-
-//       // Legacy payment intent events (for backward compatibility)
-//       case "payment_intent.succeeded":
-//         await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
-//         break;
-
-//       case "payment_intent.payment_failed":
-//         await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
-//         break;
-
-//       default:
-//         console.log(`Unhandled event type: ${event.type}`);
-//     }
-
-//     return { received: true };
-//   } catch (error) {
-//     console.error("Error handling Stripe webhook:", error);
-//     throw new AppError(status.INTERNAL_SERVER_ERROR, "Webhook handling failed");
-//   }
-// };
-
-const HandleStripeWebhook = async (event: Stripe.Event) => {
   try {
-    console.log(`Processing webhook event: ${event.type}`);
+    const stripeSub = await stripe.subscriptions.update(
+      sub.stripeSubscriptionId,
+      { cancel_at_period_end: payload.cancelAtPeriodEnd ?? true }
+    );
 
-    switch (event.type) {
-      // ============================================
-      // SUBSCRIPTION LIFECYCLE EVENTS (CRITICAL)
-      // ============================================
-      case "customer.subscription.created":
-        console.log("New subscription created:", event.data.object.id);
-        // Usually handled by createSubscription, but good for logging
-        break;
+    const updated = await prisma.subscription.update({
+      where: { id: sub.id },
+      data: {
+        cancelAtPeriodEnd: payload.cancelAtPeriodEnd ?? true,
+        canceledAt: payload.cancelAtPeriodEnd ? null : new Date(),
+        status: payload.cancelAtPeriodEnd
+          ? sub.status
+          : SubscriptionStatus.CANCELED,
+      },
+      include: { plan: true },
+    });
 
-      case "customer.subscription.trial_will_end":
-        await handleSubscriptionTrialWillEnd(
-          event.data.object as Stripe.Subscription
-        );
-        break;
-
-      case "customer.subscription.updated":
-        await handleSubscriptionUpdated(
-          event.data.object as Stripe.Subscription
-        );
-        break;
-
-      case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(
-          event.data.object as Stripe.Subscription
-        );
-        break;
-
-      // ============================================
-      // INVOICE EVENTS (CRITICAL for recurring billing)
-      // ============================================
-      case "invoice.created":
-        console.log("Invoice created:", event.data.object.id);
-        // Log for tracking purposes
-        break;
-
-      case "invoice.finalized":
-        console.log("Invoice finalized:", event.data.object.id);
-        // Invoice is ready to be paid
-        break;
-
-      case "invoice.payment_succeeded":
-        await handleInvoicePaymentSucceeded(
-          event.data.object as Stripe.Invoice
-        );
-        break;
-
-      case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
-
-      // ============================================
-      // PAYMENT INTENT EVENTS (Legacy/Backup)
-      // ============================================
-      case "payment_intent.succeeded":
-        await handlePaymentIntentSucceeded(
-          event.data.object as Stripe.PaymentIntent
-        );
-        break;
-
-      case "payment_intent.payment_failed":
-        await handlePaymentIntentFailed(
-          event.data.object as Stripe.PaymentIntent
-        );
-        break;
-
-      // ============================================
-      // CUSTOMER EVENTS (Optional but useful)
-      // ============================================
-      case "customer.created":
-        console.log("Customer created:", event.data.object.id);
-        break;
-
-      case "customer.updated":
-        console.log("Customer updated:", event.data.object.id);
-        break;
-
-      case "customer.deleted":
-        console.log("Customer deleted:", event.data.object.id);
-        break;
-
-      // ============================================
-      // PAYMENT METHOD EVENTS (Optional)
-      // ============================================
-      case "payment_method.attached":
-        console.log("Payment method attached:", event.data.object.id);
-        break;
-
-      case "payment_method.detached":
-        console.log("Payment method detached:", event.data.object.id);
-        break;
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
-
-    return { received: true };
-  } catch (error) {
-    console.error("Error handling Stripe webhook:", error);
-    throw new AppError(status.INTERNAL_SERVER_ERROR, "Webhook handling failed");
+    return updated;
+  } catch (err: any) {
+    throw new AppError(status.INTERNAL_SERVER_ERROR, err.message);
   }
 };
 
-export const SubscriptionServices = {
+const resumeSubscription = async (orgId: string, subscriptionId: string) => {
+  const sub = await prisma.subscription.findFirst({
+    where: {
+      id: subscriptionId,
+      organizationId: orgId,
+      cancelAtPeriodEnd: true,
+    },
+  });
+  if (!sub) throw new AppError(status.BAD_REQUEST, "No subscription to resume");
+
+  await stripe.subscriptions.update(sub.stripeSubscriptionId, {
+    cancel_at_period_end: false,
+  });
+
+  return await prisma.subscription.update({
+    where: { id: sub.id },
+    data: { cancelAtPeriodEnd: false, canceledAt: null },
+    include: { plan: true },
+  });
+};
+
+// Webhook (idempotent)
+const handleWebhook = async (rawBody: Buffer, signature: string) => {
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      rawBody,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err: any) {
+    throw new AppError(400, `Webhook Error: ${err.message}`);
+  }
+
+  const existing = await prisma.webhookEvent.findUnique({
+    where: { id: event.id },
+  });
+  if (existing) return { received: true };
+
+  const STATUS_MAP: Record<string, SubscriptionStatus> = {
+    active: SubscriptionStatus.ACTIVE,
+    trialing: SubscriptionStatus.TRIALING,
+    past_due: SubscriptionStatus.PAST_DUE,
+    canceled: SubscriptionStatus.CANCELED,
+    unpaid: SubscriptionStatus.UNPAID,
+    incomplete: SubscriptionStatus.INCOMPLETE,
+    incomplete_expired: SubscriptionStatus.INCOMPLETE_EXPIRED,
+  };
+
+  if (
+    [
+      "customer.subscription.created",
+      "customer.subscription.updated",
+      "customer.subscription.deleted",
+    ].includes(event.type)
+  ) {
+    const sub = event.data.object as any;
+    await prisma.subscription.updateMany({
+      where: { stripeSubscriptionId: sub.id },
+      data: {
+        status: STATUS_MAP[sub.status] || SubscriptionStatus.INCOMPLETE,
+        currentPeriodStart: new Date(sub.current_period_start * 1000),
+        currentPeriodEnd: new Date(sub.current_period_end * 1000),
+        trialStart: sub.trial_start ? new Date(sub.trial_start * 1000) : null,
+        trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
+      },
+    });
+  }
+
+  await prisma.webhookEvent.create({
+    data: { id: event.id, type: event.type },
+  });
+  return { received: true };
+};
+
+export const SubscriptionService = {
   createSubscription,
-  getAllSubscription,
-  getSingleSubscription,
-  getMySubscription,
-  updateSubscription,
-  deleteSubscription,
-  HandleStripeWebhook,
-  changePlan,
-  updateAgentCount,
+  getOrgSubscriptions,
   cancelSubscription,
-  getOrCreateStripeCustomer,
-  createSetupIntent,
+  resumeSubscription,
+  handleWebhook,
 };
