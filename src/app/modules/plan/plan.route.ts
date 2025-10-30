@@ -1,27 +1,30 @@
 import { Router } from "express";
-import { UserRole } from "@prisma/client";
 import auth from "../../middlewares/auth";
-import { PlanController } from "./plan.controller";
-import { planValidationSchema } from "./plan.validation";
 import validateRequest from "../../middlewares/validateRequest";
+import { createPlanValidation, updatePlanValidation } from "./plan.validation";
+import { PlanController } from "./plan.controller";
 
 const router = Router();
 
+// Admin only
 router.post(
-  "/create-plan",
-  auth(UserRole.super_admin),
-  validateRequest(planValidationSchema),
+  "/",
+  auth("super_admin"),
+  validateRequest(createPlanValidation),
   PlanController.createPlan
 );
 
-router.get("/", PlanController.getAllPlans);
-
-router.get("/:planId", PlanController.getPlanById);
-
-router.delete(
-  "/:planId",
-  auth(UserRole.super_admin),
-  PlanController.deletePlan
+router.patch(
+  "/:id",
+  auth("super_admin"),
+  validateRequest(updatePlanValidation),
+  PlanController.updatePlan
 );
+
+router.delete("/:id", auth("super_admin"), PlanController.deletePlan);
+
+// Public
+router.get("/", PlanController.getAllPlans);
+router.get("/:id", PlanController.getPlanById);
 
 export const PlanRoutes = router;

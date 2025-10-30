@@ -1,99 +1,201 @@
-import { Plan } from "@prisma/client";
+import status from "http-status";
+import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import { stripe } from "../../utils/stripe";
+import { ICreatePlanRequest, IUpdatePlanRequest } from "./plan.interface";
 
-const createPlan = async (payload: Plan) => {
-  const result = await prisma.$transaction(async (tx) => {
-    // Step 1: Create Product in Stripe
+const createPlan = async (payload: ICreatePlanRequest) => {
+  try {
+    // 1. Create Stripe Product
     const product = await stripe.products.create({
-      name: payload.planName,
-      description: payload.description!,
-      active: true,
-    });
-
-    // Step 2: Create Price in Stripe
-    const recurringData: any = {
-      interval: payload.interval,
-      interval_count: payload.intervalCount,
-    };
-
-    const price = await stripe.prices.create({
-      currency: "usd",
-      unit_amount: Math.round(payload.amount * 100),
-      active: true,
-      recurring: recurringData,
-      product: product.id,
-    });
-
-    // Step 3: Create Plan Record in Database
-    const dbPlan = await tx.plan.create({
-      data: {
-        amount: payload.amount || 0,
-        planName: payload.planName,
+      name: payload.name,
+      description: payload.description,
+      metadata: {
         planLevel: payload.planLevel,
-        currency: "usd",
-        interval: payload.interval,
-        intervalCount: payload.intervalCount,
-        productId: product.id,
-        priceId: price.id,
-        active: payload.active,
-        description: payload.description,
-        features: payload.features || [],
+        defaultAgents: payload.defaultAgents?.toString() || "0",
       },
     });
 
-    return dbPlan;
+    // 2. Create Stripe Price
+    const price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: Math.round(payload.price * 100),
+      currency: "usd",
+      recurring: {
+        interval: payload.interval.toLowerCase() as "month" | "year",
+        trial_period_days: payload.trialDays,
+      },
+    });
+
+    // 3. Save to DB
+    return await prisma.plan.create({
+      data: {
+        name: payload.name,
+        description: payload.description,
+        price: payload.price,
+        interval: payload.interval,
+        trialDays: payload.trialDays || 1,
+        stripePriceId: price.id,
+        stripeProductId: product.id,
+        features: payload.features || {},
+        planLevel: payload.planLevel,
+        defaultAgents: payload.defaultAgents || 0,
+        extraAgentPricing: payload.extraAgentPricing || [],
+        totalMinuteLimit: payload.totalMinuteLimit || 0,
+      },
+    });
+  } catch (error: any) {
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      `Failed to create plan: ${error.message}`
+    );
+  }
+};
+
+const getAllPlans = async (filters?: {
+  isActive?: boolean;
+  isDeleted?: boolean;
+}) => {
+  const where: any = { isDeleted: false };
+  if (filters?.isActive !== undefined) where.isActive = filters.isActive;
+
+  return await prisma.plan.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
   });
-  return result;
 };
 
-// Get All Plans
-const getAllPlans = async () => {
-  const plans = await prisma.plan.findMany();
-  return plans;
-};
-
-// Get a Single Plan by ID
-const getPlanById = async (planId: string) => {
+const getPlanById = async (id: string) => {
   const plan = await prisma.plan.findUnique({
-    where: { id: planId },
+    where: { id, isDeleted: false },
+    include: { subscriptions: { where: { status: "ACTIVE" } } },
   });
+
+  if (!plan) throw new AppError(status.NOT_FOUND, "Plan not found");
 
   return plan;
 };
 
-// // Delete Plan
-const deletePlan = async (planId: string) => {
-  return await prisma.$transaction(async (tx) => {
-    // Step 1: Find the plan record in the database
-    const plan = await tx.plan.findUnique({
-      where: { id: planId },
-    });
+const updatePlan = async (id: string, payload: IUpdatePlanRequest) => {
+  const plan = await prisma.plan.findUnique({
+    where: { id, isDeleted: false },
+    include: { subscriptions: true },
+  });
 
-    if (!plan) {
-      throw new Error(`Plan with ID ${planId} not found`);
+  if (!plan) throw new AppError(status.NOT_FOUND, "Plan not found");
+
+  const hasActiveSubs = plan.subscriptions.some((s) => s.status === "ACTIVE");
+
+  // Block price/trial changes if active subs
+  if (hasActiveSubs) {
+    if (payload.price !== undefined && payload.price !== plan.price) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Cannot change price on active subscriptions"
+      );
+    }
+    if (
+      payload.trialDays !== undefined &&
+      payload.trialDays !== plan.trialDays
+    ) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Cannot change trial days on active subscriptions"
+      );
+    }
+  }
+
+  try {
+    let newPriceId = plan.stripePriceId;
+
+    // Update Stripe Product
+    if (payload.name || payload.description) {
+      await stripe.products.update(plan.stripeProductId, {
+        name: payload.name || plan.name,
+        description: payload.description ?? plan.description,
+      });
     }
 
-    // Step 2: Deactivate the price in Stripe
-    await stripe.prices.update(plan.priceId, { active: false });
+    // Create new price if price or interval changed
+    if (payload.price !== undefined || payload.interval !== undefined) {
+      await stripe.prices.update(plan.stripePriceId, { active: false });
 
-    // Step 3: Deactivate the product in Stripe
-    await stripe.products.update(plan.productId, { active: false });
+      const newPrice = await stripe.prices.create({
+        product: plan.stripeProductId,
+        unit_amount: Math.round((payload.price || plan.price) * 100),
+        currency: "usd",
+        recurring: {
+          interval: (payload.interval || plan.interval).toLowerCase() as
+            | "month"
+            | "year",
+          trial_period_days: payload.trialDays || plan.trialDays,
+        },
+      });
+      newPriceId = newPrice.id;
+    }
 
-    // Step 4: Delete the plan record in the database
-    await tx.plan.delete({
-      where: { id: planId },
+    // Update DB
+    return await prisma.plan.update({
+      where: { id },
+      data: {
+        name: payload.name,
+        description: payload.description,
+        price: payload.price,
+        interval: payload.interval,
+        trialDays: payload.trialDays,
+        stripePriceId: newPriceId,
+        isActive: payload.isActive,
+        features: payload.features,
+        planLevel: payload.planLevel,
+        defaultAgents: payload.defaultAgents,
+        extraAgentPricing: payload.extraAgentPricing,
+        totalMinuteLimit: payload.totalMinuteLimit,
+      },
     });
-
-    return {
-      message: `Plan with ID ${planId} archived and deleted successfully`,
-    };
-  });
+  } catch (error: any) {
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      `Update failed: ${error.message}`
+    );
+  }
 };
 
-export const PlanServices = {
+const deletePlan = async (id: string) => {
+  const plan = await prisma.plan.findUnique({
+    where: { id, isDeleted: false },
+    include: {
+      subscriptions: { where: { status: { in: ["ACTIVE", "TRIALING"] } } },
+    },
+  });
+
+  if (!plan) throw new AppError(status.NOT_FOUND, "Plan not found");
+  if (plan.subscriptions.length > 0) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      "Cannot delete plan with active subscriptions"
+    );
+  }
+
+  try {
+    await stripe.products.update(plan.stripeProductId, { active: false });
+    await prisma.plan.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date(), isActive: false },
+    });
+
+    return { message: "Plan archived successfully" };
+  } catch (error: any) {
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      `Delete failed: ${error.message}`
+    );
+  }
+};
+
+export const PlanService = {
   createPlan,
   getAllPlans,
   getPlanById,
+  updatePlan,
   deletePlan,
 };

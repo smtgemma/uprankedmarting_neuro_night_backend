@@ -7,7 +7,7 @@ import express, { Application, Request, Response } from "express";
 import globalErrorHandler from "./app/middlewares/globalErrorHandler";
 import { requestLogger } from "./app/middlewares/requestLogger";
 import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
-import { scheduleExpirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
+// import { scheduleExpirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
 
 const app: Application = express();
 app.set("trust proxy", 1);
@@ -70,11 +70,11 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 // Initialize subscription expiration job
-try {
-  scheduleExpirationJob();
-} catch (error) {
-  console.error("Failed to schedule expiration job:", error);
-}
+// try {
+//   scheduleExpirationJob();
+// } catch (error) {
+//   console.error("Failed to schedule expiration job:", error);
+// }
 
 app.use(globalErrorHandler);
 app.use(notFound);
