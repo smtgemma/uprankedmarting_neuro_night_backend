@@ -1694,7 +1694,7 @@
 
 import AppError from "../../errors/AppError";
 import status from "http-status";
-import { AssignmentStatus, User } from "@prisma/client";
+import { AssignmentStatus, SubscriptionStatus, User } from "@prisma/client";
 import prisma from "../../utils/prisma";
 import { IPaginationOptions, paginationHelper } from "../../utils/paginationHelpers";
 
@@ -1933,6 +1933,102 @@ const getAgentsByOrganization = async (
 
 // ============ 3. ASSIGN AGENT TO ORGANIZATION ============
 
+// const assignAgentToOrganization = async (
+//   payload: {
+//     agentUserId: string;
+//     organizationId: string;
+//   },
+//   assignedByUserId: string
+// ) => {
+//   const { agentUserId, organizationId } = payload;
+
+//   // Verify agent exists
+//   const agent = await prisma.agent.findFirst({
+//     where: { userId: agentUserId },
+//   });
+
+//   if (!agent) {
+//     throw new AppError(status.NOT_FOUND, "Agent not found!");
+//   }
+
+//   // Verify organization exists
+//   const organization = await prisma.organization.findUnique({
+//     where: { id: organizationId },
+//   });
+
+//   if (!organization) {
+//     throw new AppError(status.NOT_FOUND, "Organization not found!");
+//   }
+
+//   // Check if already assigned
+//   const existingAssignment = await prisma.agentAssignment.findUnique({
+//     where: {
+//       agentUserId_organizationId: {
+//         agentUserId: agentUserId,
+//         organizationId: organizationId,
+//       },
+//     },
+//   });
+
+//   if (existingAssignment && existingAssignment.status === AssignmentStatus.ASSIGNED) {
+//     throw new AppError(
+//       status.BAD_REQUEST,
+//       "Agent is already assigned to this organization!"
+//     );
+//   }
+
+//   // Create or update assignment record
+//   const assignment = await prisma.agentAssignment.upsert({
+//     where: {
+//       agentUserId_organizationId: {
+//         agentUserId: agentUserId,
+//         organizationId: organizationId,
+//       },
+//     },
+//     update: {
+//       status: AssignmentStatus.ASSIGNED,
+//       assignedBy: assignedByUserId,
+//       assignedAt: new Date(),
+//       removedAt: null,
+//     },
+//     create: {
+//       agentUserId: agentUserId,
+//       organizationId: organizationId,
+//       status: AssignmentStatus.ASSIGNED,
+//       assignedBy: assignedByUserId,
+//     },
+//     include: {
+//       agent: {
+//         include: {
+//           user: {
+//             select: {
+//               id: true,
+//               name: true,
+//               email: true,
+//               phone: true,
+//             },
+//           },
+//         },
+//       },
+//       organization: {
+//         select: {
+//           id: true,
+//           name: true,
+//         },
+//       },
+//       assignedByUser: {
+//         select: {
+//           id: true,
+//           name: true,
+//           email: true,
+//         },
+//       },
+//     },
+//   });
+
+//   return assignment;
+// };
+
 const assignAgentToOrganization = async (
   payload: {
     agentUserId: string;
@@ -1958,6 +2054,42 @@ const assignAgentToOrganization = async (
 
   if (!organization) {
     throw new AppError(status.NOT_FOUND, "Organization not found!");
+  }
+
+  // Check active subscription
+  const activeSubscription = await prisma.subscription.findFirst({
+    where: {
+      organizationId: organizationId,
+      status: {
+        in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING]
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  if (!activeSubscription) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      "Organization does not have an active subscription!"
+    );
+  }
+
+  // Count currently assigned agents
+  const currentAgentCount = await prisma.agentAssignment.count({
+    where: {
+      organizationId: organizationId,
+      status: AssignmentStatus.ASSIGNED
+    }
+  });
+
+  // Check if organization has reached agent limit
+  if (currentAgentCount >= activeSubscription?.numberOfAgents!) {
+    throw new AppError(
+      status.BAD_REQUEST,
+      `Organization has reached the maximum agent limit of ${activeSubscription.numberOfAgents}.`
+    );
   }
 
   // Check if already assigned
@@ -2028,7 +2160,6 @@ const assignAgentToOrganization = async (
 
   return assignment;
 };
-
 // ============ 4. REMOVE AGENT FROM ORGANIZATION ============
 
 const removeAgentFromOrganization = async (payload: {
@@ -2096,7 +2227,6 @@ const removeAgentFromOrganization = async (payload: {
 
   return result;
 };
-
 
 const getAIAgentIdsByOrganizationAdmin = async (user: User) => {
   try {

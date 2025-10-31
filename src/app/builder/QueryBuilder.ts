@@ -9,18 +9,47 @@ class QueryBuilder {
     // console.log(query);
   }
   // Search
+  // search(searchableFields: string[]) {
+  //   const searchTerm = this.query.searchTerm as string;
+  //   if (searchTerm) {
+  //     this.prismaQuery.where = {
+  //       ...this.prismaQuery.where,
+  //       OR: searchableFields.map((field) => ({
+  //         [field]: { contains: searchTerm, mode: "insensitive" },
+  //       })),
+  //     };
+  //   }
+  //   return this;
+  // }
+
   search(searchableFields: string[]) {
-    const searchTerm = this.query.searchTerm as string;
-    if (searchTerm) {
-      this.prismaQuery.where = {
-        ...this.prismaQuery.where,
-        OR: searchableFields.map((field) => ({
-          [field]: { contains: searchTerm, mode: "insensitive" },
-        })),
+  const searchTerm = this.query.searchTerm as string;
+
+  if (searchTerm) {
+    const orConditions = searchableFields.map((field) => {
+      if (field.includes(".")) {
+        const [relation, nestedField] = field.split(".");
+        return {
+          [relation]: {
+            [nestedField]: { contains: searchTerm, mode: "insensitive" },
+          },
+        };
+      }
+
+      return {
+        [field]: { contains: searchTerm, mode: "insensitive" },
       };
-    }
-    return this;
+    });
+
+    this.prismaQuery.where = {
+      ...this.prismaQuery.where,
+      OR: orConditions,
+    };
   }
+
+  return this;
+}
+
 
   // Filter
   filter() {

@@ -19,10 +19,11 @@ const getAllOrganizations = async () => {
       subscriptions: {
         select: {
           id: true,
-          amount: true,
-          startDate: true,
-          endDate: true,
-          paymentStatus: true,
+          trialStart: true,
+          trialEnd: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          canceledAt: true,
           planLevel: true,
           purchasedNumber: true,
           sid: true,
@@ -31,7 +32,7 @@ const getAllOrganizations = async () => {
           plan: {
             select: {
               id: true,
-              planName: true,
+              name: true,
             },
           },
         },
@@ -469,7 +470,7 @@ const getOrganizationCallLogsManagement = async (
   const shouldFetchAI = agentType !== 'human';
 
   // Prepare promises for data fetching
-  const humanCallsPromise = shouldFetchHuman ? 
+  const humanCallsPromise = shouldFetchHuman ?
     getHumanAgentCalls(
       getOrganizationAdmin.id,
       searchTerm,
@@ -479,7 +480,7 @@ const getOrganizationCallLogsManagement = async (
       sortOrder
     ) : Promise.resolve([]);
 
-  const totalHumanCallsPromise = shouldFetchHuman ? 
+  const totalHumanCallsPromise = shouldFetchHuman ?
     prisma.call.count({
       where: {
         organizationId: getOrganizationAdmin.id,
@@ -501,7 +502,7 @@ const getOrganizationCallLogsManagement = async (
       },
     }) : Promise.resolve(0);
 
-  const aiCallLogsPromise = shouldFetchAI ? 
+  const aiCallLogsPromise = shouldFetchAI ?
     getAIAgentCallLogs(
       getOrganizationAdmin.id,
       searchTerm,
@@ -511,7 +512,7 @@ const getOrganizationCallLogsManagement = async (
       sortOrder
     ) : Promise.resolve([]);
 
-  const totalAICallLogsPromise = shouldFetchAI ? 
+  const totalAICallLogsPromise = shouldFetchAI ?
     prisma.aICallLog.count({
       where: {
         organizationId: getOrganizationAdmin.id,
