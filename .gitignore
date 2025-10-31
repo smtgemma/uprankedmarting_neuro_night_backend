@@ -8,17 +8,14 @@ dist/
 build/
 
 # Environment
-.env
-.env.local
-.env.production
 
 # Logs
 logs/
 *.log
+temp_auto_push.bat
 npm-debug.log*
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -33,4 +30,6 @@ prisma/*.db-journal
 
 # Test
 coverage/
-.nyc_output/
+.nyc_output/.gitignore
+branch_structure.json
+config.bat
