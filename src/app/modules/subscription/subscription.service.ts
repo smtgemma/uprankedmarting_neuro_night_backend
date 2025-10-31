@@ -1,9 +1,13 @@
 import status from "http-status";
-import { ICancelSubscriptionRequest, ICreateSubscriptionRequest } from "./subscription.interface";
+import {
+  ICancelSubscriptionRequest,
+  ICreateSubscriptionRequest,
+} from "./subscription.interface";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
 import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
+import { sendBillingEmail } from "../../utils/billing.email";
 
 // --------------------------------------------------
 //  Helper: Safe Stripe timestamp → Date
@@ -23,6 +27,63 @@ const createSafeDate = (ts: number | null | undefined): Date | null => {
 const centsToDollars = (cents: number | null | undefined): number => {
   if (!cents) return 0;
   return cents / 100;
+};
+
+// --------------------------------------------------
+//  Helper: Send Billing Notification
+// --------------------------------------------------
+const sendBillingNotification = async (
+  orgId: string,
+  invoiceData: any,
+  type: "invoice" | "receipt" | "payment_failed" | "refund"
+) => {
+  try {
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      include: {
+        ownedOrganization: true,
+        subscriptions: {
+          include: { plan: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!org?.ownedOrganization?.email) {
+      console.log("No email found for organization:", orgId);
+      return;
+    }
+
+    const currentSub = org.subscriptions[0];
+    const billingPeriod = currentSub
+      ? `${new Date(
+          currentSub.currentPeriodStart
+        ).toLocaleDateString()} - ${new Date(
+          currentSub.currentPeriodEnd
+        ).toLocaleDateString()}`
+      : undefined;
+
+    await sendBillingEmail({
+      to: org.ownedOrganization.email,
+      customerName: org.ownedOrganization.name || org.name,
+      invoiceNumber: invoiceData.number || `INV-${invoiceData.id.slice(-8)}`,
+      amount: centsToDollars(invoiceData.total),
+      currency: invoiceData.currency,
+      dueDate: invoiceData.due_date
+        ? new Date(invoiceData.due_date * 1000).toLocaleDateString()
+        : undefined,
+      billingPeriod,
+      invoiceUrl: invoiceData.hosted_invoice_url,
+      status: invoiceData.status as "paid" | "due" | "failed" | "refunded",
+      type,
+    });
+
+    console.log(`Billing ${type} email sent to:`, org.ownedOrganization.email);
+  } catch (error) {
+    console.error("Failed to send billing email:", error);
+    // Don't throw error - email failure shouldn't break webhook processing
+  }
 };
 
 // --------------------------------------------------
@@ -395,8 +456,10 @@ const resumeSubscription = async (orgId: string, subscriptionId: string) => {
 };
 
 // --------------------------------------------------
-//  handleWebhook – UPDATED with dollar conversion
+//  handleWebhook – UPDATED with email integration
 // --------------------------------------------------
+// --------------------------------------------------
+
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
   let event;
   try {
@@ -529,6 +592,28 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
             number: inv.number,
           },
         });
+
+        // SMART EMAIL HANDLING - Avoid duplicate emails
+        switch (event.type) {
+          case "invoice.created":
+            // Only send invoice email if it's not immediately paid
+            // For subscription creation, invoice is often created and paid immediately
+            // So we wait for the 'invoice.paid' event instead
+            if (inv.status !== "paid") {
+              await sendBillingNotification(org.id, inv, "invoice");
+            }
+            break;
+
+          case "invoice.paid":
+            // Always send receipt for paid invoices
+            await sendBillingNotification(org.id, inv, "receipt");
+            break;
+
+          case "invoice.payment_failed":
+            // Always send failure notification
+            await sendBillingNotification(org.id, inv, "payment_failed");
+            break;
+        }
       }
     }
 

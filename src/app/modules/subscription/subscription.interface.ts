@@ -10,3 +10,4 @@ export interface ICancelSubscriptionRequest {
   subscriptionId: string;
   cancelAtPeriodEnd?: boolean;
 }
+
