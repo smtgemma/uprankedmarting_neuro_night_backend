@@ -32,4 +32,10 @@ router.post(
   SubscriptionController.resumeSubscription
 );
 
+router.get(
+  "/billing-history",
+  auth("organization_admin"),
+  SubscriptionController.getBillingHistory
+);
+
 export const SubscriptionRoutes = router;

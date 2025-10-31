@@ -56,10 +56,27 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
   res.status(200).json(result);
 });
 
+const getBillingHistory = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId!;
+  const { limit, status: statusFilter } = req.query;
+
+  const result = await SubscriptionService.getBillingHistory(orgId, {
+    limit: limit ? Number(limit) : undefined,
+    status: statusFilter as string | undefined,
+  });
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Billing history retrieved successfully",
+    data: result,
+  });
+});
+
 export const SubscriptionController = {
   createSubscription,
   getOrgSubscriptions,
   cancelSubscription,
   resumeSubscription,
   handleWebhook,
+  getBillingHistory,
 };

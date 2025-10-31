@@ -229,6 +229,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Relations
+  billingInvoices        BillingInvoice[]        @relation("OrgBillingInvoices")
   requestedPhoneNumber   PhoneNumberRequest?
   ownedOrganization      User?                   @relation(fields: [ownerId], references: [id], name: "UserOwnedOrganization")
   subscriptions          Subscription[]
@@ -460,8 +461,9 @@ model Subscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  plan         Plan?         @relation(fields: [planId], references: [id])
+  organization    Organization?    @relation(fields: [organizationId], references: [id])
+  plan            Plan?            @relation(fields: [planId], references: [id])
+  billingInvoices BillingInvoice[] @relation("SubBillingInvoices")
 
   @@map("subscriptions")
 }
@@ -469,10 +471,61 @@ model Subscription {
 model WebhookEvent {
   id        String   @id @map("_id")
   type      String
-  processed Boolean  @default(false) // optional: for retry safety
+  processed Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@map("webhook_events")
+}
+
+/// Stripe invoice history for billing records
+model BillingInvoice {
+  id              String @id @default(auto()) @map("_id") @db.ObjectId
+  stripeInvoiceId String @unique // Stripe's "inv_xxx" ID
+
+  // Relations
+  organizationId String  @db.ObjectId
+  subscriptionId String? @db.ObjectId // Nullable: one-off invoices
+  customerId     String // org.stripeCustomerId
+
+  // Amounts (in cents)
+  amountDue       Int    @default(0)
+  amountPaid      Int    @default(0)
+  amountRemaining Int    @default(0)
+  subtotal        Int    @default(0)
+  total           Int    @default(0)
+  currency        String @default("usd")
+
+  // Billing period
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  // Stripe invoice created timestamp
+  invoiceCreatedAt DateTime?
+
+  // Invoice status
+  status String // draft, open, paid, uncollectible, void
+
+  // Line items (JSON array)
+  lineItems Json? @default("[]")
+
+  // Links
+  hostedInvoiceUrl String?
+  invoicePdf       String?
+  number           String?
+
+  // Relations (bidirectional)
+  organization Organization  @relation("OrgBillingInvoices", fields: [organizationId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation("SubBillingInvoices", fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  // Prisma audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([invoiceCreatedAt])
+  @@map("billing_invoices")
 }
 
 /// Service feedback from clients

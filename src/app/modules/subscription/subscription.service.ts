@@ -1,14 +1,33 @@
 import status from "http-status";
-import AppError from "../../errors/AppError";
+import { ICancelSubscriptionRequest, ICreateSubscriptionRequest } from "./subscription.interface";
 import prisma from "../../utils/prisma";
-import {
-  ICancelSubscriptionRequest,
-  ICreateSubscriptionRequest,
-} from "./subscription.interface";
+import AppError from "../../errors/AppError";
 import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
-import config from "../../config";
 
+// --------------------------------------------------
+//  Helper: Safe Stripe timestamp → Date
+// --------------------------------------------------
+const createSafeDate = (ts: number | null | undefined): Date | null => {
+  if (!ts || typeof ts !== "number") return null;
+  try {
+    return new Date(ts * 1000);
+  } catch {
+    return null;
+  }
+};
+
+// --------------------------------------------------
+//  Helper: Convert cents to dollars
+// --------------------------------------------------
+const centsToDollars = (cents: number | null | undefined): number => {
+  if (!cents) return 0;
+  return cents / 100;
+};
+
+// --------------------------------------------------
+//  createSubscription
+// --------------------------------------------------
 const createSubscription = async (
   orgId: string,
   payload: ICreateSubscriptionRequest
@@ -36,7 +55,6 @@ const createSubscription = async (
     );
   }
 
-  // Validate extra agents for non-AI plans
   let extraAgentPrice = 0;
   if (
     plan.planLevel !== "only_ai" &&
@@ -63,7 +81,6 @@ const createSubscription = async (
     extraAgentPrice = selectedPricing.price;
   }
 
-  // Validate phone number purchase
   if (payload.purchasedNumber && payload.sid) {
     const existingNumber = await prisma.availableTwilioNumber.findFirst({
       where: {
@@ -80,7 +97,6 @@ const createSubscription = async (
     }
   }
 
-  // Include owner to get email
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
     include: {
@@ -93,7 +109,6 @@ const createSubscription = async (
     throw new AppError(status.BAD_REQUEST, "Organization owner not found");
   }
 
-  // Prevent multiple active subs
   const activeSub = org.subscriptions.find((s) =>
     ["ACTIVE", "TRIALING"].includes(s.status)
   );
@@ -104,7 +119,6 @@ const createSubscription = async (
     );
   }
 
-  // Trial check
   if (org.hasUsedTrial && plan.trialDays > 0) {
     throw new AppError(status.BAD_REQUEST, "Trial already used");
   }
@@ -113,16 +127,7 @@ const createSubscription = async (
   let customPriceId: string | null = null;
 
   try {
-    // Calculate total price
     const totalPrice = plan.price + extraAgentPrice;
-
-    console.log("Price calculation:", {
-      basePrice: plan.price,
-      extraAgents: payload.extraAgents,
-      extraAgentPrice,
-      totalPrice,
-      totalMinuteLimit: plan.totalMinuteLimit,
-    });
 
     let stripeCustomerId = org.stripeCustomerId;
     if (!stripeCustomerId) {
@@ -149,13 +154,11 @@ const createSubscription = async (
       invoice_settings: { default_payment_method: payload.paymentMethodId },
     });
 
-    // Create custom price for total amount if extra agents are selected
     let subscriptionItems: any[] = [];
 
     if (extraAgentPrice > 0) {
-      // Create a custom price for the total amount
       const customPrice = await stripe.prices.create({
-        unit_amount: totalPrice * 100, // Convert to cents
+        unit_amount: totalPrice * 100, // Stripe expects cents
         currency: plan.currency.toLowerCase(),
         recurring: {
           interval: plan.interval.toLowerCase() as any,
@@ -173,11 +176,9 @@ const createSubscription = async (
       customPriceId = customPrice.id;
       subscriptionItems = [{ price: customPrice.id }];
     } else {
-      // Use the base plan price if no extra agents
       subscriptionItems = [{ price: plan.stripePriceId }];
     }
 
-    // Create subscription with the correct price
     const stripeSub = await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: subscriptionItems,
@@ -212,29 +213,12 @@ const createSubscription = async (
     const dbStatus =
       statusMap[stripeSub.status] || SubscriptionStatus.INCOMPLETE;
 
-    // Calculate total agents (default + extra)
     const totalAgents =
       plan.planLevel === "only_ai"
         ? 0
         : plan.defaultAgents + (payload.extraAgents || 0);
 
-    console.log("Creating subscription in DB with data:", {
-      organizationId: orgId,
-      planId: plan.id,
-      stripeSubscriptionId: stripeSub.id,
-      stripeCustomerId,
-      status: dbStatus,
-      planLevel: plan.planLevel,
-      numberOfAgents: totalAgents,
-      totalMinuteLimit: plan.totalMinuteLimit,
-      purchasedNumber: payload.purchasedNumber,
-      sid: payload.sid,
-      totalPriceCharged: totalPrice,
-    });
-
-    // Start transaction for multiple database operations
     const result = await prisma.$transaction(async (tx) => {
-      // Update organization with purchased number
       if (payload.purchasedNumber && payload.sid) {
         await tx.organization.update({
           where: { id: orgId },
@@ -244,7 +228,6 @@ const createSubscription = async (
           },
         });
 
-        // Mark phone number as purchased
         await tx.availableTwilioNumber.updateMany({
           where: {
             phoneNumber: payload.purchasedNumber,
@@ -258,7 +241,6 @@ const createSubscription = async (
         });
       }
 
-      // Create subscription
       const subscription = await tx.subscription.create({
         data: {
           organizationId: orgId,
@@ -283,18 +265,16 @@ const createSubscription = async (
         include: { plan: true, organization: true },
       });
 
+      // Mark trial as used within the same transaction
+      if (plan.trialDays > 0 && !org.hasUsedTrial) {
+        await tx.organization.update({
+          where: { id: orgId },
+          data: { hasUsedTrial: true },
+        });
+      }
+
       return subscription;
     });
-
-    console.log("Subscription created successfully in DB:", result.id);
-
-    // Mark trial used
-    if (plan.trialDays > 0 && !org.hasUsedTrial) {
-      await prisma.organization.update({
-        where: { id: orgId },
-        data: { hasUsedTrial: true },
-      });
-    }
 
     return {
       subscription: result,
@@ -321,33 +301,28 @@ const createSubscription = async (
   } catch (err: any) {
     console.error("Subscription creation error:", err);
 
-    // Cleanup: Delete custom price if created
     if (customPriceId) {
       try {
         await stripe.prices.update(customPriceId, { active: false });
-        console.log("Deactivated custom price:", customPriceId);
-      } catch (priceErr) {
-        console.error("Failed to deactivate custom price:", priceErr);
-      }
+      } catch {}
     }
 
-    // Rollback Stripe subscription if DB save fails
     if (stripeSubscriptionId) {
       try {
         await stripe.subscriptions.cancel(stripeSubscriptionId);
-        console.log("Rolled back Stripe subscription:", stripeSubscriptionId);
-      } catch (cancelErr) {
-        console.error("Failed to cancel Stripe subscription:", cancelErr);
-      }
+      } catch {}
     }
 
     throw new AppError(
       status.INTERNAL_SERVER_ERROR,
-      `Failed to create subscription: ${err.message}`
+      "Subscription creation failed. Please try again."
     );
   }
 };
 
+// --------------------------------------------------
+//  getOrgSubscriptions
+// --------------------------------------------------
 const getOrgSubscriptions = async (orgId: string) => {
   return await prisma.subscription.findMany({
     where: { organizationId: orgId },
@@ -356,6 +331,9 @@ const getOrgSubscriptions = async (orgId: string) => {
   });
 };
 
+// --------------------------------------------------
+//  cancelSubscription
+// --------------------------------------------------
 const cancelSubscription = async (
   orgId: string,
   payload: ICancelSubscriptionRequest
@@ -385,10 +363,16 @@ const cancelSubscription = async (
 
     return updated;
   } catch (err: any) {
-    throw new AppError(status.INTERNAL_SERVER_ERROR, err.message);
+    throw new AppError(
+      status.INTERNAL_SERVER_ERROR,
+      "Failed to cancel subscription"
+    );
   }
 };
 
+// --------------------------------------------------
+//  resumeSubscription
+// --------------------------------------------------
 const resumeSubscription = async (orgId: string, subscriptionId: string) => {
   const sub = await prisma.subscription.findFirst({
     where: {
@@ -410,65 +394,10 @@ const resumeSubscription = async (orgId: string, subscriptionId: string) => {
   });
 };
 
-// Webhook (idempotent)
-// const handleWebhook = async (rawBody: Buffer, signature: string) => {
-//   let event;
-//   try {
-//     event = stripe.webhooks.constructEvent(
-//       rawBody,
-//       signature,
-//       process.env.STRIPE_WEBHOOK_SECRET!
-//     );
-//   } catch (err: any) {
-//     throw new AppError(400, `Webhook Error: ${err.message}`);
-//   }
-
-//   const existing = await prisma.webhookEvent.findUnique({
-//     where: { id: event.id },
-//   });
-//   if (existing) return { received: true };
-
-//   const STATUS_MAP: Record<string, SubscriptionStatus> = {
-//     active: SubscriptionStatus.ACTIVE,
-//     trialing: SubscriptionStatus.TRIALING,
-//     past_due: SubscriptionStatus.PAST_DUE,
-//     canceled: SubscriptionStatus.CANCELED,
-//     unpaid: SubscriptionStatus.UNPAID,
-//     incomplete: SubscriptionStatus.INCOMPLETE,
-//     incomplete_expired: SubscriptionStatus.INCOMPLETE_EXPIRED,
-//   };
-
-//   if (
-//     [
-//       "customer.subscription.created",
-//       "customer.subscription.updated",
-//       "customer.subscription.deleted",
-//     ].includes(event.type)
-//   ) {
-//     const sub = event.data.object as any;
-//     await prisma.subscription.updateMany({
-//       where: { stripeSubscriptionId: sub.id },
-//       data: {
-//         status: STATUS_MAP[sub.status] || SubscriptionStatus.INCOMPLETE,
-//         currentPeriodStart: new Date(sub.current_period_start * 1000),
-//         currentPeriodEnd: new Date(sub.current_period_end * 1000),
-//         trialStart: sub.trial_start ? new Date(sub.trial_start * 1000) : null,
-//         trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-//         cancelAtPeriodEnd: sub.cancel_at_period_end,
-//         canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
-//       },
-//     });
-//   }
-
-//   await prisma.webhookEvent.create({
-//     data: { id: event.id, type: event.type },
-//   });
-//   return { received: true };
-// };
-
+// --------------------------------------------------
+//  handleWebhook – UPDATED with dollar conversion
+// --------------------------------------------------
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
-  // console.log('Webhook received - starting processing');
-
   let event;
   try {
     event = stripe.webhooks.constructEvent(
@@ -476,20 +405,14 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
-    // console.log('Webhook signature verified:', event.type, event.id);
   } catch (err: any) {
-    // console.error('Webhook signature verification failed:', err.message);
     throw new AppError(400, `Webhook Error: ${err.message}`);
   }
 
-  // Check if already processed
   const existing = await prisma.webhookEvent.findUnique({
     where: { id: event.id },
   });
-  if (existing) {
-    // console.log(`Webhook ${event.id} already processed, skipping`);
-    return { received: true };
-  }
+  if (existing) return { received: true };
 
   const STATUS_MAP: Record<string, SubscriptionStatus> = {
     active: SubscriptionStatus.ACTIVE,
@@ -502,6 +425,7 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
   };
 
   try {
+    // === SUBSCRIPTION EVENTS ===
     if (
       [
         "customer.subscription.created",
@@ -509,95 +433,136 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
         "customer.subscription.deleted",
       ].includes(event.type)
     ) {
-      const stripeSubscription = event.data.object as any;
-      // console.log(`Processing subscription: ${stripeSubscription.id}, Status: ${stripeSubscription.status}`);
-
-      // DEBUG: Log the subscription data to see what fields are available
-      // console.log('Stripe subscription data:', {
-      //   current_period_start: stripeSubscription.current_period_start,
-      //   current_period_end: stripeSubscription.current_period_end,
-      //   trial_start: stripeSubscription.trial_start,
-      //   trial_end: stripeSubscription.trial_end,
-      //   status: stripeSubscription.status
-      // });
-
-      // FIX: Create safe date conversion function
-      const createSafeDate = (
-        timestamp: number | null | undefined
-      ): Date | null => {
-        if (!timestamp || typeof timestamp !== "number") return null;
-        try {
-          return new Date(timestamp * 1000);
-        } catch (error) {
-          // console.error('Invalid timestamp:', timestamp);
-          return null;
-        }
-      };
-
-      // Prepare update data with safe date handling
+      const sub = event.data.object as any;
       const updateData: any = {
-        status:
-          STATUS_MAP[stripeSubscription.status] ||
-          SubscriptionStatus.INCOMPLETE,
-        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end || false,
-        canceledAt: createSafeDate(stripeSubscription.canceled_at),
+        status: STATUS_MAP[sub.status] || SubscriptionStatus.INCOMPLETE,
+        cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+        canceledAt: createSafeDate(sub.canceled_at),
       };
-
-      // Only add date fields if they are valid
-      const currentPeriodStart = createSafeDate(
-        stripeSubscription.current_period_start
-      );
-      const currentPeriodEnd = createSafeDate(
-        stripeSubscription.current_period_end
-      );
-      const trialStart = createSafeDate(stripeSubscription.trial_start);
-      const trialEnd = createSafeDate(stripeSubscription.trial_end);
-
-      if (currentPeriodStart)
-        updateData.currentPeriodStart = currentPeriodStart;
-      if (currentPeriodEnd) updateData.currentPeriodEnd = currentPeriodEnd;
+      const start = createSafeDate(sub.current_period_start);
+      const end = createSafeDate(sub.current_period_end);
+      if (start) updateData.currentPeriodStart = start;
+      if (end) updateData.currentPeriodEnd = end;
+      const trialStart = createSafeDate(sub.trial_start);
+      const trialEnd = createSafeDate(sub.trial_end);
       if (trialStart) updateData.trialStart = trialStart;
       if (trialEnd) updateData.trialEnd = trialEnd;
 
-      // console.log('Update data prepared:', updateData);
-
-      // Update the subscription
-      const updatedSubscription = await prisma.subscription.update({
-        where: {
-          stripeSubscriptionId: stripeSubscription.id,
-        },
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: sub.id },
         data: updateData,
       });
-
-      // console.log(`Successfully updated subscription: ${updatedSubscription.id}`);
     }
 
-    // Store webhook event after successful processing
+    // === INVOICE EVENTS ===
+    if (
+      [
+        "invoice.created",
+        "invoice.paid",
+        "invoice.payment_failed",
+        "invoice.updated",
+      ].includes(event.type)
+    ) {
+      const inv = event.data.object as any;
+
+      const org = await prisma.organization.findFirst({
+        where: { stripeCustomerId: inv.customer },
+        select: {
+          id: true,
+          subscriptions: {
+            where: { stripeSubscriptionId: inv.subscription || undefined },
+          },
+        },
+      });
+
+      if (org) {
+        const sub = org.subscriptions[0];
+
+        // Convert line item amounts from cents to dollars
+        const lineItems = (inv.lines?.data ?? []).map((l: any) => ({
+          description: l.description,
+          amount: centsToDollars(l.amount), // Convert to dollars
+          quantity: l.quantity,
+          price_id: l.price?.id,
+          product_id: l.price?.product,
+          period: {
+            start: createSafeDate(l.period?.start)?.toISOString(),
+            end: createSafeDate(l.period?.end)?.toISOString(),
+          },
+        }));
+
+        await prisma.billingInvoice.upsert({
+          where: { stripeInvoiceId: inv.id },
+          update: {
+            status: inv.status,
+            amountDue: centsToDollars(inv.amount_due), // Convert to dollars
+            amountPaid: centsToDollars(inv.amount_paid), // Convert to dollars
+            amountRemaining: centsToDollars(inv.amount_remaining || 0), // Convert to dollars
+            subtotal: centsToDollars(inv.subtotal), // Convert to dollars
+            total: centsToDollars(inv.total), // Convert to dollars
+            periodStart: createSafeDate(inv.period_start),
+            periodEnd: createSafeDate(inv.period_end),
+            invoiceCreatedAt: createSafeDate(inv.created),
+            lineItems,
+            hostedInvoiceUrl: inv.hosted_invoice_url,
+            invoicePdf: inv.invoice_pdf,
+            number: inv.number,
+          },
+          create: {
+            stripeInvoiceId: inv.id,
+            organizationId: org.id,
+            subscriptionId: sub?.id,
+            customerId: inv.customer,
+            status: inv.status,
+            amountDue: centsToDollars(inv.amount_due), // Convert to dollars
+            amountPaid: centsToDollars(inv.amount_paid), // Convert to dollars
+            amountRemaining: centsToDollars(inv.amount_remaining || 0), // Convert to dollars
+            subtotal: centsToDollars(inv.subtotal), // Convert to dollars
+            total: centsToDollars(inv.total), // Convert to dollars
+            currency: inv.currency,
+            periodStart: createSafeDate(inv.period_start),
+            periodEnd: createSafeDate(inv.period_end),
+            invoiceCreatedAt: createSafeDate(inv.created),
+            lineItems,
+            hostedInvoiceUrl: inv.hosted_invoice_url,
+            invoicePdf: inv.invoice_pdf,
+            number: inv.number,
+          },
+        });
+      }
+    }
+
     await prisma.webhookEvent.create({
-      data: {
-        id: event.id,
-        type: event.type,
-        processed: true,
-      },
+      data: { id: event.id, type: event.type, processed: true },
     });
 
-    // console.log('Webhook processing completed successfully');
     return { received: true };
   } catch (error: any) {
-    // console.error('Error in webhook processing:', error);
-
-    // Store the failed webhook for debugging
     await prisma.webhookEvent.create({
-      data: {
-        id: event.id,
-        type: event.type,
-        processed: false,
-      },
+      data: { id: event.id, type: event.type, processed: false },
     });
-
-    // console.error(`Webhook processing failed but returning 200: ${error.message}`);
     return { received: true, error: error.message };
   }
+};
+
+// --------------------------------------------------
+//  getBillingHistory
+// --------------------------------------------------
+const getBillingHistory = async (
+  orgId: string,
+  filters?: { limit?: number; status?: string }
+) => {
+  return await prisma.billingInvoice.findMany({
+    where: {
+      organizationId: orgId,
+      ...(filters?.status && { status: filters.status }),
+    },
+    include: {
+      subscription: { include: { plan: true } },
+    },
+    orderBy: { invoiceCreatedAt: "desc" },
+    take: filters?.limit ?? 20,
+  });
 };
 
 export const SubscriptionService = {
@@ -606,4 +571,5 @@ export const SubscriptionService = {
   cancelSubscription,
   resumeSubscription,
   handleWebhook,
+  getBillingHistory,
 };

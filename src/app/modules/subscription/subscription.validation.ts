@@ -19,3 +19,4 @@ export const cancelSubscriptionValidation = z.object({
     cancelAtPeriodEnd: z.boolean().optional(),
   }),
 });
+
