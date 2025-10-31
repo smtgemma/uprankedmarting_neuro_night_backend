@@ -77,7 +77,7 @@ app.use("/api/v1", router);
 app.get("/", (req: Request, res: Response) => {
   res.send({
     Message: "AnswerSmart server is running...",
-    webhook: "POST /stripe/webhook",
+    // webhook: "POST /stripe/webhook",
   });
 });
 

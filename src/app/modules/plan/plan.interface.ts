@@ -4,7 +4,7 @@ export interface ICreatePlanRequest {
   price: number;
   interval: "MONTH" | "YEAR";
   trialDays?: number;
-  features?: Record<string, any>;
+  features?: string[];
   planLevel: "only_real_agent" | "only_ai" | "ai_then_real_agent";
   defaultAgents?: number;
   extraAgentPricing?: Array<{ agents: number; price: number }>;
@@ -18,7 +18,7 @@ export interface IUpdatePlanRequest {
   interval?: "MONTH" | "YEAR";
   trialDays?: number;
   isActive?: boolean;
-  features?: Record<string, any>;
+  features?: string[];
   planLevel?: "only_real_agent" | "only_ai" | "ai_then_real_agent";
   defaultAgents?: number;
   extraAgentPricing?: Array<{ agents: number; price: number }>;

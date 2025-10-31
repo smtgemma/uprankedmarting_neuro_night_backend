@@ -1,4 +1,4 @@
-// modules/plan/plan.validation.ts
+// plan.validation.ts
 import { z } from "zod";
 
 const planLevelSchema = z.enum([
@@ -15,7 +15,7 @@ export const createPlanValidation = z.object({
     price: z.number().positive("Price must be positive"),
     interval: intervalSchema,
     trialDays: z.number().int().min(0).max(365).optional(),
-    features: z.record(z.any()).optional(),
+    features: z.array(z.string()).optional(),
     planLevel: planLevelSchema,
     defaultAgents: z.number().int().min(0).optional(),
     extraAgentPricing: z
@@ -38,7 +38,7 @@ export const updatePlanValidation = z.object({
     interval: intervalSchema.optional(),
     trialDays: z.number().int().min(0).max(365).optional(),
     isActive: z.boolean().optional(),
-    features: z.record(z.any()).optional(),
+    features: z.array(z.string()).optional(),
     planLevel: planLevelSchema.optional(),
     defaultAgents: z.number().int().min(0).optional(),
     extraAgentPricing: z

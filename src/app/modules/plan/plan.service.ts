@@ -4,6 +4,11 @@ import prisma from "../../utils/prisma";
 import { stripe } from "../../utils/stripe";
 import { ICreatePlanRequest, IUpdatePlanRequest } from "./plan.interface";
 
+// Helper: safely convert unknown[] → string with " | "
+const featuresToString = (features: unknown): string => {
+  return Array.isArray(features) ? features.join(" | ") : "";
+};
+
 const createPlan = async (payload: ICreatePlanRequest) => {
   try {
     // 1. Create Stripe Product
@@ -13,6 +18,7 @@ const createPlan = async (payload: ICreatePlanRequest) => {
       metadata: {
         planLevel: payload.planLevel,
         defaultAgents: payload.defaultAgents?.toString() || "0",
+        features: featuresToString(payload.features),
       },
     });
 
@@ -37,7 +43,7 @@ const createPlan = async (payload: ICreatePlanRequest) => {
         trialDays: payload.trialDays || 1,
         stripePriceId: price.id,
         stripeProductId: product.id,
-        features: payload.features || {},
+        features: payload.features || [],
         planLevel: payload.planLevel,
         defaultAgents: payload.defaultAgents || 0,
         extraAgentPricing: payload.extraAgentPricing || [],
@@ -108,16 +114,27 @@ const updatePlan = async (id: string, payload: IUpdatePlanRequest) => {
   try {
     let newPriceId = plan.stripePriceId;
 
-    // Update Stripe Product
-    if (payload.name || payload.description) {
+    // === UPDATE STRIPE PRODUCT (name, desc, features) ===
+    if (payload.name || payload.description || payload.features) {
+      const currentFeatures = Array.isArray(plan.features) ? plan.features : [];
+
       await stripe.products.update(plan.stripeProductId, {
         name: payload.name || plan.name,
         description: payload.description ?? plan.description,
+        metadata: {
+          planLevel: payload.planLevel || plan.planLevel,
+          defaultAgents: (
+            payload.defaultAgents ?? plan.defaultAgents
+          ).toString(),
+          features:
+            payload.features?.join(" | ") || featuresToString(currentFeatures),
+        },
       });
     }
 
-    // Create new price if price or interval changed
+    // === CREATE NEW PRICE IF NEEDED ===
     if (payload.price !== undefined || payload.interval !== undefined) {
+      // Archive old price
       await stripe.prices.update(plan.stripePriceId, { active: false });
 
       const newPrice = await stripe.prices.create({
@@ -134,7 +151,7 @@ const updatePlan = async (id: string, payload: IUpdatePlanRequest) => {
       newPriceId = newPrice.id;
     }
 
-    // Update DB
+    // === UPDATE DB ===
     return await prisma.plan.update({
       where: { id },
       data: {
@@ -145,7 +162,7 @@ const updatePlan = async (id: string, payload: IUpdatePlanRequest) => {
         trialDays: payload.trialDays,
         stripePriceId: newPriceId,
         isActive: payload.isActive,
-        features: payload.features,
+        features: payload.features ?? plan.features, // preserve if undefined
         planLevel: payload.planLevel,
         defaultAgents: payload.defaultAgents,
         extraAgentPricing: payload.extraAgentPricing,
