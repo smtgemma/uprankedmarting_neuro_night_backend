@@ -664,9 +664,9 @@ const resetPassword = async (email: string, otp: number, newPassword: string) =>
 
 const getAllUserFromDB = async (query: Record<string, unknown>) => {
   const userQuery = new QueryBuilder(prisma.user, query)
-    .search(["name", "email", "phone"])
+    .search(["name", "email", "phone", "ownedOrganization.name"])
     .filter()
-    .rawFilter({ isDeleted: false, role: query?.role })
+    .rawFilter({ status: query?.status, role: query?.role })
     .sort()
     .include({
       Agent: true,
@@ -679,9 +679,9 @@ const getAllUserFromDB = async (query: Record<string, unknown>) => {
     userQuery.countTotal(),
   ]);
 
-  if (!result.length) {
-    throw new ApiError(status.NOT_FOUND, "No users found!");
-  }
+  // if (!result.length) {
+  //   throw new ApiError(status.NOT_FOUND, "No users found!");
+  // }
 
   const data = result.map((user: User) => {
     const { password, ...rest } = user;
