@@ -16,7 +16,7 @@ router.post(
   SubscriptionController.createSubscription
 );
 router.get(
-  "/my",
+  "/my-subscription",
   auth("organization_admin"),
   SubscriptionController.getOrgSubscriptions
 );

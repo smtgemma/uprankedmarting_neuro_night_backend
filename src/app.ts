@@ -1,14 +1,15 @@
 import cors from "cors";
 import path from "path";
-import router from "./app/routes";
-import cookieParser from "cookie-parser";
-import notFound from "./app/middlewares/notFound";
-import express, { Application, Request, Response } from "express";
-import globalErrorHandler from "./app/middlewares/globalErrorHandler";
-import { requestLogger } from "./app/middlewares/requestLogger";
-import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
-import { SubscriptionController } from "./app/modules/subscription/subscription.controller";
 
+import cookieParser from "cookie-parser";
+
+import express, { Application, Request, Response } from "express";
+import { requestLogger } from "./app/middlewares/requestLogger";
+import { SubscriptionController } from "./app/modules/subscription/subscription.controller";
+import { apiLimiter, authLimiter } from "./app/utils/rateLimiter";
+import router from "./app/routes";
+import GlobalErrorHandler from "./app/middlewares/globalErrorHandler";
+import notFound from "./app/middlewares/notFound";
 
 const app: Application = express();
 app.set("trust proxy", 1);
@@ -84,7 +85,7 @@ app.get("/", (req: Request, res: Response) => {
 // ====================
 // 7. ERROR HANDLERS
 // ====================
-app.use(globalErrorHandler);
+app.use(GlobalErrorHandler);
 app.use(notFound);
 
 export default app;

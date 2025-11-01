@@ -403,6 +403,39 @@ model OrganizationDoc {
 }
 
 /// Subscription plans with pricing and features
+// model Plan {
+//   id       String       @id @default(auto()) @map("_id") @db.ObjectId
+//   name     String
+//   price    Float
+//   currency String       @default("usd")
+//   interval PlanInterval
+
+//   trialDays       Int    @default(1)
+//   stripePriceId   String @unique
+//   stripeProductId String @unique
+
+//   isActive    Boolean @default(true)
+//   description String?
+//   features    Json?   @default("{}")
+
+//   // NEW FIELDS
+//   planLevel         PlanLevel
+//   defaultAgents     Int       @default(0)
+//   extraAgentPricing Json?     @default("[]")
+//   totalMinuteLimit  Int       @default(0)
+
+//   // Soft delete
+//   isDeleted Boolean   @default(false)
+//   deletedAt DateTime?
+
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+
+//   subscriptions Subscription[]
+
+//   @@map("plans")
+// }
+
 model Plan {
   id       String       @id @default(auto()) @map("_id") @db.ObjectId
   name     String
@@ -416,7 +449,7 @@ model Plan {
 
   isActive    Boolean @default(true)
   description String?
-  features    Json?   @default("{}")
+  features    Json?   @default("{}")   // ← THIS IS THE KEY
 
   // NEW FIELDS
   planLevel         PlanLevel
@@ -627,3 +660,4 @@ model PhoneNumberRequest {
 
   @@map("phone_number_requests")
 }
+

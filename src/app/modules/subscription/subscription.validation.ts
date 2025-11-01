@@ -1,4 +1,3 @@
-// modules/subscription/subscription.validation.ts
 import { z } from "zod";
 
 export const createSubscriptionValidation = z.object({
@@ -19,5 +18,3 @@ export const cancelSubscriptionValidation = z.object({
     cancelAtPeriodEnd: z.boolean().optional(),
   }),
 });
-
-

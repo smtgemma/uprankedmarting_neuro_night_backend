@@ -1,10 +1,11 @@
+// modules/plan/plan.interface.ts
 export interface ICreatePlanRequest {
   name: string;
   description?: string;
   price: number;
   interval: "MONTH" | "YEAR";
   trialDays?: number;
-  features?: string[];
+  features?: string[]; // ← Array of strings
   planLevel: "only_real_agent" | "only_ai" | "ai_then_real_agent";
   defaultAgents?: number;
   extraAgentPricing?: Array<{ agents: number; price: number }>;
@@ -18,7 +19,7 @@ export interface IUpdatePlanRequest {
   interval?: "MONTH" | "YEAR";
   trialDays?: number;
   isActive?: boolean;
-  features?: string[];
+  features?: string[]; // ← Array of strings
   planLevel?: "only_real_agent" | "only_ai" | "ai_then_real_agent";
   defaultAgents?: number;
   extraAgentPricing?: Array<{ agents: number; price: number }>;

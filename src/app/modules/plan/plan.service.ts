@@ -1,3 +1,4 @@
+// modules/plan/plan.service.ts
 import status from "http-status";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
@@ -123,11 +124,10 @@ const updatePlan = async (id: string, payload: IUpdatePlanRequest) => {
         description: payload.description ?? plan.description,
         metadata: {
           planLevel: payload.planLevel || plan.planLevel,
-          defaultAgents: (
-            payload.defaultAgents ?? plan.defaultAgents
-          ).toString(),
+          defaultAgents: (payload.defaultAgents ?? plan.defaultAgents).toString(),
           features:
-            payload.features?.join(" | ") || featuresToString(currentFeatures),
+            payload.features?.join(" | ") ||
+            featuresToString(currentFeatures),
         },
       });
     }

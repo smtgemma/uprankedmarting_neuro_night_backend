@@ -11,3 +11,8 @@ export interface ICancelSubscriptionRequest {
   cancelAtPeriodEnd?: boolean;
 }
 
+export interface ISwitchPlanRequest {
+  subscriptionId: string;
+  newPlanId: string;
+  extraAgents?: number;
+}

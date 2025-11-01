@@ -1,11 +1,10 @@
-import app from "./app";
 import { Server } from "http";
-import config from "./app/config";
 import { seedSuperAdmin } from "./seedSuperAdmin";
+import app from "./app";
+import config from "./app/config";
 import cron from "node-cron";
 import prisma from "./app/utils/prisma";
 import { ToolsService } from "./app/modules/tools/tools.service";
-// import { expirationJob } from "./app/modules/subscription/subscriptionExpirationJob";
 
 // Simple rate limiter to avoid Google Sheets API quota issues
 const rateLimit = async (ms: number) =>
@@ -46,7 +45,9 @@ const main = async () => {
           });
 
           if (organizations.length === 0) {
-            console.log("No organizations with Google Sheets configured found.");
+            console.log(
+              "No organizations with Google Sheets configured found."
+            );
             return;
           }
 
@@ -56,7 +57,9 @@ const main = async () => {
               // Add a small delay to avoid hitting API rate limits
               await rateLimit(index * 100); // 100ms delay between requests
               try {
-                const result = await ToolsService.addQaPairsToGoogleSheets(org.id);
+                const result = await ToolsService.addQaPairsToGoogleSheets(
+                  org.id
+                );
                 console.log(
                   `✅ Successfully synced Q&A pairs for organization ${org.id}:`,
                   result.message
@@ -70,7 +73,10 @@ const main = async () => {
             })
           );
         } catch (error: any) {
-          console.error("❌ Error during scheduled Q&A pairs sync:", error.message);
+          console.error(
+            "❌ Error during scheduled Q&A pairs sync:",
+            error.message
+          );
         }
       },
       { timezone: "Asia/Dhaka" }

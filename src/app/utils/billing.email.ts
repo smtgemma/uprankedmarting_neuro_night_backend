@@ -10,8 +10,8 @@ interface BillingEmailData {
   dueDate?: string;
   billingPeriod?: string;
   invoiceUrl?: string;
-  status: "paid" | "due" | "failed" | "refunded";
-  type: "invoice" | "receipt" | "payment_failed" | "refund";
+  status: 'paid' | 'due' | 'failed' | 'refunded';
+  type: 'invoice' | 'receipt' | 'payment_failed' | 'refund';
 }
 
 export const sendBillingEmail = async (data: BillingEmailData) => {
@@ -42,52 +42,52 @@ const generateBillingEmailContent = (data: BillingEmailData) => {
     timeStyle: "short",
   }).format(new Date());
 
-  const formattedAmount = new Intl.NumberFormat("en-US", {
-    style: "currency",
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
     currency: data.currency.toUpperCase(),
   }).format(data.amount);
 
-  let subject = "";
-  let title = "";
-  let message = "";
-  let buttonText = "";
+  let subject = '';
+  let title = '';
+  let message = '';
+  let buttonText = '';
   let buttonUrl = data.invoiceUrl || `${process.env.FRONTEND_URL}/billing`;
   let showDueDate = false;
-  let statusColor = "";
+  let statusColor = '';
 
   switch (data.type) {
-    case "invoice":
+    case 'invoice':
       subject = `Invoice #${data.invoiceNumber} from Answer Smart`;
-      title = "Your Invoice is Ready";
+      title = 'Your Invoice is Ready';
       message = `Thank you for your business. Your invoice #${data.invoiceNumber} for ${formattedAmount} is now available.`;
-      buttonText = "View Invoice";
+      buttonText = 'View Invoice';
       showDueDate = true;
-      statusColor = "#2b7fff";
+      statusColor = '#2b7fff';
       break;
 
-    case "receipt":
+    case 'receipt':
       subject = `Payment Receipt #${data.invoiceNumber} - Answer Smart`;
-      title = "Payment Confirmed";
+      title = 'Payment Confirmed';
       message = `Thank you for your payment of ${formattedAmount}. Your transaction has been completed successfully.`;
-      buttonText = "View Receipt";
-      statusColor = "#10b981";
+      buttonText = 'View Receipt';
+      statusColor = '#10b981';
       break;
 
-    case "payment_failed":
+    case 'payment_failed':
       subject = `Payment Failed - Invoice #${data.invoiceNumber}`;
-      title = "Payment Failed";
+      title = 'Payment Failed';
       message = `We were unable to process your payment of ${formattedAmount} for invoice #${data.invoiceNumber}. Please update your payment method to avoid service interruption.`;
-      buttonText = "Update Payment Method";
+      buttonText = 'Update Payment Method';
       buttonUrl = `${process.env.FRONTEND_URL}/billing/payment-methods`;
-      statusColor = "#ef4444";
+      statusColor = '#ef4444';
       break;
 
-    case "refund":
+    case 'refund':
       subject = `Refund Processed - Invoice #${data.invoiceNumber}`;
-      title = "Refund Issued";
+      title = 'Refund Issued';
       message = `A refund of ${formattedAmount} has been processed for invoice #${data.invoiceNumber}. The amount should appear in your account within 5-7 business days.`;
-      buttonText = "View Details";
-      statusColor = "#8b5cf6";
+      buttonText = 'View Details';
+      statusColor = '#8b5cf6';
       break;
   }
 
@@ -115,41 +115,29 @@ const generateBillingEmailContent = (data: BillingEmailData) => {
         ${message}
       </p>
 
-
-      
       <!-- Invoice Details -->
       <div style="background:#f8fafc;border-radius:8px;padding:20px;margin-bottom:30px;border-left:4px solid ${statusColor};">
         <table style="width:100%;border-collapse:collapse;">
           <tr>
             <td style="padding:8px 0;color:#64748b;font-size:14px;">Invoice Number:</td>
-            <td style="padding:8px 0;color:#334155;font-size:14px;text-align:right;font-weight:bold;">#${
-              data.invoiceNumber
-            }</td>
+            <td style="padding:8px 0;color:#334155;font-size:14px;text-align:right;font-weight:bold;">#${data.invoiceNumber}</td>
           </tr>
           <tr>
             <td style="padding:8px 0;color:#64748b;font-size:14px;">Amount:</td>
             <td style="padding:8px 0;color:#334155;font-size:14px;text-align:right;font-weight:bold;">${formattedAmount}</td>
           </tr>
-          ${
-            data.billingPeriod
-              ? `
+          ${data.billingPeriod ? `
           <tr>
             <td style="padding:8px 0;color:#64748b;font-size:14px;">Billing Period:</td>
             <td style="padding:8px 0;color:#334155;font-size:14px;text-align:right;">${data.billingPeriod}</td>
           </tr>
-          `
-              : ""
-          }
-          ${
-            showDueDate && data.dueDate
-              ? `
+          ` : ''}
+          ${showDueDate && data.dueDate ? `
           <tr>
             <td style="padding:8px 0;color:#64748b;font-size:14px;">Due Date:</td>
             <td style="padding:8px 0;color:#334155;font-size:14px;text-align:right;">${data.dueDate}</td>
           </tr>
-          `
-              : ""
-          }
+          ` : ''}
           <tr>
             <td style="padding:8px 0;color:#64748b;font-size:14px;">Status:</td>
             <td style="padding:8px 0;color:${statusColor};font-size:14px;text-align:right;font-weight:bold;text-transform:capitalize;">
@@ -169,9 +157,7 @@ const generateBillingEmailContent = (data: BillingEmailData) => {
       <!-- Additional Info -->
       <div style="background:#fefce8;border:1px solid#fef08a;border-radius:6px;padding:15px;margin-bottom:20px;">
         <p style="font-size:14px;color:#854d0e;margin:0;text-align:center;">
-          💡 Need help? Visit our <a href="${
-            process.env.FRONTEND_URL
-          }/help/billing" style="color:#854d0e;text-decoration:underline;">Billing Help Center</a>
+          💡 Need help? Visit our <a href="${process.env.FRONTEND_URL}/help/billing" style="color:#854d0e;text-decoration:underline;">Billing Help Center</a>
         </p>
       </div>
 
@@ -186,15 +172,9 @@ const generateBillingEmailContent = (data: BillingEmailData) => {
         © ${new Date().getFullYear()} Answer Smart. All rights reserved.
       </p>
       <p style="margin:0;font-size:11px;">
-        <a href="${
-          process.env.FRONTEND_URL
-        }/privacy" style="color:#777;text-decoration:none;margin:0 10px;">Privacy Policy</a>
-        <a href="${
-          process.env.FRONTEND_URL
-        }/terms" style="color:#777;text-decoration:none;margin:0 10px;">Terms of Service</a>
-        <a href="${
-          process.env.FRONTEND_URL
-        }/contact" style="color:#777;text-decoration:none;margin:0 10px;">Contact Support</a>
+        <a href="${process.env.FRONTEND_URL}/privacy" style="color:#777;text-decoration:none;margin:0 10px;">Privacy Policy</a>
+        <a href="${process.env.FRONTEND_URL}/terms" style="color:#777;text-decoration:none;margin:0 10px;">Terms of Service</a>
+        <a href="${process.env.FRONTEND_URL}/contact" style="color:#777;text-decoration:none;margin:0 10px;">Contact Support</a>
       </p>
     </div>
   </div>
@@ -210,15 +190,13 @@ ${message}
 Invoice Details:
 - Invoice Number: #${data.invoiceNumber}
 - Amount: ${formattedAmount}
-${data.billingPeriod ? `- Billing Period: ${data.billingPeriod}` : ""}
-${showDueDate && data.dueDate ? `- Due Date: ${data.dueDate}` : ""}
+${data.billingPeriod ? `- Billing Period: ${data.billingPeriod}` : ''}
+${showDueDate && data.dueDate ? `- Due Date: ${data.dueDate}` : ''}
 - Status: ${data.status}
 
 ${buttonText}: ${buttonUrl}
 
-Need help? Visit our Billing Help Center: ${
-    process.env.FRONTEND_URL
-  }/help/billing
+Need help? Visit our Billing Help Center: ${process.env.FRONTEND_URL}/help/billing
 
 This is an automated message. Please do not reply to this email.
 
