@@ -11,8 +11,9 @@ export interface ICancelSubscriptionRequest {
   cancelAtPeriodEnd?: boolean;
 }
 
+// modules/subscription/subscription.interface.ts
 export interface ISwitchPlanRequest {
-  subscriptionId: string;
   newPlanId: string;
-  extraAgents?: number;
+  extraAgents?: number; // optional – keep current if not sent
+  chargeImmediately?: boolean;
 }

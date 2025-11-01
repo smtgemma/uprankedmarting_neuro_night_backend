@@ -2,12 +2,56 @@ import status from "http-status";
 import {
   ICancelSubscriptionRequest,
   ICreateSubscriptionRequest,
+  ISwitchPlanRequest,
 } from "./subscription.interface";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
 import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
 import { sendBillingEmail } from "../../utils/billing.email";
+import axios from "axios";
+
+// --------------------------------------------------
+//  Helper: Make routing API calls
+// --------------------------------------------------
+const makeRoutingApiCall = async (
+  planLevel: string,
+  orgId: string,
+  phoneNumber?: string
+) => {
+  const AI_BACKEND_BASE = "https://aibackend.answersmart.ai";
+
+  try {
+    if (planLevel === "only_real_agent") {
+      // Call auto-route endpoint for real agents
+      await axios.post(`${AI_BACKEND_BASE}/twilio/auto-route`, {
+        organizationId: orgId,
+        phoneNumber: phoneNumber,
+      });
+      console.log(`Auto-route configured for org ${orgId} with real agents`);
+    } else if (planLevel === "only_ai" || planLevel === "ai_then_real_agent") {
+      // Call AI agent assignment endpoint
+      await axios.post(
+        `${AI_BACKEND_BASE}/ai-call-routing/assign-phone-to-ai-agent`,
+        {
+          organizationId: orgId,
+          phoneNumber: phoneNumber,
+          planLevel: planLevel,
+        }
+      );
+      console.log(
+        `AI agent assigned for org ${orgId} with plan level: ${planLevel}`
+      );
+    }
+  } catch (error: any) {
+    console.error(
+      `Failed to configure routing for org ${orgId}:`,
+      error.message
+    );
+    // Don't throw error - routing failure shouldn't break subscription
+    // But log it for monitoring
+  }
+};
 
 // --------------------------------------------------
 //  Helper: Safe Stripe timestamp → Date
@@ -87,7 +131,7 @@ const sendBillingNotification = async (
 };
 
 // --------------------------------------------------
-//  createSubscription
+//  createSubscription - UPDATED with routing API call
 // --------------------------------------------------
 const createSubscription = async (
   orgId: string,
@@ -337,6 +381,11 @@ const createSubscription = async (
       return subscription;
     });
 
+    // AFTER SUCCESSFUL SUBSCRIPTION CREATION - Configure routing
+    if (dbStatus === "ACTIVE" || dbStatus === "TRIALING") {
+      await makeRoutingApiCall(plan.planLevel, orgId, payload.purchasedNumber);
+    }
+
     return {
       subscription: result,
       clientSecret,
@@ -456,10 +505,8 @@ const resumeSubscription = async (orgId: string, subscriptionId: string) => {
 };
 
 // --------------------------------------------------
-//  handleWebhook – UPDATED with email integration
+//  handleWebhook
 // --------------------------------------------------
-// --------------------------------------------------
-
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
   let event;
   try {
@@ -650,6 +697,207 @@ const getBillingHistory = async (
   });
 };
 
+// --------------------------------------------------
+//  switchPlan - UPDATED with routing API call
+// --------------------------------------------------
+const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
+  const { newPlanId, extraAgents } = payload;
+
+  // 1. Find active subscription + validate plan exists
+  const activeSub = await prisma.subscription.findFirst({
+    where: {
+      organizationId: orgId,
+      status: { in: ["ACTIVE", "TRIALING"] },
+    },
+    include: {
+      plan: true,
+      organization: {
+        select: {
+          id: true,
+          purchasedPhoneNumber: true,
+          stripeCustomerId: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!activeSub || !activeSub.plan || !activeSub.organization) {
+    throw new AppError(
+      status.NOT_FOUND,
+      "Active subscription or organization not found"
+    );
+  }
+
+  const currentPlan = activeSub.plan;
+  const org = activeSub.organization;
+
+  // 2. Load target plan
+  const newPlan = await prisma.plan.findUnique({
+    where: { id: newPlanId, isActive: true, isDeleted: false },
+  });
+  if (!newPlan) throw new AppError(status.NOT_FOUND, "Target plan not found");
+
+  // 3. Calculate extra agents
+  let requestedAgents = 0;
+  let extraAgentPrice = 0;
+  let totalAgents = 0;
+
+  if (newPlan.planLevel !== "only_ai") {
+    const currentExtra = activeSub.numberOfAgents ?? 0;
+    requestedAgents =
+      extraAgents !== undefined
+        ? extraAgents
+        : Math.max(currentExtra - newPlan.defaultAgents, 0);
+
+    if (requestedAgents < 0) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Cannot reduce below default agents of the new plan"
+      );
+    }
+
+    if (requestedAgents > 0) {
+      const pricing = newPlan.extraAgentPricing as any[];
+      const tier = pricing?.find((p: any) => p.agents === requestedAgents);
+      if (!tier) {
+        throw new AppError(
+          status.BAD_REQUEST,
+          `Extra agent tier for ${requestedAgents} agents not configured`
+        );
+      }
+      extraAgentPrice = tier.price;
+    }
+
+    totalAgents = newPlan.defaultAgents + requestedAgents;
+  }
+
+  const totalPrice = newPlan.price + extraAgentPrice;
+
+  // 4. Create custom price if extra agents
+  let newPriceId = newPlan.stripePriceId;
+  let customPriceId: string | null = null;
+
+  if (extraAgentPrice > 0) {
+    const customPrice = await stripe.prices.create({
+      unit_amount: Math.round(totalPrice * 100),
+      currency: "usd",
+      recurring: {
+        interval: newPlan.interval.toLowerCase() as "month" | "year",
+      },
+      product: newPlan.stripeProductId,
+      metadata: {
+        planId: newPlan.id,
+        basePrice: newPlan.price.toString(),
+        extraAgents: requestedAgents.toString(),
+        extraAgentPrice: extraAgentPrice.toString(),
+        totalPrice: totalPrice.toString(),
+      },
+    });
+    newPriceId = customPrice.id;
+    customPriceId = customPrice.id;
+  }
+
+  // 5. Update Stripe subscription
+  const prorationBehavior = "create_prorations";
+
+  const stripeSub = await stripe.subscriptions.retrieve(
+    activeSub.stripeSubscriptionId
+  );
+  const currentItem = stripeSub.items.data[0];
+
+  await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
+    proration_behavior: prorationBehavior,
+    items: [
+      {
+        id: currentItem.id,
+        price: newPriceId,
+      },
+    ],
+    metadata: {
+      ...stripeSub.metadata,
+      extraAgents: requestedAgents.toString(),
+      totalMinuteLimit: newPlan.totalMinuteLimit?.toString() ?? "0",
+      customPriceId: customPriceId ?? "",
+    },
+  });
+
+  // 6. Check proration amount
+  const upcomingInvoice = await stripe.invoices.retrieveUpcoming({
+    subscription: activeSub.stripeSubscriptionId,
+  });
+
+  const prorationAmountDueCents = upcomingInvoice.amount_due;
+  const prorationAmountDue = prorationAmountDueCents / 100;
+
+  // 7. CHARGE IMMEDIATELY IF UPGRADE
+  if (prorationAmountDue > 0) {
+    try {
+      const invoice = await stripe.invoices.create({
+        customer: upcomingInvoice.customer as string,
+        subscription: activeSub.stripeSubscriptionId,
+        auto_advance: true,
+        description: `Plan switch proration: ${currentPlan.name} to ${newPlan.name}`,
+      });
+
+      const paidInvoice = await stripe.invoices.pay(invoice.id);
+      console.log(
+        `Immediate proration charge: $${prorationAmountDue} (Invoice: ${paidInvoice.id})`
+      );
+    } catch (err: any) {
+      console.error("Failed to charge proration immediately:", err.message);
+      throw new AppError(
+        status.PAYMENT_REQUIRED,
+        `Upgrade requires immediate payment of $${prorationAmountDue}. Card declined or insufficient funds.`
+      );
+    }
+  } else if (prorationAmountDue < 0) {
+    console.log(
+      `Proration credit: $${Math.abs(
+        prorationAmountDue
+      )} (applied to next invoice)`
+    );
+  } else {
+    console.log("No proration (same price or exact timing)");
+  }
+
+  // 8. Update DB
+  const updatedSub = await prisma.subscription.update({
+    where: { id: activeSub.id },
+    data: {
+      planId: newPlan.id,
+      planLevel: newPlan.planLevel,
+      numberOfAgents: totalAgents,
+      totalMinuteLimit: newPlan.totalMinuteLimit,
+    },
+    include: { plan: true },
+  });
+
+  // 9. AFTER SUCCESSFUL PLAN SWITCH - Configure routing
+  await makeRoutingApiCall(
+    newPlan.planLevel,
+    orgId,
+    org.purchasedPhoneNumber || undefined
+  );
+
+  // 10. Return
+  return {
+    subscription: updatedSub,
+    prorated: prorationAmountDue !== 0,
+    immediateCharge: prorationAmountDue > 0 ? prorationAmountDue : 0,
+    totalPrice,
+    message: `Switched to "${newPlan.name}"${
+      requestedAgents > 0 ? ` ${requestedAgents} extra agent(s) applied.` : ""
+    }${
+      prorationAmountDue > 0
+        ? ` Charged $${prorationAmountDue} immediately for upgrade.`
+        : prorationAmountDue < 0
+        ? ` Credit of $${Math.abs(prorationAmountDue)} applied to next invoice.`
+        : ""
+    }`,
+  };
+};
+
 export const SubscriptionService = {
   createSubscription,
   getOrgSubscriptions,
@@ -657,4 +905,5 @@ export const SubscriptionService = {
   resumeSubscription,
   handleWebhook,
   getBillingHistory,
+  switchPlan,
 };
