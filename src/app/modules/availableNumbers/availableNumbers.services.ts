@@ -554,7 +554,6 @@ const requestPhoneNumber = async (
     requestedPhonePattern?: string;
   }
 ) => {
-  // Get organization by userId
   const organization = await prisma.organization.findFirst({
     where: { ownerId: userId },
     include: {
