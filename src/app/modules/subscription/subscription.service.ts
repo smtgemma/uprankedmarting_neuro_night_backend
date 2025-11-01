@@ -9,6 +9,49 @@ import AppError from "../../errors/AppError";
 import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
 import { sendBillingEmail } from "../../utils/billing.email";
+import axios from "axios";
+
+// --------------------------------------------------
+//  Helper: Make routing API calls
+// --------------------------------------------------
+const makeRoutingApiCall = async (
+  planLevel: string,
+  orgId: string,
+  phoneNumber?: string
+) => {
+  const AI_BACKEND_BASE = "https://aibackend.answersmart.ai";
+
+  try {
+    if (planLevel === "only_real_agent") {
+      // Call auto-route endpoint for real agents
+      await axios.post(`${AI_BACKEND_BASE}/twilio/auto-route`, {
+        organizationId: orgId,
+        phoneNumber: phoneNumber,
+      });
+      console.log(`Auto-route configured for org ${orgId} with real agents`);
+    } else if (planLevel === "only_ai" || planLevel === "ai_then_real_agent") {
+      // Call AI agent assignment endpoint
+      await axios.post(
+        `${AI_BACKEND_BASE}/ai-call-routing/assign-phone-to-ai-agent`,
+        {
+          organizationId: orgId,
+          phoneNumber: phoneNumber,
+          planLevel: planLevel,
+        }
+      );
+      console.log(
+        `AI agent assigned for org ${orgId} with plan level: ${planLevel}`
+      );
+    }
+  } catch (error: any) {
+    console.error(
+      `Failed to configure routing for org ${orgId}:`,
+      error.message
+    );
+    // Don't throw error - routing failure shouldn't break subscription
+    // But log it for monitoring
+  }
+};
 
 // --------------------------------------------------
 //  Helper: Safe Stripe timestamp → Date
@@ -88,7 +131,7 @@ const sendBillingNotification = async (
 };
 
 // --------------------------------------------------
-//  createSubscription
+//  createSubscription - UPDATED with routing API call
 // --------------------------------------------------
 const createSubscription = async (
   orgId: string,
@@ -338,6 +381,11 @@ const createSubscription = async (
       return subscription;
     });
 
+    // AFTER SUCCESSFUL SUBSCRIPTION CREATION - Configure routing
+    if (dbStatus === "ACTIVE" || dbStatus === "TRIALING") {
+      await makeRoutingApiCall(plan.planLevel, orgId, payload.purchasedNumber);
+    }
+
     return {
       subscription: result,
       clientSecret,
@@ -457,10 +505,8 @@ const resumeSubscription = async (orgId: string, subscriptionId: string) => {
 };
 
 // --------------------------------------------------
-//  handleWebhook – UPDATED with email integration
+//  handleWebhook
 // --------------------------------------------------
-// --------------------------------------------------
-
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
   let event;
   try {
@@ -651,10 +697,9 @@ const getBillingHistory = async (
   });
 };
 
-// ──────────────────────────────────────────────────────────────────────
-//  switchPlan
-// ──────────────────────────────────────────────────────────────────────
-
+// --------------------------------------------------
+//  switchPlan - UPDATED with routing API call
+// --------------------------------------------------
 const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
   const { newPlanId, extraAgents } = payload;
 
@@ -664,13 +709,23 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
       organizationId: orgId,
       status: { in: ["ACTIVE", "TRIALING"] },
     },
-    include: { plan: true, organization: true },
+    include: {
+      plan: true,
+      organization: {
+        select: {
+          id: true,
+          purchasedPhoneNumber: true,
+          stripeCustomerId: true,
+          name: true,
+        },
+      },
+    },
   });
 
-  if (!activeSub || !activeSub.plan) {
+  if (!activeSub || !activeSub.plan || !activeSub.organization) {
     throw new AppError(
       status.NOT_FOUND,
-      "Active subscription or plan not found"
+      "Active subscription or organization not found"
     );
   }
 
@@ -818,7 +873,14 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
     include: { plan: true },
   });
 
-  // 9. Return
+  // 9. AFTER SUCCESSFUL PLAN SWITCH - Configure routing
+  await makeRoutingApiCall(
+    newPlan.planLevel,
+    orgId,
+    org.purchasedPhoneNumber || undefined
+  );
+
+  // 10. Return
   return {
     subscription: updatedSub,
     prorated: prorationAmountDue !== 0,
