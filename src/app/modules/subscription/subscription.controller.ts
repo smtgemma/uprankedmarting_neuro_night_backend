@@ -3,6 +3,7 @@ import catchAsync from "../../utils/catchAsync";
 import { SubscriptionService } from "./subscription.service";
 import sendResponse from "../../utils/sendResponse";
 import status from "http-status";
+import { ISwitchPlanRequest } from "./subscription.interface";
 
 const createSubscription = catchAsync(async (req: Request, res: Response) => {
   const orgId = req.user?.organizationId;
@@ -71,6 +72,19 @@ const getBillingHistory = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const switchPlan = catchAsync(async (req: Request, res: Response) => {
+  const orgId = req.user?.organizationId!;
+  const payload = req.body as ISwitchPlanRequest;
+
+  const result = await SubscriptionService.switchPlan(orgId, payload);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Plan switched successfully",
+    data: result,
+  });
+});
+
 export const SubscriptionController = {
   createSubscription,
   getOrgSubscriptions,
@@ -78,4 +92,5 @@ export const SubscriptionController = {
   resumeSubscription,
   handleWebhook,
   getBillingHistory,
+  switchPlan,
 };

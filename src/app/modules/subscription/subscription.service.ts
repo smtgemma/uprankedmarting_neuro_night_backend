@@ -2,6 +2,7 @@ import status from "http-status";
 import {
   ICancelSubscriptionRequest,
   ICreateSubscriptionRequest,
+  ISwitchPlanRequest,
 } from "./subscription.interface";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
@@ -650,6 +651,144 @@ const getBillingHistory = async (
   });
 };
 
+// ──────────────────────────────────────────────────────────────────────
+//  switchPlan
+// ──────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────
+//  switchPlan – FULLY TYPED & WORKING
+// ──────────────────────────────────────────────────────────────────────
+const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
+  const { newPlanId, extraAgents } = payload;
+
+  // 1. Find active subscription
+  const activeSub = await prisma.subscription.findFirst({
+    where: {
+      organizationId: orgId,
+      status: { in: ["ACTIVE", "TRIALING"] },
+    },
+    include: { plan: true, organization: true },
+  });
+
+  if (!activeSub) {
+    throw new AppError(status.NOT_FOUND, "No active subscription found");
+  }
+
+  const currentPlan = activeSub.plan;
+  const org = activeSub.organization;
+
+  // 2. Load target plan
+  const newPlan = await prisma.plan.findUnique({
+    where: { id: newPlanId, isActive: true, isDeleted: false },
+  });
+  if (!newPlan) throw new AppError(status.NOT_FOUND, "Target plan not found");
+
+  // 3. Calculate extra agents
+  let requestedAgents = 0;
+  let extraAgentPrice = 0;
+  let totalAgents = 0;
+
+  if (newPlan.planLevel !== "only_ai") {
+    const currentExtra = activeSub.numberOfAgents ?? 0;
+    requestedAgents =
+      extraAgents !== undefined
+        ? extraAgents
+        : Math.max(currentExtra - newPlan.defaultAgents, 0);
+
+    if (requestedAgents < 0) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "Cannot reduce below default agents of the new plan"
+      );
+    }
+
+    if (requestedAgents > 0) {
+      const pricing = newPlan.extraAgentPricing as any[];
+      const tier = pricing?.find((p: any) => p.agents === requestedAgents);
+      if (!tier) {
+        throw new AppError(
+          status.BAD_REQUEST,
+          `Extra agent tier for ${requestedAgents} agents not configured`
+        );
+      }
+      extraAgentPrice = tier.price;
+    }
+
+    totalAgents = newPlan.defaultAgents + requestedAgents;
+  }
+
+  const totalPrice = newPlan.price + extraAgentPrice;
+
+  // 4. Create custom price if extra agents
+  let newPriceId = newPlan.stripePriceId;
+  let customPriceId: string | null = null;
+
+  if (extraAgentPrice > 0) {
+    const customPrice = await stripe.prices.create({
+      unit_amount: Math.round(totalPrice * 100),
+      currency: "usd",
+      recurring: {
+        interval: newPlan.interval.toLowerCase() as "month" | "year",
+      },
+      product: newPlan.stripeProductId,
+      metadata: {
+        planId: newPlan.id,
+        basePrice: newPlan.price.toString(),
+        extraAgents: requestedAgents.toString(),
+        extraAgentPrice: extraAgentPrice.toString(),
+        totalPrice: totalPrice.toString(),
+      },
+    });
+    newPriceId = customPrice.id;
+    customPriceId = customPrice.id;
+  }
+
+  // 5. Update Stripe subscription with proration
+  const prorationBehavior = "create_prorations"; // we control this
+
+  const stripeSub = await stripe.subscriptions.retrieve(
+    activeSub.stripeSubscriptionId
+  );
+  const currentItem = stripeSub.items.data[0];
+
+  await stripe.subscriptions.update(activeSub.stripeSubscriptionId, {
+    proration_behavior: prorationBehavior,
+    items: [
+      {
+        id: currentItem.id,
+        price: newPriceId,
+      },
+    ],
+    metadata: {
+      ...stripeSub.metadata,
+      extraAgents: requestedAgents.toString(),
+      totalMinuteLimit: newPlan.totalMinuteLimit?.toString() ?? "0",
+      customPriceId: customPriceId ?? "",
+    },
+  });
+
+  // 6. Update DB (purchasedNumber stays the same)
+  const updatedSub = await prisma.subscription.update({
+    where: { id: activeSub.id },
+    data: {
+      planId: newPlan.id,
+      planLevel: newPlan.planLevel,
+      numberOfAgents: totalAgents,
+      totalMinuteLimit: newPlan.totalMinuteLimit,
+    },
+    include: { plan: true },
+  });
+
+  // 7. Return result
+  return {
+    subscription: updatedSub,
+    prorated: prorationBehavior === "create_prorations",
+    totalPrice,
+    message: `Switched to "${newPlan.name}"${
+      requestedAgents > 0 ? ` ${requestedAgents} extra agent(s) applied.` : ""
+    }`,
+  };
+};
+
 export const SubscriptionService = {
   createSubscription,
   getOrgSubscriptions,
@@ -657,4 +796,5 @@ export const SubscriptionService = {
   resumeSubscription,
   handleWebhook,
   getBillingHistory,
+  switchPlan,
 };

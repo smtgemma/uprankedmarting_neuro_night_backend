@@ -18,3 +18,10 @@ export const cancelSubscriptionValidation = z.object({
     cancelAtPeriodEnd: z.boolean().optional(),
   }),
 });
+
+export const switchPlanValidation = z.object({
+  body: z.object({
+    newPlanId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid plan ID"),
+    extraAgents: z.number().int().min(0).max(10).optional(),
+  }),
+});

@@ -4,6 +4,7 @@ import validateRequest from "../../middlewares/validateRequest";
 import {
   cancelSubscriptionValidation,
   createSubscriptionValidation,
+  switchPlanValidation,
 } from "./subscription.validation";
 import { SubscriptionController } from "./subscription.controller";
 
@@ -36,6 +37,13 @@ router.get(
   "/billing-history",
   auth("organization_admin"),
   SubscriptionController.getBillingHistory
+);
+
+router.post(
+  "/switch",
+  auth("organization_admin"),
+  validateRequest(switchPlanValidation),
+  SubscriptionController.switchPlan
 );
 
 export const SubscriptionRoutes = router;
