@@ -454,7 +454,56 @@ const getAgentsId = catchAsync(async (req, res) => {
 });
 
 
+const getAgentCallsManagementInfo = catchAsync(async (req, res) => {
+  const options = pickOptions(req.query, [
+      "limit",
+      "page",
+      "sortBy",
+      "sortOrder",
+    ]);
+    const filters = pickOptions(req.query, [
+      "searchTerm",
+    ]);
+    const result =
+      await AgentAssignmentService.getAgentCallsManagementInfo(
+        options,
+        filters,
+        req.user as User
+      );
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Agents calls are retrieved successfully!",
+      data: result,
+    });
+})
+
+const getAgentsManagementInfo = catchAsync(async (req, res) => {
+  const options = pickOptions(req.query, [
+    "limit",
+    "page",
+    "sortBy",
+    "sortOrder",
+  ]);
+  const filters = pickOptions(req.query, [
+    "searchTerm"
+  ]);
+  const result = await AgentAssignmentService.getAgentsManagementInfo(
+    options,
+    filters
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agents are retrieved successfully!",
+    data: result,
+  });
+});
+
+
 export const AgentAssignmentController = {
+  getAgentsManagementInfo,
+  getAgentCallsManagementInfo,
   getUserAssignedQuestions,
   getQuestionsByOrgNumber,
   getAllOrgQuestions,

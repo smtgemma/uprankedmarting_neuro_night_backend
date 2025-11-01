@@ -198,7 +198,7 @@ model AgentAssignment {
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
 
   @@unique([agentUserId, organizationId])
-  @@map("agent_assignments")
+  @@map("AgentAssignment")
 }
 
 /// Organization with integrations and configuration
@@ -499,6 +499,7 @@ model Subscription {
   numberOfAgents  Int?      @default(0)
 
   totalMinuteLimit Int? @default(0)
+  usedMinute       Int  @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
