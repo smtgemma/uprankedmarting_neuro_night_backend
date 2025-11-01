@@ -150,6 +150,7 @@ enum PreferredChannel {
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
+  phone_number  String 
 
   status            AgentStatus      @default(offline)
   sip_address       String?

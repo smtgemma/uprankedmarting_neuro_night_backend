@@ -397,6 +397,7 @@ const createAgentIntoDB = async (payload: any) => {
 
       const agentPayload = {
         userId: createdUser.id,
+        phone_number: userData?.phone,
         employeeId: employeeId,
         skills: agentData.skills || [],
         sip_address: sipInfo?.fullSipUri,
@@ -551,6 +552,7 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
         where: { userId: agentId },
         data: {
           ...agentData,
+          phone_number: userData?.phone,
           skills: agentData.skills
         },
       });

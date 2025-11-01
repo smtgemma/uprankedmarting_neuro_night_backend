@@ -28,6 +28,8 @@ router.get(
   OrganizationController.getSingleOrganization
 );
 
+router.post("/usage/update", OrganizationController.updateUsage);
+
 
 // router.post(
 //   "/",

@@ -6,7 +6,7 @@ import {
   IPaginationOptions,
   paginationHelper,
 } from "../../utils/paginationHelpers";
-import { User } from "@prisma/client";
+import { SubscriptionStatus, User } from "@prisma/client";
 
 const getAllOrganizations = async () => {
   const organizations = await prisma.organization.findMany({
@@ -731,8 +731,42 @@ const getAIAgentCallLogs = async (
     take: limit,
   });
 };
+
+const updateUsedMinutes = async (organizationId: string, recordingDuration?: number) => {
+  if (!organizationId || !recordingDuration) return null;
+
+  const usedMinutes = Math.ceil(recordingDuration / 60);
+
+  const activeSubscription = await prisma.subscription.findFirst({
+    where: {
+      organizationId,
+      status: {
+        in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING],
+      },
+    },
+  });
+
+  if (!activeSubscription) {
+    console.log("⚠️ No active subscription found for organization:", organizationId);
+    return null;
+  }
+
+  console.log("Used minutes to add:", usedMinutes, "Current subscription:", activeSubscription);
+
+  const updated = await prisma.subscription.update({
+    where: { id: activeSubscription.id },
+    data: {
+      usedMinute: (activeSubscription.usedMinute || 0) + usedMinutes,
+    },
+  });
+
+  console.log(`✅ Updated usedMinutes: +${usedMinutes} for org ${organizationId}. New total: ${updated.usedMinute}`);
+  return updated;
+};
+
 export const OrganizationServices = {
   getAllOrganizations,
+  updateUsedMinutes,
   getPlatformOverviewStats,
   getOrganizationCallLogsManagement,
   getSingleOrganization,
