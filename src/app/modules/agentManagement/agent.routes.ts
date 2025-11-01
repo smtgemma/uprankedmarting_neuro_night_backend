@@ -171,8 +171,8 @@ router.get(
 
 // 3. Get all questions for organization (Admin view)
 router.get(
-  "/organization/:organizationId/all",
-  auth(UserRole.organization_admin, UserRole.super_admin),
+  "/organization-questions",
+  auth(UserRole.organization_admin),
   AgentAssignmentController.getAllOrgQuestions
 );
 

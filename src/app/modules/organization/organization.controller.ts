@@ -63,8 +63,25 @@ const getSingleOrganization = catchAsync(async (req, res) => {
   });
 });
 
+
+const updateUsage = catchAsync(async (req, res) => {
+  const { organizationId, recording_duration } = req.body;
+
+  const result = await OrganizationServices.updateUsedMinutes(
+    organizationId,
+    recording_duration
+  );
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Subscription usage updated successfully",
+    data: result,
+  });
+});
+
 export const OrganizationController = {
   getAllOrganizations,
+  updateUsage,
   getPlatformOverview,
   getSingleOrganization,
   getOrganizationCallLogsManagement

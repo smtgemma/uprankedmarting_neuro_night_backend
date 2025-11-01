@@ -2413,7 +2413,7 @@ const getQuestionsByOrgNumber = async (
   const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
 
   const organization = await prisma.organization.findFirst({
-    where: { organizationNumber: organizationNumber}
+    where: { organizationNumber: organizationNumber }
   });
 
 
@@ -2482,95 +2482,39 @@ const getQuestionsByOrgNumber = async (
   };
 };
 
-// Get all questions for specific organization ID (Admin view)
 const getAllOrgQuestions = async (
-  organizationId: string,
   userId: string,
-  options: IPaginationOptions,
-  query: Record<string, unknown>
+  options: IPaginationOptions
 ) => {
   const { page, limit, skip, sortBy, sortOrder } = paginationHelper.calculatePagination(options);
 
-  // Verify user has access to this organization (skip for super_admin)
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (user?.role !== 'super_admin') {
-    const hasAccess = await prisma.agentAssignment.findFirst({
-      where: {
-        agentUserId: userId,
-        organizationId: organizationId,
-        status: AssignmentStatus.ASSIGNED,
-      },
-    });
-
-    if (!hasAccess) {
-      throw new AppError(status.FORBIDDEN, 'Access denied to this organization');
+  console.log(userId)
+  const organizationId = await prisma.organization.findFirst({
+    where: {
+      ownerId: userId,
     }
-  }
-
-  // Build where conditions
-  const whereConditions: any = {
-    org_id: organizationId,
-  };
-
-  // Search functionality
-  const searchTerm = query?.searchTerm as string;
-  if (searchTerm) {
-    whereConditions.OR = [
-      {
-        question_text: {
-          contains: searchTerm,
-          mode: "insensitive"
-        }
-      },
-      {
-        question_keywords: {
-          hasSome: [searchTerm]
-        }
-      },
-    ];
-  }
-
-  // Get total count
-  const total = await prisma.question.count({
-    where: whereConditions,
-  });
-
-  // Get questions with pagination
-  const questions = await prisma.question.findMany({
-    where: whereConditions,
-    include: {
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          organizationNumber: true,
-        },
-      },
-    },
-    skip,
-    take: limit,
-    orderBy: {
-      [sortBy]: sortOrder,
-    },
-  });
-
-  const meta = {
-    page,
-    limit,
-    total,
-    totalPages: Math.ceil(total / limit),
-  };
+  })
+  // Get total count and questions
+  const [total, questions] = await Promise.all([
+    prisma.question.count({ where: { org_id: organizationId?.id }}),
+    prisma.question.findMany({
+      where: { org_id: organizationId?.id },
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
+    }),
+  ]);
 
   return {
-    meta,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
     data: questions,
   };
 };
-
 const getAllAgentIds = async (user: User) => {
   let agents;
 
@@ -2609,7 +2553,7 @@ const getAllAgentIds = async (user: User) => {
           AgentFeedbacks: {
             some: {
               client: {
-                id: user.id 
+                id: user.id
               }
             }
           }
@@ -2695,7 +2639,7 @@ const getAgentsManagementInfo = async (
         //             "workEndTime": "17:00:00",
         //             "workStartTime": "09:00:00",
         Agent: true,
-       
+
       },
       orderBy: {
         [sortBy as string]: sortOrder,

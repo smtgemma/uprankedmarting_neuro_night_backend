@@ -421,7 +421,7 @@ const getQuestionsByOrgNumber = catchAsync(async (req: Request, res: Response) =
 });
 
 const getAllOrgQuestions = catchAsync(async (req: Request, res: Response) => {
-  const { organizationId } = req.params;
+ const userId = req.user.id as string;
  const options = pickOptions(req.query, [
     "limit",
     "page",
@@ -429,10 +429,8 @@ const getAllOrgQuestions = catchAsync(async (req: Request, res: Response) => {
     "sortOrder",
   ]);
   const result = await AgentAssignmentService.getAllOrgQuestions(
-    organizationId,
-    req.user.id ,
-    options,
-    req.query
+    userId,
+    options
   );
 
   sendResponse(res, {
