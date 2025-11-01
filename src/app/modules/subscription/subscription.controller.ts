@@ -1,4 +1,3 @@
-// modules/subscription/subscription.controller.ts
 import { Request, Response } from "express";
 import catchAsync from "../../utils/catchAsync";
 import { SubscriptionService } from "./subscription.service";
