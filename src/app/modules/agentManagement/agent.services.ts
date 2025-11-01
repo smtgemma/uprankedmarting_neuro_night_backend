@@ -1694,7 +1694,7 @@
 
 import AppError from "../../errors/AppError";
 import status from "http-status";
-import { AssignmentStatus, SubscriptionStatus, User } from "@prisma/client";
+import { AssignmentStatus, SubscriptionStatus, User, UserRole } from "@prisma/client";
 import prisma from "../../utils/prisma";
 import { IPaginationOptions, paginationHelper } from "../../utils/paginationHelpers";
 
@@ -2569,11 +2569,72 @@ const getAllOrgQuestions = async (
   };
 };
 
+const getAllAgentIds = async (user: User) => {
+  let agents;
+
+  if (user?.role === UserRole.super_admin) {
+    agents = await prisma.agent.findMany({
+      select: {
+        id: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  } else if (user?.role === UserRole.organization_admin) {
+    const org = await prisma.organization.findFirst({
+      where: { ownerId: user.id },
+      select: { id: true },
+    });
+
+    if (!org) {
+      throw new Error("Organization not found for this admin!");
+    }
+
+    agents = await prisma.agent.findMany({
+      where: {
+        assignments: {
+          some: {
+            organizationId: org.id,
+            status: AssignmentStatus.ASSIGNED
+          },
+        },
+        NOT: {
+          AgentFeedbacks: {
+            some: {
+              client: {
+                id: user.id 
+              }
+            }
+          }
+        }
+      },
+      select: {
+        id: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  return agents;
+};
+
 export const AgentAssignmentService = {
   getAllOrgQuestions,
   getQuestionsByUserAssignments,
   getQuestionsByOrgNumber,
   getAllAgents,
+  getAllAgentIds,
   getAIAgentIdsByOrganizationAdmin,
   getAgentsByOrganization,
   assignAgentToOrganization,

@@ -138,21 +138,30 @@ model User {
   @@map("users")
 }
 
+// preferred_channel: phone/sip
+// phone_number:
+
+enum PreferredChannel {
+  phone
+  sip
+}
+
 /// Agent profile with SIP configuration and availability
 model Agent {
   id     String @id @default(auto()) @map("_id") @db.ObjectId
   userId String @unique @db.ObjectId
 
-  status       AgentStatus @default(offline)
-  sip_address  String?
-  sip_username String?
-  sip_password String?
-  skills       String[]    @default([])
-  employeeId   String      @unique
+  status            AgentStatus      @default(offline)
+  sip_address       String?
+  sip_username      String?
+  sip_password      String?
+  skills            String[]         @default([])
+  employeeId        String           @unique
+  preferred_channel PreferredChannel @default(phone)
 
   // Working hours
-  workEndTime   String?
-  workStartTime String?
+  workEndTime       String?
+  workStartTime     String?
 
   // Performance metrics
   successCalls Int @default(0)
@@ -449,7 +458,7 @@ model Plan {
 
   isActive    Boolean @default(true)
   description String?
-  features    Json?   @default("{}")   // ← THIS IS THE KEY
+  features    Json?   @default("{}") // ← THIS IS THE KEY
 
   // NEW FIELDS
   planLevel         PlanLevel
@@ -660,4 +669,3 @@ model PhoneNumberRequest {
 
   @@map("phone_number_requests")
 }
-

@@ -442,11 +442,24 @@ const getAllOrgQuestions = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getAgentsId = catchAsync(async (req, res) => {
+  const user = req.user as User;
+  const result = await AgentAssignmentService.getAllAgentIds(user);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "Agents Id are retrieved successfully!",
+    data: result,
+  });
+});
+
+
 export const AgentAssignmentController = {
   getUserAssignedQuestions,
   getQuestionsByOrgNumber,
   getAllOrgQuestions,
   getAllAgents,
+  getAgentsId,
   getAIAgents,
   getAgentsByOrganization,
   assignAgentToOrganization,

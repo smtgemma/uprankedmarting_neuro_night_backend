@@ -161,7 +161,11 @@ router.get(
   AgentAssignmentController.getAIAgents
 );
 
-
+router.get(
+  "/get-agent-ids",
+  auth(UserRole.organization_admin, UserRole.super_admin),
+  AgentAssignmentController.getAgentsId
+);
 
 // ============ MAIN ROUTES ============
 // 1. Get questions for user's assigned organizations (Agent Dashboard)

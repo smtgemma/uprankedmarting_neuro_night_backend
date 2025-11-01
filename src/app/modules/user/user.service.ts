@@ -327,6 +327,15 @@ const createAgentIntoDB = async (payload: any) => {
     throw new ApiError(status.BAD_REQUEST, "Email and phone are required fields");
   }
 
+  // Validate phone number format (E.164)
+  const e164Regex = /^\+[1-9]\d{1,14}$/;
+  if (!e164Regex.test(userData.phone)) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Phone number must be in E.164 format (e.g., +1234567890) with country code"
+    );
+  }
+
   if (!agentData?.sip_domain || !agentData?.sip_password) {
     throw new ApiError(status.BAD_REQUEST, "SIP domain and password are required");
   }
@@ -393,6 +402,7 @@ const createAgentIntoDB = async (payload: any) => {
         sip_address: sipInfo?.fullSipUri,
         sip_username: userName,
         sip_password: password,
+        preferred_channel: agentData.preferred_channel || "phone",
         workStartTime: agentData.workStartTime,
         workEndTime: agentData.workEndTime,
         successCalls: 0,
@@ -460,6 +470,15 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   const userData = payload?.userData;
   const agentData = payload?.agentData;
   const image = payload?.image;
+
+  // Validate phone number format (E.164)
+  const e164Regex = /^\+[1-9]\d{1,14}$/;
+  if (!e164Regex.test(userData.phone)) {
+    throw new ApiError(
+      status.BAD_REQUEST,
+      "Phone number must be in E.164 format (e.g., +1234567890) with country code"
+    );
+  }
 
   if (!agentId) {
     throw new ApiError(
