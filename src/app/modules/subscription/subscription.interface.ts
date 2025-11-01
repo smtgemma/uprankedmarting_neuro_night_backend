@@ -15,4 +15,5 @@ export interface ICancelSubscriptionRequest {
 export interface ISwitchPlanRequest {
   newPlanId: string;
   extraAgents?: number; // optional – keep current if not sent
+  chargeImmediately?: boolean;
 }

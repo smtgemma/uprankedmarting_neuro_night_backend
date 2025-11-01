@@ -654,13 +654,11 @@ const getBillingHistory = async (
 // ──────────────────────────────────────────────────────────────────────
 //  switchPlan
 // ──────────────────────────────────────────────────────────────────────
-// ──────────────────────────────────────────────────────────────────────
-//  switchPlan – FULLY TYPED & WORKING
-// ──────────────────────────────────────────────────────────────────────
+
 const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
   const { newPlanId, extraAgents } = payload;
 
-  // 1. Find active subscription
+  // 1. Find active subscription + validate plan exists
   const activeSub = await prisma.subscription.findFirst({
     where: {
       organizationId: orgId,
@@ -669,8 +667,11 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
     include: { plan: true, organization: true },
   });
 
-  if (!activeSub) {
-    throw new AppError(status.NOT_FOUND, "No active subscription found");
+  if (!activeSub || !activeSub.plan) {
+    throw new AppError(
+      status.NOT_FOUND,
+      "Active subscription or plan not found"
+    );
   }
 
   const currentPlan = activeSub.plan;
@@ -742,8 +743,8 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
     customPriceId = customPrice.id;
   }
 
-  // 5. Update Stripe subscription with proration
-  const prorationBehavior = "create_prorations"; // we control this
+  // 5. Update Stripe subscription
+  const prorationBehavior = "create_prorations";
 
   const stripeSub = await stripe.subscriptions.retrieve(
     activeSub.stripeSubscriptionId
@@ -766,7 +767,46 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
     },
   });
 
-  // 6. Update DB (purchasedNumber stays the same)
+  // 6. Check proration amount
+  const upcomingInvoice = await stripe.invoices.retrieveUpcoming({
+    subscription: activeSub.stripeSubscriptionId,
+  });
+
+  const prorationAmountDueCents = upcomingInvoice.amount_due;
+  const prorationAmountDue = prorationAmountDueCents / 100;
+
+  // 7. CHARGE IMMEDIATELY IF UPGRADE
+  if (prorationAmountDue > 0) {
+    try {
+      const invoice = await stripe.invoices.create({
+        customer: upcomingInvoice.customer as string,
+        subscription: activeSub.stripeSubscriptionId,
+        auto_advance: true,
+        description: `Plan switch proration: ${currentPlan.name} to ${newPlan.name}`,
+      });
+
+      const paidInvoice = await stripe.invoices.pay(invoice.id);
+      console.log(
+        `Immediate proration charge: $${prorationAmountDue} (Invoice: ${paidInvoice.id})`
+      );
+    } catch (err: any) {
+      console.error("Failed to charge proration immediately:", err.message);
+      throw new AppError(
+        status.PAYMENT_REQUIRED,
+        `Upgrade requires immediate payment of $${prorationAmountDue}. Card declined or insufficient funds.`
+      );
+    }
+  } else if (prorationAmountDue < 0) {
+    console.log(
+      `Proration credit: $${Math.abs(
+        prorationAmountDue
+      )} (applied to next invoice)`
+    );
+  } else {
+    console.log("No proration (same price or exact timing)");
+  }
+
+  // 8. Update DB
   const updatedSub = await prisma.subscription.update({
     where: { id: activeSub.id },
     data: {
@@ -778,13 +818,20 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
     include: { plan: true },
   });
 
-  // 7. Return result
+  // 9. Return
   return {
     subscription: updatedSub,
-    prorated: prorationBehavior === "create_prorations",
+    prorated: prorationAmountDue !== 0,
+    immediateCharge: prorationAmountDue > 0 ? prorationAmountDue : 0,
     totalPrice,
     message: `Switched to "${newPlan.name}"${
       requestedAgents > 0 ? ` ${requestedAgents} extra agent(s) applied.` : ""
+    }${
+      prorationAmountDue > 0
+        ? ` Charged $${prorationAmountDue} immediately for upgrade.`
+        : prorationAmountDue < 0
+        ? ` Credit of $${Math.abs(prorationAmountDue)} applied to next invoice.`
+        : ""
     }`,
   };
 };
