@@ -785,6 +785,8 @@
 //     data: calls,
 //   };
 // };
+
+
 // // Request assignment (Organization Admin)
 // const requestAgentAssignment = async (agentUserId: string, user: User) => {
 //   // Use transaction for data consistency
@@ -1694,7 +1696,7 @@
 
 import AppError from "../../errors/AppError";
 import status from "http-status";
-import { AssignmentStatus, SubscriptionStatus, User, UserRole } from "@prisma/client";
+import { AssignmentStatus, SubscriptionStatus, User, UserRole, UserStatus } from "@prisma/client";
 import prisma from "../../utils/prisma";
 import { IPaginationOptions, paginationHelper } from "../../utils/paginationHelpers";
 
@@ -2629,7 +2631,181 @@ const getAllAgentIds = async (user: User) => {
   return agents;
 };
 
+const getAgentsManagementInfo = async (
+  options: IPaginationOptions,
+  filters: any = {}
+) => {
+
+  console.log("hitting")
+  const searchTerm = filters?.searchTerm as string;
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  let whereClause: any = {
+    status: UserStatus.ACTIVE,
+    role: UserRole.agent,
+  };
+
+  // Search functionality
+  if (searchTerm) {
+    whereClause.OR = [
+      { name: { contains: searchTerm, mode: "insensitive" } },
+      { email: { contains: searchTerm, mode: "insensitive" } },
+      { phone: { contains: searchTerm, mode: "insensitive" } },
+      { Agent: { employeeId: { contains: searchTerm, mode: "insensitive" } } },
+    ];
+  }
+
+  if (searchTerm === "employeeId") {
+    whereClause.Agent = {};
+  }
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        // "id": "68c307fe072c5a263a704f89",
+        //             "userId": "68c307fd072c5a263a704f88",
+        //             "status": "offline",
+        //             "sip_address": "sip:agentsanim65934@test-uprank.sip.twilio.com",
+        //             "sip_username": "agentsanim65934",
+        //             "sip_password": "Securepassword123",
+        //             "dateOfBirth": "2000-01-01T00:00:00.000Z",
+        //             "gender": "male",
+        //             "address": "Updated Address Street",
+        //             "emergencyPhone": "01743034999",
+        //             "ssn": "12347-455-43789",
+        //             "skills": [
+        //                 "customer service",
+        //                 "sales",
+        //                 "technical support",
+        //                 "communication"
+        //             ],
+        //             "employeeId": null,
+        //             "isAvailable": true,
+        //             "assignTo": "68c211cc6864cb0ea1959230",
+        //             "jobTitle": "Senior Customer Service Agent",
+        //             "employmentType": "full_time",
+        //             "department": "Customer Success",
+        //             "workEndTime": "17:00:00",
+        //             "workStartTime": "09:00:00",
+        Agent: true,
+       
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.user.count({
+      where: whereClause,
+    }),
+  ]);
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: users,
+  };
+};
+
+const getAgentCallsManagementInfo = async (
+  options: IPaginationOptions,
+  filters: any = {},
+  user: User
+) => {
+  let searchTerm = filters?.searchTerm as string;
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(options);
+
+  // Build where clause for Call model
+  let whereClause: any = {
+    agentId: user?.id,
+  };
+
+  // If search term exists, ADD search conditions to the existing whereClause
+  if (searchTerm) {
+    whereClause.AND = [
+      {
+        OR: [
+          { from_number: { contains: searchTerm, mode: "insensitive" } },
+          { to_number: { contains: searchTerm, mode: "insensitive" } },
+          { call_status: { contains: searchTerm, mode: "insensitive" } },
+          { callType: { contains: searchTerm, mode: "insensitive" } },
+          {
+            Agent: {
+              employeeId: { contains: searchTerm, mode: "insensitive" },
+            },
+          },
+        ],
+      },
+    ];
+  }
+  // console.log(whereClause);
+
+  const [calls, total] = await Promise.all([
+    prisma.call.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        organizationId: true,
+        agentId: true,
+        from_number: true,
+        to_number: true,
+        call_time: true,
+        callType: true,
+        call_status: true,
+        call_duration: true,
+        call_started_at: true,
+        call_completed_at: true,
+        call_transcript: true,
+        recording_duration: true,
+        recording_status: true,
+        recording_url: true,
+
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip: Number(skip),
+      take: Number(limit),
+    }),
+    prisma.call.count({
+      where: whereClause,
+    }),
+  ]);
+
+  return {
+    meta: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    },
+    data: calls,
+  };
+};
+
 export const AgentAssignmentService = {
+  getAgentsManagementInfo,
+  getAgentCallsManagementInfo,
   getAllOrgQuestions,
   getQuestionsByUserAssignments,
   getQuestionsByOrgNumber,

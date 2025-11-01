@@ -198,7 +198,7 @@ model AgentAssignment {
   assignedByUser User?        @relation(fields: [assignedBy], references: [id], name: "AssignmentMadeBy")
 
   @@unique([agentUserId, organizationId])
-  @@map("agent_assignments")
+  @@map("AgentAssignment")
 }
 
 /// Organization with integrations and configuration

@@ -98,20 +98,7 @@
 //   AssignmentController.getOrganizationAssignments
 // );
 
-// // Get Agents Management Info by super admin
-// router.get(
-//   "/agents-management-info",
-//   auth(UserRole.super_admin),
-//   AssignmentController.getAgentsManagementInfo
-// );
 
-
-// // Agent dashboard
-// router.get(
-//   "/agent-calls-management-info",
-//   auth(UserRole.agent),
-//   AssignmentController.getAgentCallsManagementInfo
-// );
 
 
 
@@ -187,5 +174,20 @@ router.get(
   "/organization/:organizationId/all",
   auth(UserRole.organization_admin, UserRole.super_admin),
   AgentAssignmentController.getAllOrgQuestions
+);
+
+// Get Agents Management Info by super admin
+router.get(
+  "/agents-management-info",
+  auth(UserRole.super_admin),
+  AgentAssignmentController.getAgentsManagementInfo
+);
+
+
+// Agent dashboard
+router.get(
+  "/agent-calls-management-info",
+  auth(UserRole.agent),
+  AgentAssignmentController.getAgentCallsManagementInfo
 );
 export const AssignmentRoutes = router;
