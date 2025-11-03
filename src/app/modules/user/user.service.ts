@@ -822,6 +822,7 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
     data: {
       image: payload?.image,
       bio: payload?.bio,
+
     },
     select: {
       id: true,
@@ -833,20 +834,28 @@ const updateAgentSpecificInfo = async (user: User, payload: any) => {
       role: true,
       status: true,
       createdAt: true,
-      updatedAt: true,
-      Agent: {
-        select: {
-          id: true,
-          status: true,
-          skills: true,
-          successCalls: true,
-          droppedCalls: true,
-        },
-      },
+      updatedAt: true
     },
   });
+  let updatedAgent = null;
+  if (payload?.preferred_channel) {
+    if (payload?.preferred_channel !== "phone" && payload?.preferred_channel !== "sip") {
+      throw new ApiError(status.BAD_REQUEST, "Invalid preferred channel selected! Please select either 'phone' or 'sip' ");
+    }
+    updatedAgent = await prisma.agent.update({
+      where: { userId: user?.id },
+      data: {
+        preferred_channel: payload?.preferred_channel,
+      },
+    });
+  }
 
-  return updatedUser;
+  return {
+    ...updatedUser,
+    Agent: {
+      ...updatedAgent
+    }
+  }
 };
 const getSingleUserByIdFromDB = async (userId: string) => {
   const user = await prisma.user.findFirst({
