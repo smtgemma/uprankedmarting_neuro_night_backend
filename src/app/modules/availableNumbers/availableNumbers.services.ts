@@ -155,9 +155,9 @@ const getAllNumbersForAdmin = async (query: Record<string, unknown>) => {
   if (query.countryCode) {
     customFilters.countryCode = query.countryCode as string;
   }
-  
 
- if (searchTerm) {
+
+  if (searchTerm) {
     customFilters.OR = [
       {
         organization: {
@@ -223,25 +223,33 @@ const getAllNumbersForAdmin = async (query: Record<string, unknown>) => {
     data: result,
   };
 };
-
 const getAllPhoneNumberRequests = async (query: Record<string, unknown>) => {
-  const searchTerm = query?.searchTerm as string;
-  const queryBuilder = new QueryBuilder(prisma.phoneNumberRequest, query);
+  const {
+    page = 1,
+    limit = 10,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+    searchTerm,
+    status,
+    organizationId
+  } = query;
 
-  const customFilters: Record<string, any> = {};
+  const skip = (Number(page) - 1) * Number(limit);
+  const take = Number(limit);
 
-  // Filter by status
-  if (query.status) {
-    customFilters.status = query.status as PhoneNumberRequestStatus;
+  // Build where clause
+  const where: any = {};
+
+  if (status) {
+    where.status = status;
   }
 
-  // Filter by organization
-  if (query.organizationId) {
-    customFilters.organizationId = query.organizationId as string;
+  if (organizationId) {
+    where.organizationId = organizationId;
   }
 
   if (searchTerm) {
-    customFilters.OR = [
+    where.OR = [
       {
         organization: {
           name: { contains: searchTerm, mode: "insensitive" },
@@ -267,44 +275,131 @@ const getAllPhoneNumberRequests = async (query: Record<string, unknown>) => {
     ];
   }
 
-  const result = await queryBuilder
-    .filter()
-    .rawFilter(customFilters)
-    .include({
-      organization: {
-        select: {
-          id: true,
-          name: true,
-          ownedOrganization: {
-            select: {
-              id: true,
-              phone: true,
-              name: true,
-              email: true,
+  // Get phone number requests with organization details
+  const [requests, total] = await Promise.all([
+    prisma.phoneNumberRequest.findMany({
+      where,
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+            address: true,
+            websiteLink: true,
+            requestedTwilioNumbers: {
+              select:{
+                phoneNumber: true
+              }
             },
-          },
+            ownedOrganization: {
+              select: {
+                id: true,
+                phone: true,
+                name: true,
+                email: true,
+              },
+
+            }
+          }
         },
       },
-      // assignedNumber: {
-      //   select: {
-      //     id: true,
-      //     phoneNumber: true,
-      //     friendlyName: true,
-      //   },
-      // },
-    })
-    .sort()
-    .paginate()
-    .fields()
-    .execute();
+      orderBy: {
+        [sortBy as string]: sortOrder,
+      },
+      skip,
+      take,
+    }),
+    prisma.phoneNumberRequest.count({ where })
+  ]);
 
-  const meta = await queryBuilder.countTotal();
+  const totalPage = Math.ceil(total / take);
 
   return {
-    meta,
-    data: result,
+    meta: {
+      page: Number(page),
+      limit: take,
+      total,
+      totalPage
+    },
+    data: requests,
   };
 };
+// const getAllPhoneNumberRequests = async (query: Record<string, unknown>) => {
+//   const searchTerm = query?.searchTerm as string;
+//   const queryBuilder = new QueryBuilder(prisma.phoneNumberRequest, query);
+
+//   const customFilters: Record<string, any> = {};
+
+//   // Filter by status
+//   if (query.status) {
+//     customFilters.status = query.status as PhoneNumberRequestStatus;
+//   }
+
+//   // Filter by organization
+//   if (query.organizationId) {
+//     customFilters.organizationId = query.organizationId as string;
+//   }
+
+//   if (searchTerm) {
+//     customFilters.OR = [
+//       {
+//         organization: {
+//           name: { contains: searchTerm, mode: "insensitive" },
+//         },
+//       },
+//       {
+//         organization: {
+//           ownedOrganization: {
+//             email: { contains: searchTerm, mode: "insensitive" },
+//           },
+//         },
+//       },
+//       {
+//         organization: {
+//           ownedOrganization: {
+//             phone: { contains: searchTerm, mode: "insensitive" },
+//           },
+//         },
+//       },
+//       {
+//         requesterName: { contains: searchTerm, mode: "insensitive" },
+//       }
+//     ];
+//   }
+
+//   const result = await queryBuilder
+//     .filter()
+//     .rawFilter(customFilters)
+//     .include({
+//       organization: {
+//         select: {
+//           id: true,
+//           name: true,
+//           ownedOrganization: {
+//             select: {
+//               id: true,
+//               phone: true,
+//               name: true,
+//               email: true,
+//             },
+//           },
+//         },
+//       },
+
+//     })
+//     .sort()
+//     .paginate()
+//     .fields()
+//     .execute();
+
+//   const meta = await queryBuilder.countTotal();
+
+//   return {
+//     meta,
+//     data: result,
+//   };
+// };
 
 // const togglePinNumber = async (
 //   numberId: string,
