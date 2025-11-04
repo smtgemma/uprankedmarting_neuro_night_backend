@@ -452,12 +452,12 @@ const togglePinNumber = async (
     throw new AppError(status.NOT_FOUND, "Phone number not found!");
   }
 
-  // ✅ ADDED: Prevent pinning already purchased numbers
+  // Prevent pinning purchased numbers
   if (number.isPurchased) {
     throw new AppError(status.BAD_REQUEST, "Cannot pin a purchased number!");
   }
 
-  // If pinning, ensure organizationId is provided
+  // Ensure orgId is provided when pinning
   if (payload.isPinned && !payload.organizationId) {
     throw new AppError(
       status.BAD_REQUEST,
@@ -465,6 +465,25 @@ const togglePinNumber = async (
     );
   }
 
+  //  Prevent multiple pinned numbers for same org
+  if (payload.isPinned && payload.organizationId) {
+    const alreadyPinned = await prisma.availableTwilioNumber.findFirst({
+      where: {
+        requestedByOrgId: payload.organizationId,
+        isPinned: true,
+        id: { not: numberId }, // exclude the current one
+      },
+    });
+
+    if (alreadyPinned) {
+      throw new AppError(
+        status.BAD_REQUEST,
+        "This organization already has a pinned number!"
+      );
+    }
+  }
+
+  // Update number pin status
   const result = await prisma.availableTwilioNumber.update({
     where: { id: numberId },
     data: {
@@ -472,13 +491,14 @@ const togglePinNumber = async (
       requestedByOrgId: payload.isPinned ? payload.organizationId : null,
     },
     include: {
-      requestedByOrg: true, // ✅ CHANGED: organization -> requestedByOrg
-      purchasedByOrg: true, // ✅ ADDED: Include purchased org
+      requestedByOrg: true,
+      purchasedByOrg: true,
     },
   });
 
   return result;
 };
+
 
 const updateRequestStatus = async (
   requestId: string,
