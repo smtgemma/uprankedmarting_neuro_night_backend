@@ -473,13 +473,13 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
   const image = payload?.image;
 
   // Validate phone number format (E.164)
-  const e164Regex = /^\+[1-9]\d{1,14}$/;
-  if (!e164Regex.test(userData.phone)) {
-    throw new ApiError(
-      status.BAD_REQUEST,
-      "Phone number must be in E.164 format (e.g., +1234567890) with country code"
-    );
-  }
+  // const e164Regex = /^\+[1-9]\d{1,14}$/;
+  // if (!e164Regex.test(userData.phone)) {
+  //   throw new ApiError(
+  //     status.BAD_REQUEST,
+  //     "Phone number must be in E.164 format (e.g., +1234567890) with country code"
+  //   );
+  // }
 
   if (!agentId) {
     throw new ApiError(
@@ -513,30 +513,30 @@ const updateAgentInfo = async (user: User, agentId: string, payload: any) => {
     // Update user data if provided
     if (userData) {
       // ===== Check for existing user =====
-      const existingUser = await transactionClient.user.findFirst({
-        where: {
-          AND: [
-            { id: { not: agentId } }, // exclude current user
-            { phone: userData.phone }, // check only phone
-          ],
-        },
-      });
+      // const existingUser = await transactionClient.user.findFirst({
+      //   where: {
+      //     AND: [
+      //       { id: { not: agentId } }, // exclude current user
+      //       { phone: userData.phone }, // check only phone
+      //     ],
+      //   },
+      // });
 
       // console.log("existingUser", existingUser);
 
-      if (existingUser) {
-        throw new ApiError(
-          status.BAD_REQUEST,
-          "User with this email or phone already exists!"
-        );
-      }
+      // if (existingUser) {
+      //   throw new ApiError(
+      //     status.BAD_REQUEST,
+      //     "User with this email or phone already exists!"
+      //   );
+      // }
 
       updatedUser = await transactionClient.user.update({
         where: { id: agentId },
         data: {
           name: userData.name,
           bio: userData.bio,
-          phone: userData.phone,
+          // phone: userData.phone,
           image: image || targetUser?.image,
           role: userData.role, // Super admin can change role
         },
