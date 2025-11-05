@@ -148,9 +148,9 @@ enum PreferredChannel {
 
 /// Agent profile with SIP configuration and availability
 model Agent {
-  id     String @id @default(auto()) @map("_id") @db.ObjectId
-  userId String @unique @db.ObjectId
-  phone_number  String 
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String @unique @db.ObjectId
+  phone_number String
 
   status            AgentStatus      @default(offline)
   sip_address       String?
@@ -161,8 +161,8 @@ model Agent {
   preferred_channel PreferredChannel @default(phone)
 
   // Working hours
-  workEndTime       String?
-  workStartTime     String?
+  workEndTime   String?
+  workStartTime String?
 
   // Performance metrics
   successCalls Int @default(0)
