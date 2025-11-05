@@ -10,6 +10,7 @@ import { stripe } from "../../utils/stripe";
 import { SubscriptionStatus } from "@prisma/client";
 import { sendBillingEmail } from "../../utils/billing.email";
 import axios from "axios";
+import QueryBuilder from "../../builder/QueryBuilder";
 
 // --------------------------------------------------
 //  Helper: Make routing API calls
@@ -898,6 +899,29 @@ const switchPlan = async (orgId: string, payload: ISwitchPlanRequest) => {
   };
 };
 
+const getAllBillingHistory = async (query: Record<string, any>) => {
+  const billingQuery = new QueryBuilder(prisma.billingInvoice, query)
+    .search(["number", "status", "organization.name"]) // searchable fields
+    .filter()
+    .sort()
+    .paginate()
+    .include({
+      organization: {
+        select: { id: true, name: true, stripeCustomerId: true },
+      },
+      subscription: {
+        include: { plan: true },
+      },
+    });
+
+  const [data, meta] = await Promise.all([
+    billingQuery.execute(),
+    billingQuery.countTotal(),
+  ]);
+
+  return { data, meta };
+};
+
 export const SubscriptionService = {
   createSubscription,
   getOrgSubscriptions,
@@ -906,4 +930,5 @@ export const SubscriptionService = {
   handleWebhook,
   getBillingHistory,
   switchPlan,
+  getAllBillingHistory,
 };

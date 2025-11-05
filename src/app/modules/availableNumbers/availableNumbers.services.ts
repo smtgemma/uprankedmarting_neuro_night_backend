@@ -4,8 +4,8 @@ import config from "../../config";
 import AppError from "../../errors/AppError";
 import prisma from "../../utils/prisma";
 import QueryBuilder from "../../builder/QueryBuilder";
-import { PhoneNumberRequestStatus } from "@prisma/client";
-import { sendPhoneNumberRequestEmail } from "../../utils/sendEmailForPhoneNumber";
+import { PhoneNumberRequestStatus, SubscriptionStatus } from "@prisma/client";
+import { sendPhoneNumberRequestEmail } from "../../utils/sendPhoneNumberRequestEmail";
 // Initialize Twilio client
 const twilioClient = new Twilio(
   config.twilio.account_sid,
@@ -674,6 +674,18 @@ const requestPhoneNumber = async (
     where: { ownerId: userId },
     include: {
       ownedOrganization: true,
+      requestedPhoneNumber: true, // Include existing phone number request
+      subscriptions: {
+        where: {
+          status: {
+            in: [
+              SubscriptionStatus.ACTIVE,
+              SubscriptionStatus.TRIALING,
+              SubscriptionStatus.INCOMPLETE
+            ]
+          }
+        }
+      }
     },
   });
 
@@ -681,41 +693,120 @@ const requestPhoneNumber = async (
     throw new AppError(status.NOT_FOUND, "Organization not found!");
   }
 
-  if (organization && organization?.organizationNumber) {
+  // ✅ CHECK: Organization should NOT have any active subscription
+  if (organization.subscriptions.length > 0) {
+    const activeSub = organization.subscriptions[0];
+    throw new AppError(
+      status.BAD_REQUEST,
+      `You already have an active ${activeSub.planLevel} subscription. Please use your subscribed features instead of requesting a phone number.`
+    );
+  }
+
+  // ✅ CHECK: Organization should NOT have a purchased phone number
+  if (organization.purchasedPhoneNumber) {
     throw new AppError(
       status.BAD_REQUEST,
       "Organization already has a purchased phone number!"
     );
   }
 
-  // Check if organization already has a pending request
-  const existingRequest = await prisma.phoneNumberRequest.findFirst({
+  // Check for existing pending request
+  const existingPendingRequest = await prisma.phoneNumberRequest.findFirst({
     where: {
       organizationId: organization.id,
       status: PhoneNumberRequestStatus.PENDING,
     },
   });
 
-  if (existingRequest) {
+  // OPTION 1: Update existing pending request instead of creating new one
+  if (existingPendingRequest) {
+    const updatedRequest = await prisma.phoneNumberRequest.update({
+      where: { id: existingPendingRequest.id },
+      data: {
+        requesterName: payload.requesterName,
+        message: payload.message,
+        requestedPhonePattern: payload.requestedPhonePattern,
+        updatedAt: new Date(),
+      },
+      include: {
+        organization: {
+          include: {
+            ownedOrganization: {
+              select: {
+                email: true,
+                name: true,
+                phone: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Send email notification for updated request
+    try {
+      await sendPhoneNumberRequestEmail(
+        {
+          requesterName: payload.requesterName,
+          message: payload.message
+            ? `(Updated Request) ${payload.message}`
+            : "Request details updated",
+          requestedPhonePattern: payload.requestedPhonePattern,
+        },
+        organization.ownedOrganization?.email || "noreply@answersmart.com"
+      );
+    } catch (error) {
+      console.error("Failed to send email notification:", error);
+    }
+
+    return {
+      ...updatedRequest,
+      message: "Existing phone number request updated successfully!",
+      isUpdated: true,
+    };
+  }
+
+  // Check for recent rejected requests (within last 7 days)
+  const recentRejectedRequest = await prisma.phoneNumberRequest.findFirst({
+    where: {
+      organizationId: organization.id,
+      status: PhoneNumberRequestStatus.REJECTED,
+      createdAt: {
+        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+      },
+    },
+  });
+
+  if (recentRejectedRequest) {
     throw new AppError(
       status.BAD_REQUEST,
-      "You already have a  phone number request!"
+      `Your previous request was rejected. You can submit a new request after ${new Date(
+        recentRejectedRequest.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000
+      ).toLocaleDateString()}.`
     );
   }
 
-  // Create the request
+  // Create new request
   const result = await prisma.phoneNumberRequest.create({
     data: {
       organizationId: organization.id,
       requesterName: payload.requesterName,
-      // requesterEmail: payload.requesterEmail,
-      // requesterPhone: payload.requesterPhone as string,
       message: payload.message,
       requestedPhonePattern: payload.requestedPhonePattern,
       status: PhoneNumberRequestStatus.PENDING,
     },
     include: {
-      organization: true,
+      organization: {
+        include: {
+          ownedOrganization: {
+            select: {
+              email: true,
+              name: true,
+              phone: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -727,14 +818,17 @@ const requestPhoneNumber = async (
         message: payload.message,
         requestedPhonePattern: payload.requestedPhonePattern,
       },
-      organization?.ownedOrganization?.email || "noreply@answersmart.com"
+      organization.ownedOrganization?.email || "noreply@answersmart.com"
     );
   } catch (error) {
     console.error("Failed to send email notification:", error);
-    // Don't throw error, just log it
   }
 
-  return result;
+  return {
+    ...result,
+    message: "Phone number request submitted successfully!",
+    isUpdated: false,
+  };
 };
 
 export const TwilioPhoneNumberService = {

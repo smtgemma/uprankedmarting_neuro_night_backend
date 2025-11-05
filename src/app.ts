@@ -41,6 +41,7 @@ const allowedOrigins = [
   "https://lead.answersmart.ai",
   "http://localhost:3000",
   "https://47bc5cdc91c2.ngrok-free.app",
+  "https://b0ee98f16965.ngrok-free.app",
 ];
 
 app.use(
