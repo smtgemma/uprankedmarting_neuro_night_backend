@@ -85,6 +85,18 @@ const switchPlan = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+
+const getAllBillingHistory = catchAsync(async (req: Request, res: Response) => {
+  const result = await SubscriptionService.getAllBillingHistory(req.query);
+
+  sendResponse(res, {
+    statusCode: status.OK,
+    message: "All billing history retrieved successfully",
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
 export const SubscriptionController = {
   createSubscription,
   getOrgSubscriptions,
@@ -93,4 +105,5 @@ export const SubscriptionController = {
   handleWebhook,
   getBillingHistory,
   switchPlan,
+  getAllBillingHistory,
 };

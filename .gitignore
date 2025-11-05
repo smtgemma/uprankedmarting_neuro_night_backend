@@ -8,17 +8,14 @@ dist/
 build/
 
 # Environment
-.env
-.env.local
-.env.production
 
 # Logs
 logs/
 *.log
 npm-debug.log*
+temp_auto_push.bat
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -35,3 +32,6 @@ prisma/*.db-journal
 coverage/
 .nyc_output/
 .vercel
+.gitignore
+branch_structure.json
+config.bat

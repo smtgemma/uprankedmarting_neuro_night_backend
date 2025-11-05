@@ -46,4 +46,10 @@ router.post(
   SubscriptionController.switchPlan
 );
 
+router.get(
+  "/admin/billing-history",
+  auth("super_admin"), // or auth("super_admin", "organization_admin")
+  SubscriptionController.getAllBillingHistory
+);
+
 export const SubscriptionRoutes = router;
