@@ -71,9 +71,9 @@ app.post(
 // app.use("/api/v1", apiLimiter);
 // app.use("/api/v1/auth/login", authLimiter);
 // app.use("/api/v1/users/register-user", authLimiter);
-app.use("/api/v1");
-app.use("/api/v1/auth/login");
-app.use("/api/v1/users/register-user");
+// app.use("/api/v1");
+// app.use("/api/v1/auth/login");
+// app.use("/api/v1/users/register-user");
 app.use("/api/v1", router);
 
 // ====================
