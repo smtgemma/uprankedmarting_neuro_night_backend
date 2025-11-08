@@ -1,4 +1,4 @@
-import { DocFor, User } from "@prisma/client";
+import { AgentStatus, AssignmentStatus, DocFor, User } from "@prisma/client";
 import QueryBuilder from "../../builder/QueryBuilder";
 import prisma from "../../utils/prisma";
 import AppError from "../../errors/AppError";
@@ -6,97 +6,6 @@ import status from "http-status";
 import fs from "fs";
 import { Request, Response } from "express";
 import { uploadToCloudinary } from "../../config/cloudinary.config";
-
-// // Helper function to remove file extension
-// const removeFileExtension = (filename: string): string => {
-//   return filename.replace(/\.[^/.]+$/, "");
-// };
-
-// // Create company document controller - FIXED VERSION
-// const createCompanyDoc = async (req: Request, res: Response) => {
-//   try {
-//     const { docFor } = req.body;
-//     const file = req.file;
-//     const user = req.user;
-
-//     if (!user) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Authentication required",
-//       });
-//     }
-
-//     const Organization = await prisma.organization.findUnique({
-//       where: { ownerId: user.id },
-//     });
-
-//     if (!Organization) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Organization not found for the user",
-//       });
-//     }
-
-//     if (!file) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "No file uploaded",
-//       });
-//     }
-
-//     const cleanedDocName = removeFileExtension(file.originalname);
-
-//     // Upload file to Cloudinary with proper resource type
-//     const cloudinaryResult = await uploadToCloudinary(file.path, file.mimetype);
-
-//     console.log("Cloudinary result:", cloudinaryResult);
-
-//     // Generate proper download URL (fix for PDFs treated as images)
-//     let downloadUrl = cloudinaryResult.secure_url;
-//     if (
-//       file.mimetype.includes("pdf") &&
-//       downloadUrl.includes("/image/upload/")
-//     ) {
-//       downloadUrl = downloadUrl.replace("/image/upload/", "/raw/upload/");
-//     }
-
-//     const companyDoc = await prisma.organizationDoc.create({
-//       data: {
-//         organizationId: Organization.id,
-//         docFor: docFor || "AGENT",
-//         fileName: cleanedDocName,
-//         cloudUrl: downloadUrl, // Use the corrected URL
-//         fileFormat: cloudinaryResult.format || file.mimetype.split("/")[1],
-//         // publicId: cloudinaryResult.public_id // Store public_id for future operations
-//       },
-//       include: {
-//         organization: true,
-//       },
-//     });
-
-//     // Clean up the uploaded file
-//     try {
-//       fs.unlinkSync(file.path);
-//       console.log(`File deleted locally: ${file.path}`);
-//     } catch (deleteError) {
-//       console.error(`Failed to delete file ${file.path}:`, deleteError);
-//     }
-
-//     return companyDoc;
-//   } catch (error) {
-//     console.error("Error processing document:", error);
-
-//     // Clean up file if error occurred
-//     if (req.file && fs.existsSync(req.file.path)) {
-//       try {
-//         fs.unlinkSync(req.file.path);
-//       } catch (deleteError) {
-//         console.error(`Failed to delete file ${req.file.path}:`, deleteError);
-//       }
-//     }
-//   }
-// };
-
 
 // // Helper function to remove file extension
 const removeFileExtension = (filename: string): string => {
@@ -267,6 +176,69 @@ const getCompanyDocsByOrgnizationId = async (
   };
 };
 
+const getCompanyDocsByAssignedAgent = async (
+  query: Record<string, unknown>,
+  user: User
+) => {
+  // First, check if the user is an agent
+  const agent = await prisma.agent.findUnique({
+    where: { userId: user.id },
+    include: {
+      assignments: {
+        where: {
+          status: AssignmentStatus.ASSIGNED
+        },
+        include: {
+          organization: true
+        }
+      }
+    }
+  });
+
+  if (!agent) {
+    throw new AppError(status.NOT_FOUND, "Agent not found for the user");
+  }
+
+  if (agent.assignments.length === 0) {
+    throw new AppError(
+      status.NOT_FOUND, 
+      "No organization assignments found for this agent"
+    );
+  }
+
+  // Get all organization IDs where the agent is assigned
+  const organizationIds = agent.assignments.map(assignment => assignment.organizationId);
+
+  // console.log(organizationIds)
+  // Query documents for all assigned organizations
+  const companyDocQuery = new QueryBuilder(prisma.organizationDoc, query)
+    .rawFilter({ 
+      organizationId: { 
+        in: organizationIds 
+      } 
+    })
+    .sort()
+    .paginate()
+    .fields()
+    .include({ 
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          industry: true
+        }
+      } 
+    });
+
+  const result = await companyDocQuery.execute();
+  const meta = await companyDocQuery.countTotal();
+
+  return {
+    meta,
+    data: result,
+  };
+};
+
 const getCompanyDocsByType = async (
   docFor: DocFor,
   query: Record<string, unknown>
@@ -376,8 +348,9 @@ const deleteCompanyDoc = async (id: string, user: User) => {
 
 export const CompanyDocServices = {
   createCompanyDoc,
-  getAllCompanyDocs,
   getCompanyDocsByOrgnizationId,
+  getCompanyDocsByAssignedAgent,
+  getAllCompanyDocs,
   getSingleCompanyDoc,
   getCompanyDocsByOrgAdmin,
   getCompanyDocsByType,

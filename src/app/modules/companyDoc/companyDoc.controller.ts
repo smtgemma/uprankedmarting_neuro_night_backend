@@ -69,6 +69,23 @@ const getCompanyDocsByOrgnizationId = catchAsync(
   }
 );
 
+const getCompanyDocsByAssignedAgent = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await CompanyDocServices.getCompanyDocsByAssignedAgent(
+      req.query,
+      req.user as User
+    );
+
+    sendResponse(res, {
+      statusCode: status.OK,
+      message: "Company documents fetched successfully for assigned organizations!",
+      meta: result.meta,
+      data: result.data,
+    });
+  }
+);
+
+
 const getCompanyDocsByType = catchAsync(async (req: Request, res: Response) => {
   const { docFor } = req.params;
   const result = await CompanyDocServices.getCompanyDocsByType(
@@ -109,6 +126,7 @@ const deleteCompanyDoc = catchAsync(async (req: Request, res: Response) => {
 export const CompanyDocController = {
   createCompanyDoc,
   getAllCompanyDocs,
+  getCompanyDocsByAssignedAgent,
   getSingleCompanyDoc,
   getCompanyDocsByOrgnizationId,
   getCompanyDocsByOrgAdmin,

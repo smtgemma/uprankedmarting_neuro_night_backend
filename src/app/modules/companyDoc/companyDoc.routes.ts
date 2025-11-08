@@ -6,30 +6,6 @@ import { UserRole } from "@prisma/client";
 
 const router = express.Router();
 
-// router.post(
-//   '/',
-//   upload.fields([
-//     { name: 'aiDocument', maxCount: 1 },
-//     { name: 'agentDocument', maxCount: 1 }
-//   ]),
-//   CompanyDocController.createCompanyDoc
-// );
-// router.post(
-//   '/',
-//   upload.single('document'), // Single file with field name 'document'
-//   (req: Request, res: Response, next: NextFunction) => {
-//     const file = req.file;
-//     if (req?.body?.data) {
-//       req.body = JSON.parse(req?.body?.data);
-//     }
-//     if (file) {
-//       req.body.image = file?.path;
-//     }
-
-//     CompanyDocController.createCompanyDoc(req, res, next);
-//   }
-// );
-
 router.post(
   "/",
   uploadDocument.single("document"), 
@@ -55,11 +31,15 @@ router.post(
     CompanyDocController.createCompanyDoc(req, res, next);
   }
 );
-
 router.get(
   "/",
   auth(UserRole.super_admin),
   CompanyDocController.getAllCompanyDocs
+);
+router.get(
+  "/assigned-organizations",
+  auth(UserRole.agent), 
+  CompanyDocController.getCompanyDocsByAssignedAgent
 );
 router.get("/organization",auth(UserRole.organization_admin), CompanyDocController.getCompanyDocsByOrgAdmin);
 router.get("/:id", CompanyDocController.getSingleCompanyDoc);
@@ -74,5 +54,7 @@ router.put(
   CompanyDocController.updateCompanyDoc
 );
 router.delete("/:id",auth(UserRole.organization_admin), CompanyDocController.deleteCompanyDoc);
+
+
 
 export const CompanyDocRoutes = router;
